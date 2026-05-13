@@ -613,22 +613,7 @@ body{
     <div class="modal-handle"></div>
     <div class="modal-title">Registrera snapshot</div>
     <div class="field"><label>Period</label><input type="month" id="nwm-period"></div>
-    <div class="f2">
-      <div class="field"><label>Likvidamedel</label><input type="number" id="nwm-cash" placeholder="0" inputmode="decimal"></div>
-      <div class="field"><label>Kontanter</label><input type="number" id="nwm-kontanter" placeholder="0" inputmode="decimal"></div>
-    </div>
-    <div class="f2">
-      <div class="field"><label>Aktier/fonder</label><input type="number" id="nwm-stocks" placeholder="0" inputmode="decimal"></div>
-      <div class="field"><label>Pension</label><input type="number" id="nwm-pension" placeholder="0" inputmode="decimal"></div>
-    </div>
-    <div class="f2">
-      <div class="field"><label>Lägenhet (netto)</label><input type="number" id="nwm-apt" placeholder="0" inputmode="decimal"></div>
-      <div class="field"><label>Klockor</label><input type="number" id="nwm-klockor" placeholder="0" inputmode="decimal"></div>
-    </div>
-    <div class="f2">
-      <div class="field"><label>AB</label><input type="number" id="nwm-ab" placeholder="0" inputmode="decimal"></div>
-      <div class="field"><label>Övrigt</label><input type="number" id="nwm-other" placeholder="0" inputmode="decimal"></div>
-    </div>
+    <div id="nwm-fields"></div>
     <button class="btn-p" onclick="saveNW()">Spara snapshot</button>
     <button class="btn-s" onclick="closeOverlay('nw-modal')">Avbryt</button>
   </div>
@@ -711,6 +696,17 @@ body{
   </div>
 
   <div class="s-sec">
+    <div class="s-lbl">Förmögenhetskategorier</div>
+    <div class="s-card" id="nw-cats-list"></div>
+    <div style="margin-top:8px;margin-bottom:0">
+      <div class="tag-add" style="padding:0">
+        <input type="text" id="new-nw-cat" placeholder="Ny kategori…" onkeydown="if(event.key==='Enter')addNWCat()">
+        <button class="tag-add-btn" onclick="addNWCat()">+</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="s-sec">
     <div class="s-lbl">Utgiftskategorier</div>
     <div class="s-card">
       <div class="tag-list" id="exp-cats"></div>
@@ -789,6 +785,18 @@ const svNWs=v=>sv('nws',v);
 const getGoal=()=>ld('goal',700000);
 const getExpCats=()=>ld('cats_exp',DEF_EXP);
 const getSavCats=()=>ld('cats_sav',DEF_SAV);
+const DEF_NW_CATS=[
+  {key:'cash',label:'Likvidamedel'},
+  {key:'stocks',label:'Aktier/fonder'},
+  {key:'apt',label:'Lägenhet'},
+  {key:'pension',label:'Pension'},
+  {key:'klockor',label:'Klockor'},
+  {key:'ab',label:'AB'},
+  {key:'kontanter',label:'Kontanter'},
+  {key:'other',label:'Övrigt'},
+];
+const getNWCats=()=>ld('cats_nw',DEF_NW_CATS);
+const svNWCats=v=>sv('cats_nw',v);
 const getGroups=()=>ld('cat_groups',[]);
 const svGroups=v=>sv('cat_groups',v);
 
@@ -987,18 +995,25 @@ function deleteTx(){
 // ═══════════════════════════════════════════
 function openNWModal(){
   document.getElementById('nwm-period').value=todayYM();
-  ['nwm-cash','nwm-kontanter','nwm-stocks','nwm-pension','nwm-apt','nwm-klockor','nwm-ab','nwm-other'].forEach(id=>document.getElementById(id).value='');
+  const cats=getNWCats();
+  document.getElementById('nwm-fields').innerHTML=cats.map(c=>
+    `<div class="field"><label>${c.label}</label><input type="number" id="nwm-${c.key}" placeholder="0" inputmode="decimal"></div>`
+  ).join('');
   openOverlay('nw-modal');
 }
 function saveNW(){
   const period=document.getElementById('nwm-period').value;
   if(!period){alert('Välj period');return}
-  const g=id=>parseFloat(document.getElementById(id).value)||0;
-  const cash=g('nwm-cash'),kontanter=g('nwm-kontanter'),stocks=g('nwm-stocks'),
-    pension=g('nwm-pension'),apt=g('nwm-apt'),klockor=g('nwm-klockor'),ab=g('nwm-ab'),other=g('nwm-other');
-  const total=cash+kontanter+stocks+pension+apt+klockor+ab+other;
+  const cats=getNWCats();
+  const snap={period};
+  let total=0;
+  cats.forEach(c=>{
+    const v=parseFloat(document.getElementById('nwm-'+c.key)?.value)||0;
+    snap[c.key]=v;total+=v;
+  });
+  snap.total=total;
   const nws=getNWs().filter(n=>n.period!==period);
-  nws.push({period,cash,kontanter,stocks,pension,apt,klockor,ab,other,total});
+  nws.push(snap);
   nws.sort((a,b)=>a.period.localeCompare(b.period));
   svNWs(nws);closeOverlay('nw-modal');render();
 }
@@ -1253,12 +1268,7 @@ function renderNetWorth(){
     return;
   }
 
-  const assetDefs=[
-    {key:'cash',label:'Likvidamedel'},{key:'stocks',label:'Aktier/fonder'},
-    {key:'apt',label:'Lägenhet'},{key:'pension',label:'Pension'},
-    {key:'klockor',label:'Klockor'},{key:'ab',label:'AB'},
-    {key:'kontanter',label:'Kontanter'},{key:'other',label:'Övrigt'},
-  ].filter(a=>latest[a.key]>0);
+  const assetDefs=getNWCats().filter(a=>latest[a.key]>0);
 
   const slices=assetDefs.map((a,i)=>({val:latest[a.key],color:COLORS[i],label:a.label}));
 
@@ -1522,7 +1532,30 @@ function renderSettings(){
   document.getElementById('s-apikey').value=getApiKey();
   renderCatList('exp-cats',getExpCats(),'expense');
   renderCatList('sav-cats',getSavCats(),'savings');
+  renderNWCatList();
   renderGroupList();
+}
+
+function renderNWCatList(){
+  const cats=getNWCats();
+  const el=document.getElementById('nw-cats-list');
+  el.innerHTML=`<div class="tag-list">${cats.map((c,i)=>
+    `<div class="tag-item"><span>${c.label}</span><button class="tag-rm" onclick="removeNWCat(${i})">×</button></div>`
+  ).join('')}</div>`;
+}
+function addNWCat(){
+  const inp=document.getElementById('new-nw-cat');
+  const label=inp.value.trim();if(!label)return;
+  // Generate a safe key from label
+  const key='nw_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_').slice(0,20)+'_'+Date.now().toString(36);
+  const cats=getNWCats();
+  if(cats.find(c=>c.label===label)){inp.value='';return;}
+  cats.push({key,label});
+  svNWCats(cats);inp.value='';renderNWCatList();
+}
+function removeNWCat(idx){
+  const cats=getNWCats().filter((_,i)=>i!==idx);
+  svNWCats(cats);renderNWCatList();
 }
 
 function renderGroupList(){
