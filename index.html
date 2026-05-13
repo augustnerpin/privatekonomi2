@@ -420,47 +420,65 @@ body{
 .detail-chart-mini{height:90px;position:relative;padding:0 16px;margin:12px 0 0}
 
 /* ── AI SCREEN ── */
-#screen-ai{display:none;flex-direction:column;padding-bottom:0}
+#screen-ai{display:none;flex-direction:column;padding-bottom:0;height:100dvh;overflow:hidden}
 #screen-ai.active{display:flex}
 .ai-hdr{
-  padding:calc(var(--safe-t)+48px) 20px 16px;
-  background:var(--bg0);flex-shrink:0;
+  padding:calc(var(--safe-t)+48px) 20px 12px;
+  background:transparent;flex-shrink:0;
 }
-.ai-hdr-t{font-size:26px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
+.ai-hdr-t{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
 .ai-hdr-s{font-size:11px;color:var(--sub);margin-top:3px;font-family:var(--mono)}
-.ai-msgs{flex:1;overflow-y:auto;padding:12px 16px 0;display:flex;flex-direction:column;gap:10px}
-.ai-msg{max-width:86%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.6}
+.ai-msgs{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  padding:10px 14px 10px;
+  display:flex;flex-direction:column;gap:10px;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+}
+.ai-msg{max-width:88%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.6;word-break:break-word}
 .ai-msg.user{align-self:flex-end;background:var(--acc);color:#09090f;border-bottom-right-radius:4px;font-weight:500}
-.ai-msg.bot{align-self:flex-start;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-bottom-left-radius:4px}
-.ai-msg.thinking{color:var(--sub);font-style:italic;font-size:13px}
-.ai-chips-row{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px 0;flex-shrink:0}
+.ai-msg.bot{align-self:flex-start;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-bottom-left-radius:4px}
+.ai-msg.thinking{color:var(--sub);font-style:italic;font-size:13px;background:none;border:none;padding:4px 0}
+.ai-chips-row{display:flex;gap:7px;flex-wrap:nowrap;overflow-x:auto;padding:6px 14px 8px;flex-shrink:0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.ai-chips-row::-webkit-scrollbar{display:none}
 .ai-chip{
   padding:7px 12px;border-radius:20px;font-size:12px;font-family:var(--mono);
-  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:var(--sub);
-  cursor:pointer;transition:all .15s;white-space:nowrap;
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);color:var(--sub);
+  cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;
 }
-.ai-chip:active{background:var(--bg3);color:var(--text)}
-.ai-bar{
-  display:flex;align-items:flex-end;gap:10px;
-  padding:10px 14px calc(78px + var(--safe-b));
-  border-top:1px solid rgba(255,255,255,0.08);background:rgba(10,10,20,0.6);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);flex-shrink:0;
+.ai-chip:active{background:rgba(255,255,255,0.14);color:var(--text)}
+.ai-bottom{
+  flex-shrink:0;
+  border-top:1px solid rgba(255,255,255,0.08);
+  background:rgba(10,10,20,0.7);
+  backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);
+  padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 86px);
 }
+.ai-bar{display:flex;align-items:flex-end;gap:10px}
 .ai-inp{
-  flex:1;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
-  border-radius:18px;padding:10px 15px;
-  color:var(--text);font-family:var(--sans);font-size:14px;outline:none;
-  resize:none;max-height:110px;line-height:1.5;transition:border-color .18s;
+  flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);
+  border-radius:20px;padding:10px 15px;
+  color:var(--text);font-family:var(--sans);font-size:15px;outline:none;
+  resize:none;line-height:1.4;transition:border-color .18s;
+  max-height:120px;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
 }
 .ai-inp:focus{border-color:var(--acc)}
 .ai-send{
   width:40px;height:40px;border-radius:50%;flex-shrink:0;
   background:var(--acc);border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  font-size:17px;color:#09090f;transition:opacity .15s;
+  font-size:17px;color:#09090f;transition:opacity .15s,transform .1s;
 }
+.ai-send:active{transform:scale(.9)}
 .ai-send:disabled{opacity:.35;cursor:default}
+.ai-mem-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 14px 0;font-size:11px;color:var(--sub2);font-family:var(--mono);
+}
+.ai-mem-dot{width:6px;height:6px;border-radius:50%;background:var(--acc);flex-shrink:0}
 .ai-key-note{
-  margin:8px 16px 0;padding:10px 14px;
+  margin:6px 14px 0;padding:10px 14px;
   background:var(--amber2);border:1px solid rgba(251,191,36,.3);
   border-radius:var(--rsm);font-size:12px;color:var(--amber);
   line-height:1.5;cursor:pointer;display:none;
@@ -532,27 +550,37 @@ body{
     <div style="display:flex;align-items:flex-start;justify-content:space-between">
       <div>
         <div class="hdr-label">AI-assistent</div>
-        <div class="ai-hdr-t">Fråga om din ekonomi</div>
+        <div class="ai-hdr-t">Ekonomicoach</div>
         <div class="ai-hdr-s" id="ai-status">Ange din API-nyckel i inställningar</div>
       </div>
-      <button class="ibtn" onclick="openSettings()">⚙</button>
+      <div style="display:flex;gap:8px">
+        <button class="ibtn" onclick="clearAiMemory()" title="Rensa minne">🧠</button>
+        <button class="ibtn" onclick="openSettings()">⚙</button>
+      </div>
     </div>
   </div>
   <div class="ai-key-note" id="ai-key-note" onclick="openSettings()">🔑 Ingen API-nyckel — tryck här för att ange</div>
   <div class="ai-chips-row">
     <div class="ai-chip" onclick="sendChip('Hur ser min ekonomi ut denna månaden?')">📊 Månaden</div>
-    <div class="ai-chip" onclick="sendChip('Analysera mitt sparande och ge tips')">💡 Spartips</div>
-    <div class="ai-chip" onclick="sendChip('Vad spenderade jag mest på senaste 3 månaderna?')">🔍 Topputgifter</div>
-    <div class="ai-chip" onclick="sendChip('Hur går det mot mitt förmögenhetsmål?')">🎯 Mål</div>
+    <div class="ai-chip" onclick="sendChip('Analysera mitt totala sparande och ge konkreta tips')">💡 Spartips</div>
+    <div class="ai-chip" onclick="sendChip('Visa mina topputgifter det senaste året')">🔍 Topputgifter</div>
+    <div class="ai-chip" onclick="sendChip('Hur utvecklas min förmögenhet och när når jag målet?')">🎯 Förmögenhetsmål</div>
+    <div class="ai-chip" onclick="sendChip('Finns det månader jag spenderade onödigt mycket?')">⚠️ Avvikelser</div>
   </div>
   <div class="ai-msgs" id="ai-msgs">
-    <div class="ai-msg bot">👋 Hej! Jag är din personliga ekonomiassistent med tillgång till all din data. Ange din Anthropic API-nyckel i inställningar för att börja!</div>
+    <div class="ai-msg bot">👋 Hej! Jag är din personliga ekonomicoach med tillgång till all din transaktionshistorik och förmögenhetsutveckling. Jag lär mig om dig ju mer vi pratar och kommer ihåg viktiga saker mellan sessioner. Ange din API-nyckel för att börja!</div>
   </div>
-  <div class="ai-bar">
-    <textarea class="ai-inp" id="ai-inp" placeholder="Ställ en fråga…" rows="1"
-      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAi()}"
-      oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-    <button class="ai-send" id="ai-send" onclick="sendAi()">↑</button>
+  <div class="ai-bottom">
+    <div class="ai-mem-bar" id="ai-mem-bar" style="display:none">
+      <div class="ai-mem-dot"></div>
+      <span id="ai-mem-txt">Minne aktivt</span>
+    </div>
+    <div class="ai-bar" style="margin-top:8px">
+      <textarea class="ai-inp" id="ai-inp" placeholder="Skriv en fråga…" rows="1"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAi()}"
+        oninput="autoResizeAi(this)"></textarea>
+      <button class="ai-send" id="ai-send" onclick="sendAi()">↑</button>
+    </div>
   </div>
 </div>
 
@@ -1245,17 +1273,15 @@ function renderNetWorth(){
   const pct=latest?Math.min(latest.total/goal*100,100):0;
 
   document.getElementById('nw-hero-val').textContent=latest?fmt(latest.total):'—';
-
   const heroEl=document.getElementById('nw-hero-pill');
   if(change!==null){
     heroEl.innerHTML=`<span class="pill ${change>=0?'pill-g':'pill-r'}">${change>=0?'↑':'↓'} ${fmt(Math.abs(change))} kr vs förra</span>`;
   } else heroEl.innerHTML='';
 
-  // 4 stat cards
   const allChanges=nws.slice(1).map((n,i)=>n.total-nws[i].total);
   const bestChange=allChanges.length?Math.max(...allChanges):null;
-  const monthsCount=nws.length;
-  const avgMonthly=monthsCount>1?(nws[nws.length-1].total-nws[0].total)/(monthsCount-1):null;
+  const worstChange=allChanges.length?Math.min(...allChanges):null;
+  const avgMonthly=nws.length>1?(nws[nws.length-1].total-nws[0].total)/(nws.length-1):null;
 
   document.getElementById('nw-pills').innerHTML=`
     <div class="scard"><div class="scard-lbl">Mot mål</div><div class="scard-val" style="color:var(--acc)">${pct.toFixed(0)}%</div></div>
@@ -1269,69 +1295,69 @@ function renderNetWorth(){
   }
 
   const assetDefs=getNWCats().filter(a=>latest[a.key]>0);
-
   const slices=assetDefs.map((a,i)=>({val:latest[a.key],color:COLORS[i],label:a.label}));
-
   let html='';
 
-  // Growth chart
+  // ── 1. FÖRMÖGENHETSUTVECKLING ──
   if(nws.length>=2){
     const totalGrowth=latest.total-nws[0].total;
-    html+=`<div class="sec"><span class="sec-t">Förmögenhetsutveckling</span><span class="sec-sub pill ${totalGrowth>=0?'pill-g':'pill-r'}" style="font-size:11px;padding:2px 8px">${totalGrowth>=0?'+':''}${fmtK(totalGrowth)}</span></div>`;
+    const growthPct=nws[0].total>0?((totalGrowth/nws[0].total)*100).toFixed(1):null;
+    html+=`<div class="sec"><span class="sec-t">Förmögenhetsutveckling</span>
+      <span class="pill ${totalGrowth>=0?'pill-g':'pill-r'}" style="font-size:11px">${totalGrowth>=0?'+':''}${fmtK(totalGrowth)} kr</span></div>`;
     html+=makeNWChart(nws);
   }
 
-  // Monthly snapshots mini table
-  if(nws.length>=2){
-    const last6=[...nws].slice(-6).reverse();
-    html+=`<div class="sec"><span class="sec-t">Månadsöversikt</span></div>
-    <div class="txl">
-      <div class="ytrow ythd" style="grid-template-columns:2fr 2fr 2fr"><span>Period</span><span>Total</span><span>Förändring</span></div>`;
-    last6.forEach((n,i,arr)=>{
-      const idxInFull=nws.indexOf(n);
-      const prv=nws[idxInFull-1];
-      const diff=prv?n.total-prv.total:null;
-      html+=`<div class="ytrow" style="grid-template-columns:2fr 2fr 2fr;cursor:default">
-        <span>${mLabel(n.period)}</span>
-        <span style="font-family:var(--mono)">${fmtK(n.total)}</span>
-        <span style="font-family:var(--mono);color:${diff===null?'var(--sub2)':diff>=0?'var(--green)':'var(--red)'}">${diff===null?'—':(diff>=0?'+':'')+fmtK(diff)}</span>
-      </div>`;
-    });
-    html+=`</div>`;
-  }
+  // ── 2. MÅL & PROGNOS ──
+  const monthsToGoal=avgMonthly>0?Math.ceil(Math.max(goal-latest.total,0)/avgMonthly):null;
+  const goalDate=monthsToGoal?new Date(new Date().getFullYear(),new Date().getMonth()+monthsToGoal,1):null;
+  const goalDateStr=goalDate?['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'][goalDate.getMonth()]+' '+goalDate.getFullYear():null;
 
-  // Goal progress
-  html+=`<div class="card"><div class="card-inner">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
-      <div class="card-lbl">Framsteg mot mål</div>
-      <span style="font-family:var(--mono);font-size:13px;color:var(--acc)">${pct.toFixed(0)}%</span>
+  html+=`<div class="sec"><span class="sec-t">Mål & prognos</span></div>
+  <div class="card"><div class="card-inner">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+      <div class="card-lbl">Förmögenhetsmål</div>
+      <span style="font-family:var(--mono);font-size:13px;color:var(--acc)">${pct.toFixed(1)}%</span>
     </div>
-    <div class="pbar"><div class="pfill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#34d399,#60a5fa)"></div></div>
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:3px">
+    <div class="pbar"><div class="pfill" style="width:${Math.min(pct,100).toFixed(1)}%;background:linear-gradient(90deg,#34d399,#60a5fa)"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:3px;margin-bottom:14px">
       <span>${fmt(latest.total)} kr</span><span>${fmt(goal)} kr</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div style="text-align:center">
+        <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Kvar</div>
+        <div style="font-size:15px;font-weight:600;font-family:var(--mono)">${fmtK(Math.max(goal-latest.total,0))}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Snitt/mån</div>
+        <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--green)">${avgMonthly!==null?'+'+fmtK(avgMonthly):'—'}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Beräknat</div>
+        <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--blue)">${goalDateStr||'—'}</div>
+      </div>
     </div>
   </div></div>`;
 
-  // Donut + asset legend
-  html+=`<div class="card"><div class="card-inner">
-    <div class="card-lbl" style="margin-bottom:12px">Fördelning — tryck för historik</div>
+  // ── 3. TILLGÅNGSFÖRDELNING ──
+  html+=`<div class="sec"><span class="sec-t">Tillgångsfördelning</span></div>
+  <div class="card"><div class="card-inner">
     <div style="display:flex;align-items:center;gap:16px">
-      <div class="donut" style="width:130px;height:130px">
-        <svg viewBox="0 0 140 140" width="130" height="130">${makeDonut(slices,latest.total)}</svg>
+      <div class="donut" style="width:120px;height:120px;flex-shrink:0">
+        <svg viewBox="0 0 140 140" width="120" height="120">${makeDonut(slices,latest.total)}</svg>
         <div class="donut-c"><div class="donut-v">${fmtK(latest.total)}</div><div class="donut-l">totalt</div></div>
       </div>
-      <div style="flex:1;display:flex;flex-direction:column;gap:7px">
-        ${slices.slice(0,5).map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px">
-          <span style="width:8px;height:8px;border-radius:2px;background:${s.color};flex-shrink:0;display:inline-block"></span>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        ${slices.map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:${s.color};flex-shrink:0"></span>
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${s.label}</span>
-          <span style="font-family:var(--mono)">${fmtK(s.val)}</span>
+          <span style="font-family:var(--mono);font-size:11px">${Math.round(s.val/latest.total*100)}%</span>
         </div>`).join('')}
       </div>
     </div>
   </div></div>`;
 
-  // Clickable asset rows
-  html+=`<div class="sec"><span class="sec-t">Tillgångar</span></div><div class="txl">`;
+  // ── 4. TILLGÅNGAR (klickbara) ──
+  html+=`<div class="sec"><span class="sec-t">Tillgångar</span><span class="sec-sub">tryck för historik</span></div><div class="txl">`;
   assetDefs.forEach((a,i)=>{
     const p=latest.total>0?Math.round(latest[a.key]/latest.total*100):0;
     const prevVal=prev?prev[a.key]:null;
@@ -1340,17 +1366,151 @@ function renderNetWorth(){
       <div class="txav" style="background:${COLORS[i]}18;color:${COLORS[i]};font-size:11px;font-weight:600;font-family:var(--mono)">${p}%</div>
       <div class="txi-info">
         <div class="txi-name">${a.label}</div>
-        <div class="txi-meta">${diff!==null?(diff>=0?'↑':'↓')+' '+fmt(Math.abs(diff))+' kr vs förra':'Första snapshot'}</div>
+        <div class="txi-meta">${diff!==null?(diff>=0?'↑':'↓')+' '+fmt(Math.abs(diff))+' kr':'Första snapshot'}</div>
       </div>
       <div style="text-align:right">
         <div class="txi-amt">${fmt(latest[a.key])} kr</div>
-        <div style="width:56px;margin-top:4px;background:var(--bg3);border-radius:3px;height:3px;overflow:hidden;margin-left:auto">
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
           <div style="width:${p}%;height:100%;background:${COLORS[i]};border-radius:3px"></div>
         </div>
       </div>
     </div>`;
   });
   html+=`</div>`;
+
+  // ── 5. MÅNADSANALYS ──
+  if(nws.length>=2){
+    const posMonths=allChanges.filter(c=>c>0).length;
+    const negMonths=allChanges.filter(c=>c<0).length;
+    const longestStreak=(()=>{
+      let best=0,cur=0;
+      allChanges.forEach(c=>{cur=c>0?cur+1:0;if(cur>best)best=cur});
+      return best;
+    })();
+    html+=`<div class="sec"><span class="sec-t">Månadsanalys</span></div>
+    <div class="sgrid sg3" style="margin-bottom:10px">
+      <div class="scard"><div class="scard-lbl">Positiva månader</div><div class="scard-val" style="color:var(--green)">${posMonths}</div></div>
+      <div class="scard"><div class="scard-lbl">Negativa månader</div><div class="scard-val" style="color:var(--red)">${negMonths}</div></div>
+      <div class="scard"><div class="scard-lbl">Längsta streak</div><div class="scard-val" style="color:var(--blue)">${longestStreak}mån</div></div>
+    </div>`;
+
+    // Bästa/sämsta månader
+    const changesWithPeriod=nws.slice(1).map((n,i)=>({period:n.period,change:n.total-nws[i].total}));
+    const best=changesWithPeriod.reduce((a,b)=>a.change>b.change?a:b);
+    const worst=changesWithPeriod.reduce((a,b)=>a.change<b.change?a:b);
+    html+=`<div class="card"><div class="card-inner" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="card-lbl">Bästa månaden</div>
+        <div style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green)">+${fmtK(best.change)}</div>
+        <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:2px">${mLabel(best.period)}</div>
+      </div>
+      <div>
+        <div class="card-lbl">Sämsta månaden</div>
+        <div style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red)">${fmtK(worst.change)}</div>
+        <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:2px">${mLabel(worst.period)}</div>
+      </div>
+    </div></div>`;
+  }
+
+  // ── 6. LIKVIDITETSANALYS ──
+  const liquidKeys=['cash','kontanter'];
+  const liquidCats=getNWCats().filter(c=>liquidKeys.includes(c.key)&&latest[c.key]>0);
+  const liquid=liquidCats.reduce((s,c)=>s+latest[c.key],0);
+  const liquidPct=latest.total>0?Math.round(liquid/latest.total*100):0;
+  const txs=getTxs();
+  const now=new Date();
+  const last3months=[0,1,2].map(i=>{
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  });
+  const avgMonthlyExp=last3months.reduce((s,m)=>{
+    return s+txs.filter(t=>t.month===m&&t.type==='expense').reduce((ss,t)=>ss+t.amount,0);
+  },0)/3;
+  const liquidityMonths=avgMonthlyExp>0?(liquid/avgMonthlyExp).toFixed(1):null;
+
+  html+=`<div class="sec"><span class="sec-t">Likviditet</span></div>
+  <div class="card"><div class="card-inner">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+      <div>
+        <div class="card-lbl">Likvida medel</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono)">${fmt(liquid)} kr</div>
+        <div style="font-size:11px;color:var(--sub2);margin-top:2px">${liquidPct}% av totalt</div>
+      </div>
+      <div>
+        <div class="card-lbl">Buffer (månader)</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:${liquidityMonths>=3?'var(--green)':liquidityMonths>=1?'var(--amber)':'var(--red)'}">${liquidityMonths||'—'}</div>
+        <div style="font-size:11px;color:var(--sub2);margin-top:2px">vs snitt utgifter</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.6;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">
+      ${liquidityMonths>=6?'✅ Utmärkt buffert — över 6 månaders utgifter':
+        liquidityMonths>=3?'✓ God buffert — 3–6 månaders utgifter':
+        liquidityMonths>=1?'⚠️ Låg buffert — under 3 månader rekommenderas':
+        '🔴 Kritisk buffert — bygg upp likvida medel'}
+    </div>
+  </div></div>`;
+
+  // ── 7. HISTORIKTABELL ──
+  if(nws.length>=2){
+    html+=`<div class="sec"><span class="sec-t">Historik</span></div>
+    <div class="txl">
+      <div class="ytrow ythd" style="grid-template-columns:2fr 2fr 2fr 2fr"><span>Period</span><span>Total</span><span>+/−</span><span>Tillväxt</span></div>`;
+    [...nws].reverse().forEach((n,i,arr)=>{
+      const pr=arr[i+1];
+      const diff=pr?n.total-pr.total:null;
+      const pctChg=pr&&pr.total>0?((n.total-pr.total)/pr.total*100).toFixed(1):null;
+      html+=`<div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">${mLabel(n.period)}</span>
+        <span style="font-family:var(--mono)">${fmtK(n.total)}</span>
+        <span style="font-family:var(--mono);color:${diff===null?'var(--sub2)':diff>=0?'var(--green)':'var(--red)'}">${diff===null?'—':(diff>=0?'+':'')+fmtK(diff)}</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">${pctChg!==null?(pctChg>=0?'+':'')+pctChg+'%':'—'}</span>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+
+  // ── 8. SPARKVOT FRÅN TRANSAKTIONER ──
+  const allTxMonths=[...new Set(txs.map(t=>t.month))].sort();
+  if(allTxMonths.length>=2){
+    const rates=allTxMonths.map(m=>{
+      const mt=txs.filter(t=>t.month===m);
+      const inc=mt.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+      const sav=mt.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
+      return{m,rate:inc>0?Math.round(sav/inc*100):0,inc,sav};
+    }).filter(r=>r.inc>0);
+    const avgRate=rates.length?Math.round(rates.reduce((s,r)=>s+r.rate,0)/rates.length):0;
+    const bestRate=rates.length?rates.reduce((a,b)=>a.rate>b.rate?a:b):{rate:0,m:''};
+    const last=rates[rates.length-1];
+
+    html+=`<div class="sec"><span class="sec-t">Sparkvot — historik</span></div>
+    <div class="card"><div class="card-inner">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Snitt</div>
+          <div style="font-size:22px;font-weight:600;color:${avgRate>=20?'var(--green)':avgRate>=10?'var(--amber)':'var(--red)'}">${avgRate}%</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Senaste</div>
+          <div style="font-size:22px;font-weight:600;color:${last&&last.rate>=20?'var(--green)':last&&last.rate>=10?'var(--amber)':'var(--red)'}">${last?last.rate:0}%</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Rekord</div>
+          <div style="font-size:22px;font-weight:600;color:var(--green)">${bestRate.rate}%</div>
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono)">${bestRate.m?mLabel(bestRate.m):''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:3px;align-items:flex-end;height:48px">
+        ${rates.slice(-12).map(r=>{
+          const h=Math.max(4,Math.round(r.rate/Math.max(...rates.map(x=>x.rate),1)*44));
+          const col=r.rate>=20?'var(--green)':r.rate>=10?'var(--amber)':'var(--red)';
+          return`<div style="flex:1;background:${col};border-radius:3px 3px 0 0;height:${h}px;opacity:.8" title="${mLabel(r.m)}: ${r.rate}%"></div>`;
+        }).join('')}
+      </div>
+      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:4px;text-align:center">Senaste ${Math.min(rates.length,12)} månader</div>
+    </div></div>`;
+  }
+
+  html+=`<div style="height:16px"></div>`;
 
   document.getElementById('nw-content').innerHTML=html;
   setTimeout(initNWChartEvents,50);
@@ -1709,13 +1869,40 @@ function confirmImport(){
 // ═══════════════════════════════════════════
 let aiHistory=[];
 
+// ── Minne ──────────────────────────────────
+function getAiMemory(){return ld('ai_memory',[])}
+function svAiMemory(v){sv('ai_memory',v)}
+
+function clearAiMemory(){
+  if(confirm('Rensa AI:ns minne om dig?')){svAiMemory([]);updateMemBar();}
+}
+function updateMemBar(){
+  const mem=getAiMemory();
+  const bar=document.getElementById('ai-mem-bar');
+  const txt=document.getElementById('ai-mem-txt');
+  if(!bar)return;
+  if(mem.length){
+    bar.style.display='flex';
+    txt.textContent=`${mem.length} saker sparade i minnet`;
+  } else {
+    bar.style.display='none';
+  }
+}
+
+// ── Textarea auto-resize ────────────────────
+function autoResizeAi(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
+
+// ── Status ─────────────────────────────────
 function updateAiStatus(){
   const key=getApiKey();
   const statusEl=document.getElementById('ai-status');
   const noteEl=document.getElementById('ai-key-note');
   if(!statusEl)return;
   if(key){
-    statusEl.textContent='Claude är redo · din data är inkluderad';
+    statusEl.textContent='Claude är redo · full dataåtkomst';
     if(noteEl)noteEl.style.display='none';
   } else {
     statusEl.textContent='Ange din API-nyckel i inställningar';
@@ -1724,36 +1911,84 @@ function updateAiStatus(){
 }
 function initAi(){
   updateAiStatus();
+  updateMemBar();
   document.getElementById('s-apikey').value=getApiKey();
 }
+
+// ── Bygg fullständig kontext ────────────────
 function buildCtx(){
-  const txs=getTxs();const nws=getNWs();
-  const now=new Date();
-  const months=[];
-  for(let i=0;i<3;i++){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'))}
-  const sums=months.map(m=>{
+  const txs=getTxs();
+  const nws=getNWs();
+  const goal=getGoal();
+
+  // Alla månader med data
+  const allMonths=[...new Set(txs.map(t=>t.month))].sort();
+  const monthSums=allMonths.map(m=>{
     const mt=txs.filter(t=>t.month===m);
     const inc=mt.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
     const exp=mt.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
     const sav=mt.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
     const bc={};mt.filter(t=>t.type==='expense').forEach(t=>{bc[t.cat]=(bc[t.cat]||0)+t.amount});
-    return{month:m,inc,exp,sav,bc};
+    const topCats=Object.entries(bc).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,v])=>`${k}:${fmt(v)}`).join(', ');
+    return`${mLabel(m)}: in=${fmt(inc)} ut=${fmt(exp)} spar=${fmt(sav)} kvar=${fmt(inc-exp-sav)}${topCats?` [${topCats}]`:''}`;
   });
-  const ln=nws[nws.length-1];const goal=getGoal();
-  return`Du är en personlig ekonomiassistent. Svara alltid på svenska. Var koncis och konkret.
 
-MÅNADSDATA (senaste 3 månader):
-${sums.map(m=>`${mLabel(m.month)}: Inkomst ${fmt(m.inc)} kr, Utgifter ${fmt(m.exp)} kr, Sparande ${fmt(m.sav)} kr, Kvar ${fmt(m.inc-m.exp-m.sav)} kr
-  Kategorier: ${Object.entries(m.bc).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>`${k}: ${fmt(v)}`).join(', ')}`).join('\n')}
+  // Totaler per år
+  const years=[...new Set(allMonths.map(m=>m.slice(0,4)))];
+  const yearTotals=years.map(y=>{
+    const yt=txs.filter(t=>t.month.startsWith(y));
+    const inc=yt.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+    const exp=yt.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+    const sav=yt.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
+    return`${y}: inkomst=${fmt(inc)} utgifter=${fmt(exp)} sparat=${fmt(sav)}`;
+  });
 
-NETTOFÖRMÖGENHET:
-${ln?`Total: ${fmt(ln.total)} kr | Likvidamedel: ${fmt(ln.cash)} kr | Aktier: ${fmt(ln.stocks)} kr | Pension: ${fmt(ln.pension)} kr | Lägenhet: ${fmt(ln.apt)} kr | Klockor: ${fmt(ln.klockor)} kr | AB: ${fmt(ln.ab)} kr`:'Ingen data'}
+  const ln=nws[nws.length-1];
+  const nwHistory=nws.map(n=>`${n.period}: ${fmt(n.total)} kr`).join(' → ');
 
-MÅL: ${fmt(goal)} kr${ln?` (${Math.round(ln.total/goal*100)}% uppnått)`:''}
-HISTORIK: ${nws.slice(-6).map(n=>`${n.period}: ${fmt(n.total)}`).join(' → ')}`;
+  // Minne om användaren
+  const mem=getAiMemory();
+  const memSection=mem.length?`\nVAD JAG VET OM ANVÄNDAREN:\n${mem.map((m,i)=>`${i+1}. ${m}`).join('\n')}`:'';
+
+  return`Du är en personlig ekonomicoach för den här användaren. Svara alltid på svenska. Var konkret, personlig och hjälpsam.
+
+INSTRUKTION OM MINNE: Om du lär dig något viktigt om användaren (mål, vanor, preferenser, livssituation) som är värt att komma ihåg — avsluta ditt svar med ett JSON-block i detta exakta format:
+<memory>["Sak att minnas 1","Sak att minnas 2"]</memory>
+Lägg bara till genuint värdefull information. Ersätt inte befintliga minnen — de hanteras separat.${memSection}
+
+TRANSAKTIONSHISTORIK (${allMonths.length} månader):
+${monthSums.join('\n')}
+
+ÅRSTOTALER:
+${yearTotals.join('\n')}
+
+FÖRMÖGENHETSUTVECKLING:
+${nwHistory||'Ingen data'}
+${ln?`Senaste snapshot: Total ${fmt(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${fmt(ln[c.key])}`).join(' | ')}`:''}
+
+FÖRMÖGENHETSMÅL: ${fmt(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått, ${fmt(Math.max(goal-ln.total,0))} kr kvar`:''}`;
 }
 
-function sendChip(txt){document.getElementById('ai-inp').value=txt;sendAi()}
+// ── Extrahera och spara minnen ──────────────
+function extractAndSaveMemory(reply){
+  const match=reply.match(/<memory>([\s\S]*?)<\/memory>/);
+  if(!match)return reply;
+  try{
+    const newMems=JSON.parse(match[1]);
+    if(Array.isArray(newMems)&&newMems.length){
+      const existing=getAiMemory();
+      svAiMemory([...existing,...newMems].slice(-20)); // max 20 minnen
+      updateMemBar();
+    }
+  }catch{}
+  return reply.replace(/<memory>[\s\S]*?<\/memory>/,'').trim();
+}
+
+function sendChip(txt){
+  document.getElementById('ai-inp').value=txt;
+  autoResizeAi(document.getElementById('ai-inp'));
+  sendAi();
+}
 
 async function sendAi(){
   const inp=document.getElementById('ai-inp');
@@ -1770,13 +2005,21 @@ async function sendAi(){
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:buildCtx(),messages:aiHistory.slice(-10)})
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1200,system:buildCtx(),messages:aiHistory.slice(-16)})
     });
     const data=await res.json();
     document.getElementById(tid)?.remove();
     if(data.error){addAiMsg('⚠️ '+data.error.message,'bot')}
-    else{const reply=data.content[0].text;aiHistory.push({role:'assistant',content:reply});addAiMsg(reply,'bot')}
-  }catch{document.getElementById(tid)?.remove();addAiMsg('⚠️ Anslutningsfel','bot')}
+    else{
+      const raw=data.content[0].text;
+      const reply=extractAndSaveMemory(raw);
+      aiHistory.push({role:'assistant',content:reply});
+      addAiMsg(reply,'bot');
+    }
+  }catch{
+    document.getElementById(tid)?.remove();
+    addAiMsg('⚠️ Anslutningsfel — kontrollera nätverk och API-nyckel','bot');
+  }
   document.getElementById('ai-send').disabled=false;
 }
 
@@ -1785,9 +2028,12 @@ function addAiMsg(txt,cls,id=''){
   const div=document.createElement('div');
   div.className='ai-msg '+cls;
   if(id)div.id=id;
-  div.innerHTML=txt.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+  div.innerHTML=txt
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
   msgs.appendChild(div);
-  msgs.scrollTop=msgs.scrollHeight;
+  // Smooth scroll to bottom
+  requestAnimationFrame(()=>{msgs.scrollTop=msgs.scrollHeight});
 }
 
 // ═══════════════════════════════════════════
