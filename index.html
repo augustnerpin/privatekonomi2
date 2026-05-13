@@ -1,44 +1,47 @@
 <!DOCTYPE html>
-<!-- saved from url=(0060)file:///C:/Users/AugustNerpin/Downloads/privatekonomi_6.html -->
-<html lang="sv"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#09090f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Förmögenhet</title>
-<link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="./Privatekonomi3_files/css2" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg0:    #09090f;
-  --bg1:    #111118;
-  --bg2:    #18181f;
-  --bg3:    #22222c;
-  --bg4:    #2c2c38;
-  --line:   rgba(255,255,255,0.06);
-  --line2:  rgba(255,255,255,0.10);
-  --text:   #f0f0f8;
-  --sub:    #8888a0;
-  --sub2:   #5a5a70;
+  --bg0:    #0a0a12;
+  --bg1:    rgba(255,255,255,0.07);
+  --bg2:    rgba(255,255,255,0.05);
+  --bg3:    rgba(255,255,255,0.10);
+  --bg4:    rgba(255,255,255,0.14);
+  --line:   rgba(255,255,255,0.10);
+  --line2:  rgba(255,255,255,0.16);
+  --text:   #ffffff;
+  --sub:    rgba(255,255,255,0.55);
+  --sub2:   rgba(255,255,255,0.30);
   --green:  #34d399;
-  --green2: rgba(52,211,153,0.12);
+  --green2: rgba(52,211,153,0.18);
   --red:    #f87171;
-  --red2:   rgba(248,113,113,0.12);
+  --red2:   rgba(248,113,113,0.18);
   --blue:   #60a5fa;
-  --blue2:  rgba(96,165,250,0.12);
+  --blue2:  rgba(96,165,250,0.18);
   --amber:  #fbbf24;
-  --amber2: rgba(251,191,36,0.12);
+  --amber2: rgba(251,191,36,0.18);
   --purple: #a78bfa;
-  --purple2:rgba(167,139,250,0.12);
+  --purple2:rgba(167,139,250,0.18);
   --acc:    #34d399;
-  --acc2:   rgba(52,211,153,0.15);
-  --r:      16px;
-  --rsm:    10px;
+  --acc2:   rgba(52,211,153,0.18);
+  --r:      18px;
+  --rsm:    12px;
   --sans:   'DM Sans', sans-serif;
   --mono:   'DM Mono', monospace;
   --safe-b: env(safe-area-inset-bottom,0px);
   --safe-t: env(safe-area-inset-top,0px);
+  --glass:  rgba(255,255,255,0.07);
+  --glass-border: rgba(255,255,255,0.14);
+  --blur:   blur(24px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg0)}
@@ -46,17 +49,21 @@ body{
   font-family:var(--sans);color:var(--text);
   max-width:430px;margin:0 auto;
   overflow-x:hidden;position:relative;
+  /* Deep gradient background */
+  background: linear-gradient(160deg,#0d1117 0%,#0a0d1a 40%,#0d0a1a 100%);
+  background-attachment:fixed;
+  min-height:100dvh;
 }
 
 /* ── SCREENS ── */
-.screen{display:none;min-height:100dvh;padding-bottom:calc(80px + var(--safe-b))}
+.screen{display:none;min-height:100dvh;padding-bottom:calc(100px + var(--safe-b))}
 .screen.active{display:block;animation:su .3s cubic-bezier(.4,0,.2,1)}
 @keyframes su{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── HEADER ── */
 .hdr{
   padding:calc(var(--safe-t) + 48px) 20px 20px;
-  background:var(--bg0);
+  background:transparent;
   position:relative;
 }
 .hdr-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--sub);font-family:var(--mono);margin-bottom:6px}
@@ -70,16 +77,18 @@ body{
   display:inline-flex;align-items:center;gap:4px;
   padding:4px 10px;border-radius:20px;font-size:12px;
   font-family:var(--mono);font-weight:500;
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
 }
-.pill-g{background:var(--green2);color:var(--green)}
-.pill-r{background:var(--red2);color:var(--red)}
-.pill-b{background:var(--blue2);color:var(--blue)}
-.pill-a{background:var(--amber2);color:var(--amber)}
+.pill-g{background:var(--green2);color:var(--green);border:1px solid rgba(52,211,153,0.25)}
+.pill-r{background:var(--red2);color:var(--red);border:1px solid rgba(248,113,113,0.25)}
+.pill-b{background:var(--blue2);color:var(--blue);border:1px solid rgba(96,165,250,0.25)}
+.pill-a{background:var(--amber2);color:var(--amber);border:1px solid rgba(251,191,36,0.25)}
 
 /* ── ICON BTN ── */
 .ibtn{
   width:36px;height:36px;border-radius:50%;
-  background:var(--bg2);border:1px solid var(--line2);
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
   color:var(--sub);font-size:16px;
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;flex-shrink:0;transition:background .15s;
@@ -95,17 +104,22 @@ body{
 .sg3{grid-template-columns:1fr 1fr 1fr}
 .sg4{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
 .scard{
-  background:var(--bg1);border:1px solid var(--line);
+  background:var(--glass);
+  border:1px solid var(--glass-border);
   border-radius:var(--r);padding:14px 14px;
-  box-shadow:0 2px 12px rgba(0,0,0,.3);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  box-shadow:0 2px 16px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .scard-lbl{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--sub2);font-family:var(--mono);margin-bottom:5px}
 .scard-val{font-size:17px;font-weight:600;letter-spacing:-.02em;font-family:var(--mono)}
 
 /* ── CARD ── */
 .card{
-  background:var(--bg1);border:1px solid var(--line);
+  background:var(--glass);
+  border:1px solid var(--glass-border);
   border-radius:var(--r);margin:0 16px 10px;overflow:hidden;
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  box-shadow:0 4px 24px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .card-inner{padding:16px 18px}
 .card-lbl{font-size:10px;letter-spacing:.10em;text-transform:uppercase;color:var(--sub);font-family:var(--mono);margin-bottom:6px}
@@ -117,14 +131,19 @@ body{
 .sec-sub{font-size:11px;color:var(--sub2);font-family:var(--mono)}
 
 /* ── TX LIST ── */
-.txl{background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin:0 16px 10px;overflow:hidden}
+.txl{
+  background:var(--glass);border:1px solid var(--glass-border);
+  border-radius:var(--r);margin:0 16px 10px;overflow:hidden;
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  box-shadow:0 4px 24px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,0.08);
+}
 .txi{
   display:flex;align-items:center;gap:12px;
-  padding:13px 16px;border-bottom:1px solid var(--line);
+  padding:13px 16px;border-bottom:1px solid rgba(255,255,255,0.06);
   cursor:pointer;transition:background .1s;
 }
 .txi:last-child{border-bottom:none}
-.txi:active{background:var(--bg2)}
+.txi:active{background:rgba(255,255,255,0.06)}
 .txav{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .txi-info{flex:1;min-width:0}
 .txi-name{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -132,50 +151,87 @@ body{
 .txi-amt{font-family:var(--mono);font-size:14px;font-weight:500;white-space:nowrap}
 
 /* ── PROGRESS ── */
-.pbar{background:var(--bg3);border-radius:4px;height:4px;overflow:hidden;margin:10px 0 3px}
+.pbar{background:rgba(255,255,255,0.08);border-radius:4px;height:4px;overflow:hidden;margin:10px 0 3px}
 .pfill{height:100%;border-radius:4px;transition:width .6s cubic-bezier(.4,0,.2,1)}
 
 /* ── NAV ── */
 .nav{
-  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-  width:100%;max-width:430px;
-  background:rgba(9,9,15,.85);backdrop-filter:blur(28px);
-  border-top:1px solid var(--line);
-  display:flex;gap:0;padding:8px 0 calc(8px + var(--safe-b));
+  position:fixed;bottom:0;left:0;right:0;
+  display:flex;justify-content:center;
+  padding:0 20px calc(12px + var(--safe-b));
   z-index:100;
+  pointer-events:none;
+}
+.nav-dock{
+  display:flex;gap:4px;
+  background:rgba(28,28,36,0.55);
+  backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
+  -webkit-backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:26px;
+  padding:8px 10px;
+  pointer-events:all;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.45),
+    0 2px 8px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.15),
+    inset 0 -1px 0 rgba(0,0,0,0.2);
 }
 .nb{
-  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
   background:none;border:none;cursor:pointer;
-  color:var(--sub2);font-family:var(--sans);font-size:10px;
-  letter-spacing:.03em;padding:4px 0;transition:color .2s;
+  color:rgba(255,255,255,0.38);
+  font-family:var(--sans);font-size:9px;letter-spacing:.02em;
+  padding:6px 14px;border-radius:18px;
+  transition:color .2s,background .2s;
+  min-width:64px;
 }
-.nb svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.5;fill:none}
-.nb.active{color:var(--acc)}
+.nb-icon{
+  width:28px;height:28px;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:8px;
+  transition:background .2s,transform .15s;
+}
+.nb svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.6;fill:none}
+.nb.active{color:#fff}
+.nb.active .nb-icon{
+  background:rgba(255,255,255,0.15);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.nb:active .nb-icon{transform:scale(.88)}
 
 /* ── FAB ── */
 .fab{
-  position:fixed;bottom:calc(76px + var(--safe-b));right:18px;
+  position:fixed;bottom:calc(90px + var(--safe-b));right:18px;
   width:50px;height:50px;border-radius:25px;
   background:var(--acc);color:#09090f;
   font-size:22px;font-weight:300;border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 4px 20px rgba(52,211,153,.35);
+  box-shadow:0 4px 20px rgba(52,211,153,.4),0 0 0 1px rgba(52,211,153,.2);
   transition:transform .15s,box-shadow .15s;z-index:90;
 }
 .fab:active{transform:scale(.9);box-shadow:0 2px 10px rgba(52,211,153,.2)}
 
 /* ── MODAL ── */
 .overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.7);
-  backdrop-filter:blur(12px);z-index:200;
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.5);
+  backdrop-filter:blur(20px) saturate(180%);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  z-index:200;
   display:flex;align-items:flex-end;
   opacity:0;pointer-events:none;transition:opacity .22s;
 }
 .overlay.open{opacity:1;pointer-events:all}
 .modal{
-  background:var(--bg1);border-radius:24px 24px 0 0;
-  border-top:1px solid var(--line2);
+  background:rgba(18,18,28,0.85);
+  backdrop-filter:blur(40px) saturate(200%);
+  -webkit-backdrop-filter:blur(40px) saturate(200%);
+  border-radius:28px 28px 0 0;
+  border-top:1px solid rgba(255,255,255,0.15);
+  border-left:1px solid rgba(255,255,255,0.08);
+  border-right:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 -8px 40px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,0.1);
   padding:12px 20px calc(28px + var(--safe-b));
   width:100%;max-height:92dvh;overflow-y:auto;
   transform:translateY(32px);
@@ -192,7 +248,7 @@ body{
   letter-spacing:.10em;color:var(--sub);text-transform:uppercase;margin-bottom:6px;
 }
 .field input,.field select{
-  width:100%;background:var(--bg2);border:1px solid var(--line2);
+  width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
   border-radius:var(--rsm);padding:13px 14px;
   color:var(--text);font-family:var(--sans);font-size:16px;
   outline:none;appearance:none;transition:border-color .18s;
@@ -224,14 +280,14 @@ body{
 .btn-p:active{opacity:.8}
 .btn-s{
   width:100%;padding:13px;border-radius:var(--rsm);
-  background:none;color:var(--sub);
+  background:rgba(255,255,255,0.06);color:var(--sub);
   font-family:var(--sans);font-size:14px;
-  border:1px solid var(--line);cursor:pointer;margin-top:8px;
+  border:1px solid rgba(255,255,255,0.10);cursor:pointer;margin-top:8px;
 }
 .btn-del{
   width:100%;padding:13px;border-radius:var(--rsm);
   background:var(--red2);color:var(--red);
-  border:1px solid rgba(248,113,113,.2);
+  border:1px solid rgba(248,113,113,.25);
   font-family:var(--sans);font-size:14px;cursor:pointer;margin-top:8px;
 }
 
@@ -246,7 +302,7 @@ body{
 .mnav{display:flex;align-items:center;justify-content:space-between;padding:0 20px;margin-bottom:6px}
 .mnav-b{
   width:32px;height:32px;border-radius:50%;
-  background:var(--bg2);border:1px solid var(--line2);
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
   color:var(--text);font-size:18px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;transition:background .12s;
 }
@@ -258,20 +314,27 @@ body{
 
 /* ── SLIDE SCREEN (settings, detail) ── */
 .slide{
-  position:fixed;inset:0;background:var(--bg0);
+  position:fixed;inset:0;
+  background:linear-gradient(160deg,#0d1117 0%,#0a0d1a 40%,#0d0a1a 100%);
   z-index:150;overflow-y:auto;padding-bottom:40px;
   transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  -webkit-overflow-scrolling:touch;
+  will-change:transform;
 }
 .slide.open{transform:translateX(0)}
 .slide-hd{
   display:flex;align-items:center;gap:12px;
-  padding:calc(var(--safe-t)+52px) 20px 20px;
-  border-bottom:1px solid var(--line);
-  position:sticky;top:0;background:var(--bg0);z-index:10;
+  padding:calc(var(--safe-t) + 16px) 20px 16px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  position:sticky;top:0;
+  background:rgba(10,10,20,0.7);
+  backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);
+  z-index:10;
 }
 .back-btn{
   width:34px;height:34px;border-radius:50%;
-  background:var(--bg2);border:1px solid var(--line2);
+  background:var(--glass);border:1px solid var(--glass-border);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
   color:var(--text);font-size:20px;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
 }
@@ -279,13 +342,18 @@ body{
 /* ── SETTINGS ── */
 .s-sec{padding:18px 16px 0}
 .s-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.10em;color:var(--sub2);text-transform:uppercase;margin-bottom:8px}
-.s-card{background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
-.s-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);gap:12px}
+.s-card{
+  background:var(--glass);border:1px solid var(--glass-border);
+  border-radius:var(--r);overflow:hidden;margin-bottom:16px;
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.s-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);gap:12px}
 .s-row:last-child{border-bottom:none}
 .s-row-lbl{font-size:14px}
 .s-row-sub{font-size:11px;color:var(--sub);margin-top:2px}
 .s-row input[type=number]{
-  width:110px;background:var(--bg2);border:1px solid var(--line2);
+  width:110px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
   border-radius:var(--rsm);padding:8px 10px;
   color:var(--text);font-family:var(--mono);font-size:13px;
   outline:none;text-align:right;
@@ -293,24 +361,24 @@ body{
 .s-row input[type=number]:focus{border-color:var(--acc)}
 .toggle{position:relative;width:44px;height:26px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0;position:absolute}
-.tsl{position:absolute;inset:0;border-radius:13px;background:var(--bg3);border:1px solid var(--line2);transition:background .2s;cursor:pointer}
-.tsl:before{content:'';position:absolute;width:20px;height:20px;border-radius:10px;background:var(--sub2);top:3px;left:3px;transition:transform .2s,background .2s}
-.toggle input:checked+.tsl{background:rgba(52,211,153,.2);border-color:var(--acc)}
+.tsl{position:absolute;inset:0;border-radius:13px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.12);transition:background .2s;cursor:pointer}
+.tsl:before{content:'';position:absolute;width:20px;height:20px;border-radius:10px;background:rgba(255,255,255,0.4);top:3px;left:3px;transition:transform .2s,background .2s}
+.toggle input:checked+.tsl{background:rgba(52,211,153,.25);border-color:var(--acc)}
 .toggle input:checked+.tsl:before{transform:translateX(18px);background:var(--acc)}
 
 .tag-list{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px 6px}
-.tag-item{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--line2);border-radius:20px;padding:5px 8px 5px 12px;font-size:12px}
+.tag-item{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:5px 8px 5px 12px;font-size:12px}
 .tag-rm{width:18px;height:18px;border-radius:9px;background:none;border:none;color:var(--sub);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .tag-rm:active{color:var(--red)}
 .tag-add{display:flex;gap:8px;padding:4px 16px 12px}
-.tag-add input{flex:1;background:var(--bg2);border:1px solid var(--line2);border-radius:var(--rsm);padding:10px 12px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none}
+.tag-add input{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:var(--rsm);padding:10px 12px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none}
 .tag-add input:focus{border-color:var(--acc)}
-.tag-add-btn{width:40px;height:40px;border-radius:var(--rsm);background:var(--acc2);border:1px solid var(--acc);color:var(--acc);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tag-add-btn{width:40px;height:40px;border-radius:var(--rsm);background:var(--acc2);border:1px solid rgba(52,211,153,0.3);color:var(--acc);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 
 /* ── YEAR TABLE ── */
-.ytrow{display:grid;grid-template-columns:2fr 2fr 2fr 2fr;padding:11px 16px;border-bottom:1px solid var(--line);font-size:12px;align-items:center;cursor:pointer;transition:background .1s}
+.ytrow{display:grid;grid-template-columns:2fr 2fr 2fr 2fr;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;align-items:center;cursor:pointer;transition:background .1s}
 .ytrow:last-child{border-bottom:none}
-.ytrow:not(.ythd):active{background:var(--bg2)}
+.ytrow:not(.ythd):active{background:rgba(255,255,255,0.05)}
 .ythd{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--sub2);text-transform:uppercase;cursor:default}
 
 /* ── EMPTY STATE ── */
@@ -335,7 +403,7 @@ body{
 }
 .nwc-tooltip{
   position:absolute;bottom:calc(100% + 8px);
-  background:var(--bg2);border:1px solid var(--line2);
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
   border-radius:10px;padding:8px 12px;font-size:12px;
   font-family:var(--mono);white-space:nowrap;
   box-shadow:0 4px 16px rgba(0,0,0,.3);
@@ -363,22 +431,22 @@ body{
 .ai-msgs{flex:1;overflow-y:auto;padding:12px 16px 0;display:flex;flex-direction:column;gap:10px}
 .ai-msg{max-width:86%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.6}
 .ai-msg.user{align-self:flex-end;background:var(--acc);color:#09090f;border-bottom-right-radius:4px;font-weight:500}
-.ai-msg.bot{align-self:flex-start;background:var(--bg2);border:1px solid var(--line2);border-bottom-left-radius:4px}
+.ai-msg.bot{align-self:flex-start;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-bottom-left-radius:4px}
 .ai-msg.thinking{color:var(--sub);font-style:italic;font-size:13px}
 .ai-chips-row{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px 0;flex-shrink:0}
 .ai-chip{
   padding:7px 12px;border-radius:20px;font-size:12px;font-family:var(--mono);
-  background:var(--bg2);border:1px solid var(--line2);color:var(--sub);
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:var(--sub);
   cursor:pointer;transition:all .15s;white-space:nowrap;
 }
 .ai-chip:active{background:var(--bg3);color:var(--text)}
 .ai-bar{
   display:flex;align-items:flex-end;gap:10px;
   padding:10px 14px calc(78px + var(--safe-b));
-  border-top:1px solid var(--line);background:var(--bg0);flex-shrink:0;
+  border-top:1px solid rgba(255,255,255,0.08);background:rgba(10,10,20,0.6);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);flex-shrink:0;
 }
 .ai-inp{
-  flex:1;background:var(--bg2);border:1px solid var(--line2);
+  flex:1;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
   border-radius:18px;padding:10px 15px;
   color:var(--text);font-family:var(--sans);font-size:14px;outline:none;
   resize:none;max-height:110px;line-height:1.5;transition:border-color .18s;
@@ -400,7 +468,7 @@ body{
 
 /* settings api key input */
 #s-apikey{
-  width:100%;background:var(--bg2);border:1px solid var(--line2);
+  width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
   border-radius:var(--rsm);padding:12px 14px;
   color:var(--text);font-family:var(--mono);font-size:13px;
   outline:none;transition:border-color .18s;
@@ -423,508 +491,8 @@ body{
       </div>
     </div>
   </div>
-  <div class="sgrid sg3" id="bgt-pills">
-    <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green);font-size:15px">28&nbsp;000</div></div>
-    <div class="scard"><div class="scard-lbl">Utgifter</div><div class="scard-val" style="color:var(--red);font-size:15px">17&nbsp;141</div></div>
-    <div class="scard"><div class="scard-lbl">Sparkvot</div><div class="scard-val" style="color:var(--blue)">36%</div></div></div>
-  <div id="bgt-content" style="margin-top:18px"><div class="mnav">
-    <button class="mnav-b" onclick="changeMonth(-1)">‹</button>
-    <div style="text-align:center">
-      <div class="mnav-m">Maj 2026</div>
-      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:2px">Löneperiod 24 apr – 21 maj</div>
-    </div>
-    <button class="mnav-b" onclick="changeMonth(1)">›</button>
-  </div><div class="card"><div class="card-inner">
-    <div class="card-lbl">Kvar på lönekonto</div>
-    <div class="card-big" style="color:var(--green);margin-bottom:10px">+859 kr</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <span class="bdg" style="background:var(--blue2);color:var(--blue)">Sparande 10&nbsp;000 kr</span>
-      <span class="bdg" style="background:var(--green2);color:var(--green)">Kvot 36%</span>
-    </div>
-  </div></div><div class="card"><div class="card-inner">
-      <div class="card-lbl" style="margin-bottom:12px">Utgifter per kategori</div>
-      <div style="display:flex;align-items:center;gap:16px">
-        <div class="donut" style="width:120px;height:120px">
-          <svg viewBox="0 0 140 140" width="120" height="120"><circle cx="70" cy="70" r="52" fill="none" stroke="#34d399" stroke-width="13" stroke-dasharray="114.48 212.24" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(-90.00deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#60a5fa" stroke-width="13" stroke-dasharray="49.06 277.66" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(36.14deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#a78bfa" stroke-width="13" stroke-dasharray="48.47 278.25" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(90.20deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#fbbf24" stroke-width="13" stroke-dasharray="38.37 288.36" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(143.61deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#f87171" stroke-width="13" stroke-dasharray="19.29 307.44" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(185.89deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#fb923c" stroke-width="13" stroke-dasharray="17.76 308.96" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(207.14deg)"></circle></svg>
-          <div class="donut-c"><div class="donut-v">17k</div><div class="donut-l">utgifter</div></div>
-        </div>
-        <div style="flex:1;display:flex;flex-direction:column;gap:7px">
-          <div style="display:flex;align-items:center;gap:8px;font-size:12px">
-            <span style="width:8px;height:8px;border-radius:2px;background:#34d399;flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Boende (Lån)</span>
-            <span style="font-family:var(--mono);color:var(--text)">6&nbsp;006</span>
-          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
-            <span style="width:8px;height:8px;border-radius:2px;background:#60a5fa;flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Fest</span>
-            <span style="font-family:var(--mono);color:var(--text)">2&nbsp;574</span>
-          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
-            <span style="width:8px;height:8px;border-radius:2px;background:#a78bfa;flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Boende (Avgift)</span>
-            <span style="font-family:var(--mono);color:var(--text)">2&nbsp;543</span>
-          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
-            <span style="width:8px;height:8px;border-radius:2px;background:#fbbf24;flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Övrigt</span>
-            <span style="font-family:var(--mono);color:var(--text)">2&nbsp;013</span>
-          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
-            <span style="width:8px;height:8px;border-radius:2px;background:#f87171;flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Boende (Resterande)</span>
-            <span style="font-family:var(--mono);color:var(--text)">1&nbsp;012</span>
-          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
-            <span style="width:8px;height:8px;border-radius:2px;background:#fb923c;flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Mat (Ute)</span>
-            <span style="font-family:var(--mono);color:var(--text)">932</span>
-          </div>
-        </div>
-      </div>
-    </div></div><div class="sec"><span class="sec-t">Transaktioner</span><span class="sec-sub">64 st</span></div><div class="txl"><div class="txi" onclick="openEdit(2150)">
-        <div class="txav" style="background:var(--green2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-25</div>
-        </div>
-        <div class="txi-amt" style="color:var(--green)">+500</div>
-      </div><div class="txi" onclick="openEdit(2148)">
-        <div class="txav" style="background:var(--green2)">💰</div>
-        <div class="txi-info">
-          <div class="txi-name">Lön</div>
-          <div class="txi-meta">Lön · 05-25</div>
-        </div>
-        <div class="txi-amt" style="color:var(--green)">+27&nbsp;500</div>
-      </div><div class="txi" onclick="openEdit(2210)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">ai</div>
-          <div class="txi-meta">Övrigt · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−249</div>
-      </div><div class="txi" onclick="openEdit(2209)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">ai</div>
-          <div class="txi-meta">Övrigt · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−249</div>
-      </div><div class="txi" onclick="openEdit(2208)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−60</div>
-      </div><div class="txi" onclick="openEdit(2207)">
-        <div class="txav" style="background:var(--red2)">🥗</div>
-        <div class="txi-info">
-          <div class="txi-name">Lunch (Restaurang)</div>
-          <div class="txi-meta">Lunch (Restaurang) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−85</div>
-      </div><div class="txi" onclick="openEdit(2206)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−43</div>
-      </div><div class="txi" onclick="openEdit(2205)">
-        <div class="txav" style="background:var(--red2)">🛒</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Butik)</div>
-          <div class="txi-meta">Mat (Butik) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−14</div>
-      </div><div class="txi" onclick="openEdit(2204)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−89</div>
-      </div><div class="txi" onclick="openEdit(2203)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−30</div>
-      </div><div class="txi" onclick="openEdit(2202)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−51</div>
-      </div><div class="txi" onclick="openEdit(2201)">
-        <div class="txav" style="background:var(--red2)">🛒</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Butik)</div>
-          <div class="txi-meta">Mat (Butik) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−28</div>
-      </div><div class="txi" onclick="openEdit(2200)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−345</div>
-      </div><div class="txi" onclick="openEdit(2199)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−248</div>
-      </div><div class="txi" onclick="openEdit(2198)">
-        <div class="txav" style="background:var(--red2)">🎁</div>
-        <div class="txi-info">
-          <div class="txi-name">Bjuda andra/presenter</div>
-          <div class="txi-meta">Bjuda andra/presenter · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−47</div>
-      </div><div class="txi" onclick="openEdit(2197)">
-        <div class="txav" style="background:var(--red2)">🥗</div>
-        <div class="txi-info">
-          <div class="txi-name">Lunch (Restaurang)</div>
-          <div class="txi-meta">Lunch (Restaurang) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−75</div>
-      </div><div class="txi" onclick="openEdit(2196)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−40</div>
-      </div><div class="txi" onclick="openEdit(2195)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−224</div>
-      </div><div class="txi" onclick="openEdit(2194)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-12</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−39</div>
-      </div><div class="txi" onclick="openEdit(2193)">
-        <div class="txav" style="background:var(--red2)">🥗</div>
-        <div class="txi-info">
-          <div class="txi-name">Lunch (Restaurang)</div>
-          <div class="txi-meta">Lunch (Restaurang) · 05-07</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−85</div>
-      </div><div class="txi" onclick="openEdit(2192)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-06</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−10</div>
-      </div><div class="txi" onclick="openEdit(2191)">
-        <div class="txav" style="background:var(--red2)">🛒</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Butik)</div>
-          <div class="txi-meta">Mat (Butik) · 05-06</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−56</div>
-      </div><div class="txi" onclick="openEdit(2190)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-06</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−250</div>
-      </div><div class="txi" onclick="openEdit(2189)">
-        <div class="txav" style="background:var(--red2)">🛒</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Butik)</div>
-          <div class="txi-meta">Mat (Butik) · 05-05</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−92</div>
-      </div><div class="txi" onclick="openEdit(2188)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-05</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−68</div>
-      </div><div class="txi" onclick="openEdit(2187)">
-        <div class="txav" style="background:var(--red2)">🚗</div>
-        <div class="txi-info">
-          <div class="txi-name">Transport/Parkering</div>
-          <div class="txi-meta">Transport/Parkering · 05-05</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−36</div>
-      </div><div class="txi" onclick="openEdit(2186)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 05-04</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−36</div>
-      </div><div class="txi" onclick="openEdit(2185)">
-        <div class="txav" style="background:var(--red2)">🥗</div>
-        <div class="txi-info">
-          <div class="txi-name">Lunch (Restaurang)</div>
-          <div class="txi-meta">Lunch (Restaurang) · 05-04</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−75</div>
-      </div><div class="txi" onclick="openEdit(2184)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-03</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−78</div>
-      </div><div class="txi" onclick="openEdit(2183)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 05-03</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−144</div>
-      </div><div class="txi" onclick="openEdit(2182)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 05-03</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−60</div>
-      </div><div class="txi" onclick="openEdit(2181)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Snus</div>
-          <div class="txi-meta">Övrigt · 05-02</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−390</div>
-      </div><div class="txi" onclick="openEdit(2180)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 05-02</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−4</div>
-      </div><div class="txi" onclick="openEdit(2179)">
-        <div class="txav" style="background:var(--red2)">🛒</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Butik)</div>
-          <div class="txi-meta">Mat (Butik) · 05-02</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−100</div>
-      </div><div class="txi" onclick="openEdit(2178)">
-        <div class="txav" style="background:var(--red2)">🚗</div>
-        <div class="txi-info">
-          <div class="txi-name">Transport/Parkering</div>
-          <div class="txi-meta">Transport/Parkering · 05-02</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−119</div>
-      </div><div class="txi" onclick="openEdit(2177)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 05-02</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−384</div>
-      </div><div class="txi" onclick="openEdit(2176)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 04-29</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−169</div>
-      </div><div class="txi" onclick="openEdit(2175)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 04-29</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−159</div>
-      </div><div class="txi" onclick="openEdit(2174)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 04-29</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−175</div>
-      </div><div class="txi" onclick="openEdit(2173)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 04-29</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−338</div>
-      </div><div class="txi" onclick="openEdit(2172)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 04-28</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−43</div>
-      </div><div class="txi" onclick="openEdit(2171)">
-        <div class="txav" style="background:var(--red2)">🛒</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Butik)</div>
-          <div class="txi-meta">Mat (Butik) · 04-28</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−369</div>
-      </div><div class="txi" onclick="openEdit(2170)">
-        <div class="txav" style="background:var(--red2)">🥗</div>
-        <div class="txi-info">
-          <div class="txi-name">Lunch (Restaurang)</div>
-          <div class="txi-meta">Lunch (Restaurang) · 04-28</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−54</div>
-      </div><div class="txi" onclick="openEdit(2169)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−54</div>
-      </div><div class="txi" onclick="openEdit(2168)">
-        <div class="txav" style="background:var(--red2)">🚗</div>
-        <div class="txi-info">
-          <div class="txi-name">Transport/Parkering</div>
-          <div class="txi-meta">Transport/Parkering · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−21</div>
-      </div><div class="txi" onclick="openEdit(2167)">
-        <div class="txav" style="background:var(--red2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Övrigt</div>
-          <div class="txi-meta">Övrigt · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−129</div>
-      </div><div class="txi" onclick="openEdit(2166)">
-        <div class="txav" style="background:var(--red2)">💪</div>
-        <div class="txi-info">
-          <div class="txi-name">Gym</div>
-          <div class="txi-meta">Gym · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−19</div>
-      </div><div class="txi" onclick="openEdit(2165)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−90</div>
-      </div><div class="txi" onclick="openEdit(2164)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−230</div>
-      </div><div class="txi" onclick="openEdit(2163)">
-        <div class="txav" style="background:var(--red2)">🎁</div>
-        <div class="txi-info">
-          <div class="txi-name">Bjuda andra/presenter</div>
-          <div class="txi-meta">Bjuda andra/presenter · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−246</div>
-      </div><div class="txi" onclick="openEdit(2162)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−175</div>
-      </div><div class="txi" onclick="openEdit(2161)">
-        <div class="txav" style="background:var(--red2)">🚗</div>
-        <div class="txi-info">
-          <div class="txi-name">Transport/Parkering</div>
-          <div class="txi-meta">Transport/Parkering · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−206</div>
-      </div><div class="txi" onclick="openEdit(2160)">
-        <div class="txav" style="background:var(--red2)">🚗</div>
-        <div class="txi-info">
-          <div class="txi-name">Transport/Parkering</div>
-          <div class="txi-meta">Transport/Parkering · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−100</div>
-      </div><div class="txi" onclick="openEdit(2159)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−386</div>
-      </div><div class="txi" onclick="openEdit(2158)">
-        <div class="txav" style="background:var(--red2)">🍽</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Ute)</div>
-          <div class="txi-meta">Mat (Ute) · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−98</div>
-      </div><div class="txi" onclick="openEdit(2157)">
-        <div class="txav" style="background:var(--red2)">🎉</div>
-        <div class="txi-info">
-          <div class="txi-name">Fest</div>
-          <div class="txi-meta">Fest · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−382</div>
-      </div><div class="txi" onclick="openEdit(2156)">
-        <div class="txav" style="background:var(--red2)">🚗</div>
-        <div class="txi-info">
-          <div class="txi-name">Transport/Parkering</div>
-          <div class="txi-meta">Transport/Parkering · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−155</div>
-      </div><div class="txi" onclick="openEdit(2155)">
-        <div class="txav" style="background:var(--red2)">🛒</div>
-        <div class="txi-info">
-          <div class="txi-name">Mat (Butik)</div>
-          <div class="txi-meta">Mat (Butik) · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−20</div>
-      </div><div class="txi" onclick="openEdit(2154)">
-        <div class="txav" style="background:var(--red2)">🥗</div>
-        <div class="txi-info">
-          <div class="txi-name">Lunch (Restaurang)</div>
-          <div class="txi-meta">Lunch (Restaurang) · 04-27</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−59</div>
-      </div><div class="txi" onclick="openEdit(2153)">
-        <div class="txav" style="background:var(--blue2)">○</div>
-        <div class="txi-info">
-          <div class="txi-name">Seb</div>
-          <div class="txi-meta">Sparande · 04-24</div>
-        </div>
-        <div class="txi-amt" style="color:var(--blue)">−10&nbsp;000</div>
-      </div><div class="txi" onclick="openEdit(2152)">
-        <div class="txav" style="background:var(--red2)">🏠</div>
-        <div class="txi-info">
-          <div class="txi-name">Boende (Resterande)</div>
-          <div class="txi-meta">Boende (Resterande) · 04-24</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−124</div>
-      </div><div class="txi" onclick="openEdit(2151)">
-        <div class="txav" style="background:var(--red2)">🏠</div>
-        <div class="txi-info">
-          <div class="txi-name">Hemförsäkring</div>
-          <div class="txi-meta">Boende (Resterande) · 04-24</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−888</div>
-      </div><div class="txi" onclick="openEdit(2149)">
-        <div class="txav" style="background:var(--red2)">🏠</div>
-        <div class="txi-info">
-          <div class="txi-name">Boende (Lån)</div>
-          <div class="txi-meta">Boende (Lån) · 04-24</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−6&nbsp;006</div>
-      </div><div class="txi" onclick="openEdit(2147)">
-        <div class="txav" style="background:var(--red2)">🏠</div>
-        <div class="txi-info">
-          <div class="txi-name">Boende (Avgift)</div>
-          <div class="txi-meta">Boende (Avgift) · 04-24</div>
-        </div>
-        <div class="txi-amt" style="color:var(--sub)">−2&nbsp;543</div>
-      </div></div></div>
+  <div class="sgrid sg3" id="bgt-pills"></div>
+  <div id="bgt-content" style="margin-top:18px"></div>
 </div>
 
 <!-- ═══ NET WORTH SCREEN ═══ -->
@@ -972,38 +540,50 @@ body{
   </div>
   <div class="ai-key-note" id="ai-key-note" onclick="openSettings()">🔑 Ingen API-nyckel — tryck här för att ange</div>
   <div class="ai-chips-row">
-    <div class="ai-chip" onclick="sendChip(&#39;Hur ser min ekonomi ut denna månaden?&#39;)">📊 Månaden</div>
-    <div class="ai-chip" onclick="sendChip(&#39;Analysera mitt sparande och ge tips&#39;)">💡 Spartips</div>
-    <div class="ai-chip" onclick="sendChip(&#39;Vad spenderade jag mest på senaste 3 månaderna?&#39;)">🔍 Topputgifter</div>
-    <div class="ai-chip" onclick="sendChip(&#39;Hur går det mot mitt förmögenhetsmål?&#39;)">🎯 Mål</div>
+    <div class="ai-chip" onclick="sendChip('Hur ser min ekonomi ut denna månaden?')">📊 Månaden</div>
+    <div class="ai-chip" onclick="sendChip('Analysera mitt sparande och ge tips')">💡 Spartips</div>
+    <div class="ai-chip" onclick="sendChip('Vad spenderade jag mest på senaste 3 månaderna?')">🔍 Topputgifter</div>
+    <div class="ai-chip" onclick="sendChip('Hur går det mot mitt förmögenhetsmål?')">🎯 Mål</div>
   </div>
   <div class="ai-msgs" id="ai-msgs">
     <div class="ai-msg bot">👋 Hej! Jag är din personliga ekonomiassistent med tillgång till all din data. Ange din Anthropic API-nyckel i inställningar för att börja!</div>
   </div>
   <div class="ai-bar">
-    <textarea class="ai-inp" id="ai-inp" placeholder="Ställ en fråga…" rows="1" onkeydown="if(event.key===&#39;Enter&#39;&amp;&amp;!event.shiftKey){event.preventDefault();sendAi()}" oninput="this.style.height=&#39;auto&#39;;this.style.height=this.scrollHeight+&#39;px&#39;"></textarea>
+    <textarea class="ai-inp" id="ai-inp" placeholder="Ställ en fråga…" rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAi()}"
+      oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
     <button class="ai-send" id="ai-send" onclick="sendAi()">↑</button>
   </div>
 </div>
 
 <!-- ═══ NAV ═══ -->
 <nav class="nav">
-  <button class="nb active" onclick="showScreen(&#39;budget&#39;)" id="nav-budget">
-    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="13" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect></svg>
-    Budget
-  </button>
-  <button class="nb" onclick="showScreen(&#39;nw&#39;)" id="nav-nw">
-    <svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"></polyline><polyline points="14 7 21 7 21 14"></polyline></svg>
-    Förmögenhet
-  </button>
-  <button class="nb" onclick="showScreen(&#39;year&#39;)" id="nav-year">
-    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-    År
-  </button>
-  <button class="nb" onclick="showScreen(&#39;ai&#39;)" id="nav-ai">
-    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-    AI
-  </button>
+  <div class="nav-dock">
+    <button class="nb active" onclick="showScreen('budget')" id="nav-budget">
+      <div class="nb-icon">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+      </div>
+      <span>Budget</span>
+    </button>
+    <button class="nb" onclick="showScreen('nw')" id="nav-nw">
+      <div class="nb-icon">
+        <svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
+      </div>
+      <span>Förmögenhet</span>
+    </button>
+    <button class="nb" onclick="showScreen('year')" id="nav-year">
+      <div class="nb-icon">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </div>
+      <span>År</span>
+    </button>
+    <button class="nb" onclick="showScreen('ai')" id="nav-ai">
+      <div class="nb-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <span>AI</span>
+    </button>
+  </div>
 </nav>
 <button class="fab" id="fab" onclick="openAdd()" style="display:flex">+</button>
 
@@ -1013,9 +593,9 @@ body{
     <div class="modal-handle"></div>
     <div class="modal-title" id="tx-modal-title">Lägg till</div>
     <div class="type-row">
-      <button class="tbtn" id="tbtn-expense" onclick="setType(&#39;expense&#39;)">Utgift</button>
-      <button class="tbtn" id="tbtn-income" onclick="setType(&#39;income&#39;)">Inkomst</button>
-      <button class="tbtn" id="tbtn-savings" onclick="setType(&#39;savings&#39;)">Sparande</button>
+      <button class="tbtn" id="tbtn-expense" onclick="setType('expense')">Utgift</button>
+      <button class="tbtn" id="tbtn-income" onclick="setType('income')">Inkomst</button>
+      <button class="tbtn" id="tbtn-savings" onclick="setType('savings')">Sparande</button>
     </div>
     <div class="field"><label>Belopp (kr)</label><input type="number" id="tx-amt" placeholder="0" inputmode="decimal"></div>
     <div class="field"><label>Beskrivning</label><input type="text" id="tx-desc" placeholder="Valfritt"></div>
@@ -1023,7 +603,7 @@ body{
     <div class="field"><label>Datum</label><input type="date" id="tx-date"></div>
     <button class="btn-p" onclick="saveTx()">Spara</button>
     <button class="btn-del" id="tx-del-btn" onclick="deleteTx()" style="display:none">Ta bort</button>
-    <button class="btn-s" onclick="closeOverlay(&#39;tx-modal&#39;)">Avbryt</button>
+    <button class="btn-s" onclick="closeOverlay('tx-modal')">Avbryt</button>
   </div>
 </div>
 
@@ -1050,7 +630,23 @@ body{
       <div class="field"><label>Övrigt</label><input type="number" id="nwm-other" placeholder="0" inputmode="decimal"></div>
     </div>
     <button class="btn-p" onclick="saveNW()">Spara snapshot</button>
-    <button class="btn-s" onclick="closeOverlay(&#39;nw-modal&#39;)">Avbryt</button>
+    <button class="btn-s" onclick="closeOverlay('nw-modal')">Avbryt</button>
+  </div>
+</div>
+
+<!-- ═══ GROUP MODAL ═══ -->
+<div class="overlay" id="grp-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="grp-modal-title">Ny grupp</div>
+    <div class="field"><label>Gruppnamn</label><input type="text" id="grp-name" placeholder="t.ex. Boende"></div>
+    <div class="field">
+      <label>Välj kategorier att inkludera</label>
+      <div id="grp-cat-checks" style="display:flex;flex-direction:column;gap:8px;margin-top:4px;max-height:260px;overflow-y:auto"></div>
+    </div>
+    <button class="btn-p" onclick="saveGroup()">Spara grupp</button>
+    <button class="btn-del" id="grp-del-btn" onclick="deleteGroup()" style="display:none">Ta bort grupp</button>
+    <button class="btn-s" onclick="closeOverlay('grp-modal')">Avbryt</button>
   </div>
 </div>
 
@@ -1061,7 +657,7 @@ body{
     <div class="modal-title">Bekräfta import</div>
     <div id="import-info" style="color:var(--sub);font-size:13px;margin-bottom:16px;font-family:var(--mono);line-height:1.6"></div>
     <button class="btn-p" onclick="confirmImport()">Skriv över och importera</button>
-    <button class="btn-s" onclick="closeOverlay(&#39;import-modal&#39;)">Avbryt</button>
+    <button class="btn-s" onclick="closeOverlay('import-modal')">Avbryt</button>
   </div>
 </div>
 
@@ -1097,12 +693,20 @@ body{
     <div class="s-card">
       <div class="s-row">
         <div><div class="s-row-lbl">Månadslön (netto)</div></div>
-        <input type="number" id="s-salary" placeholder="0" onchange="saveSetting(&#39;salary&#39;,this.value)">
+        <input type="number" id="s-salary" placeholder="0" onchange="saveSetting('salary',this.value)">
       </div>
       <div class="s-row">
         <div><div class="s-row-lbl">Förmögenhetsmål</div></div>
-        <input type="number" id="s-goal" placeholder="700000" onchange="saveSetting(&#39;goal&#39;,this.value)">
+        <input type="number" id="s-goal" placeholder="700000" onchange="saveSetting('goal',this.value)">
       </div>
+    </div>
+  </div>
+
+  <div class="s-sec">
+    <div class="s-lbl">Kategorgrupper <span style="font-size:10px;color:var(--sub2);font-weight:400">— slå ihop kategorier i diagrammet</span></div>
+    <div class="s-card" id="grp-list"></div>
+    <div style="margin-top:8px">
+      <button onclick="openNewGroupModal()" style="width:100%;padding:12px;border-radius:var(--rsm);background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:var(--sub);font-family:var(--sans);font-size:14px;cursor:pointer">+ Ny grupp</button>
     </div>
   </div>
 
@@ -1111,8 +715,8 @@ body{
     <div class="s-card">
       <div class="tag-list" id="exp-cats"></div>
       <div class="tag-add">
-        <input type="text" id="new-exp-cat" placeholder="Ny kategori…" onkeydown="if(event.key===&#39;Enter&#39;)addCat(&#39;expense&#39;)">
-        <button class="tag-add-btn" onclick="addCat(&#39;expense&#39;)">+</button>
+        <input type="text" id="new-exp-cat" placeholder="Ny kategori…" onkeydown="if(event.key==='Enter')addCat('expense')">
+        <button class="tag-add-btn" onclick="addCat('expense')">+</button>
       </div>
     </div>
   </div>
@@ -1122,8 +726,8 @@ body{
     <div class="s-card">
       <div class="tag-list" id="sav-cats"></div>
       <div class="tag-add">
-        <input type="text" id="new-sav-cat" placeholder="Nytt sparkonto…" onkeydown="if(event.key===&#39;Enter&#39;)addCat(&#39;savings&#39;)">
-        <button class="tag-add-btn" onclick="addCat(&#39;savings&#39;)">+</button>
+        <input type="text" id="new-sav-cat" placeholder="Nytt sparkonto…" onkeydown="if(event.key==='Enter')addCat('savings')">
+        <button class="tag-add-btn" onclick="addCat('savings')">+</button>
       </div>
     </div>
   </div>
@@ -1185,6 +789,23 @@ const svNWs=v=>sv('nws',v);
 const getGoal=()=>ld('goal',700000);
 const getExpCats=()=>ld('cats_exp',DEF_EXP);
 const getSavCats=()=>ld('cats_sav',DEF_SAV);
+const getGroups=()=>ld('cat_groups',[]);
+const svGroups=v=>sv('cat_groups',v);
+
+// Merge grouped categories into group name for display purposes only
+function applyGroups(byCat){
+  const groups=getGroups();
+  if(!groups.length)return byCat;
+  const result={...byCat};
+  groups.forEach(g=>{
+    let total=0;
+    g.cats.forEach(c=>{
+      if(result[c]!==undefined){total+=result[c];delete result[c];}
+    });
+    if(total>0)result[g.name]=(result[g.name]||0)+total;
+  });
+  return result;
+}
 
 function fmt(n){return Math.round(n).toLocaleString('sv-SE')}
 function fmtK(n){if(Math.abs(n)>=1000000)return (n/1000000).toFixed(1)+'M';if(Math.abs(n)>=1000)return (n/1000).toFixed(0)+'k';return Math.round(n).toString()}
@@ -1416,7 +1037,8 @@ function renderBudget(){
 
   const byCat={};
   txs.filter(t=>t.type==='expense').forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
-  const sortedCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const byCatGrouped=applyGroups(byCat);
+  const sortedCats=Object.entries(byCatGrouped).sort((a,b)=>b[1]-a[1]);
   const slices=sortedCats.slice(0,6).map(([c,v],i)=>({val:v,color:COLORS[i],cat:c}));
 
   const periodLbl=payPeriodLabel(month);
@@ -1533,7 +1155,7 @@ function makeNWChart(nws){
       </svg>
       <div id="nwc-vline" style="display:none;position:absolute;top:0;bottom:20px;width:1px;background:var(--acc);pointer-events:none"></div>
       <div id="nwc-dot" style="display:none;position:absolute;width:10px;height:10px;border-radius:50%;background:var(--acc);border:2px solid var(--bg1);pointer-events:none;transform:translate(-50%,-50%)"></div>
-      <div id="nwc-tip" style="display:none;position:absolute;bottom:24px;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;font-size:12px;font-family:var(--mono);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;transform:translateX(-50%)"></div>
+      <div id="nwc-tip" style="display:none;position:absolute;bottom:24px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:7px 12px;font-size:12px;font-family:var(--mono);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;transform:translateX(-50%)"></div>
       <div style="position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;padding:0 ${pad*100/W}%;font-size:10px;font-family:var(--mono);color:var(--sub2)">
         ${lblPts.map(p=>`<span>${p.n.period.slice(2).replace('-','/')}</span>`).join('')}
       </div>
@@ -1900,6 +1522,95 @@ function renderSettings(){
   document.getElementById('s-apikey').value=getApiKey();
   renderCatList('exp-cats',getExpCats(),'expense');
   renderCatList('sav-cats',getSavCats(),'savings');
+  renderGroupList();
+}
+
+function renderGroupList(){
+  const groups=getGroups();
+  const el=document.getElementById('grp-list');
+  if(!groups.length){
+    el.innerHTML=`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga grupper ännu. Tryck "Ny grupp" för att skapa.</div>`;
+    return;
+  }
+  el.innerHTML=groups.map((g,i)=>`
+    <div class="s-row" style="cursor:pointer" onclick="openEditGroupModal(${i})">
+      <div>
+        <div class="s-row-lbl">${g.name}</div>
+        <div class="s-row-sub">${g.cats.join(', ')}</div>
+      </div>
+      <span style="color:var(--sub2);font-size:18px">›</span>
+    </div>`).join('');
+}
+
+let editGroupIdx=null;
+
+function openNewGroupModal(){
+  editGroupIdx=null;
+  document.getElementById('grp-modal-title').textContent='Ny grupp';
+  document.getElementById('grp-name').value='';
+  document.getElementById('grp-del-btn').style.display='none';
+  renderGroupCatChecks([]);
+  document.getElementById('grp-modal').classList.add('open');
+}
+
+function openEditGroupModal(idx){
+  editGroupIdx=idx;
+  const g=getGroups()[idx];
+  document.getElementById('grp-modal-title').textContent='Redigera grupp';
+  document.getElementById('grp-name').value=g.name;
+  document.getElementById('grp-del-btn').style.display='block';
+  renderGroupCatChecks(g.cats);
+  document.getElementById('grp-modal').classList.add('open');
+}
+
+function renderGroupCatChecks(selected){
+  const cats=getExpCats();
+  const sel=new Set(selected);
+  document.getElementById('grp-cat-checks').innerHTML=cats.map(c=>`
+    <div onclick="toggleGrpCat(this,'${c.replace(/'/g,"\\'")}','grp-cat-checks')"
+      data-cat="${c}"
+      style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;
+        background:${sel.has(c)?'var(--acc2)':'var(--bg2)'};
+        border:1px solid ${sel.has(c)?'var(--acc)':'var(--line2)'};
+        border-radius:var(--rsm);cursor:pointer;transition:all .15s"
+      data-selected="${sel.has(c)?'1':'0'}">
+      <span style="font-size:14px;color:${sel.has(c)?'var(--acc)':'var(--text)'}">${c}</span>
+      <span style="font-size:18px;color:${sel.has(c)?'var(--acc)':'var(--sub2)'}">${sel.has(c)?'✓':'○'}</span>
+    </div>`).join('');
+}
+
+function toggleGrpCat(el){
+  const isSelected=el.dataset.selected==='1';
+  el.dataset.selected=isSelected?'0':'1';
+  el.style.background=isSelected?'var(--bg2)':'var(--acc2)';
+  el.style.border=`1px solid ${isSelected?'var(--line2)':'var(--acc)'}`;
+  el.querySelector('span:first-child').style.color=isSelected?'var(--text)':'var(--acc)';
+  el.querySelector('span:last-child').textContent=isSelected?'○':'✓';
+  el.querySelector('span:last-child').style.color=isSelected?'var(--sub2)':'var(--acc)';
+}
+
+function saveGroup(){
+  const name=document.getElementById('grp-name').value.trim();
+  if(!name){alert('Ange ett gruppnamn');return;}
+  const cats=[...document.querySelectorAll('#grp-cat-checks [data-selected="1"]')].map(el=>el.dataset.cat);
+  if(cats.length<2){alert('Välj minst 2 kategorier');return;}
+  const groups=getGroups();
+  const grp={name,cats};
+  if(editGroupIdx!==null){groups[editGroupIdx]=grp;}
+  else{groups.push(grp);}
+  svGroups(groups);
+  closeOverlay('grp-modal');
+  renderSettings();
+  render();
+}
+
+function deleteGroup(){
+  if(editGroupIdx===null)return;
+  const groups=getGroups().filter((_,i)=>i!==editGroupIdx);
+  svGroups(groups);
+  closeOverlay('grp-modal');
+  renderSettings();
+  render();
 }
 function renderCatList(id,cats,type){
   document.getElementById(id).innerHTML=cats.map((c,i)=>
@@ -1919,9 +1630,7 @@ function addCat(type){
   inp.value='';renderSettings();
 }
 
-// ═══════════════════════════════════════════
-// EXPORT / IMPORT
-// ═══════════════════════════════════════════
+
 function exportData(){
   const data={version:1,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
     settings:{goal:ld('goal',700000),salary:ld('salary',0),theme:ld('theme','dark'),cats_exp:getExpCats(),cats_sav:getSavCats()}};
@@ -2061,19 +1770,7 @@ function render(){
 (()=>{if(ld('theme','dark')==='light')document.body.classList.add('light')})();
 
 
-// ═══════════════════════════════════════════
-// SEED DATA
-// ═══════════════════════════════════════════
-(function(){
-  if(!JSON.parse(localStorage.getItem('txs')||'[]').length){
-    localStorage.setItem('txs',JSON.stringify([{"id": 1000, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-02-15", "month": "2025-02"}, {"id": 1001, "type": "income", "amount": 23426.0, "desc": "", "cat": "Lön", "date": "2025-02-25", "month": "2025-02"}, {"id": 1002, "type": "expense", "amount": 6254.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-02-15", "month": "2025-02"}, {"id": 1074, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-03-15", "month": "2025-03"}, {"id": 1075, "type": "income", "amount": 26823.0, "desc": "", "cat": "Lön", "date": "2025-03-25", "month": "2025-03"}, {"id": 1076, "type": "expense", "amount": 6248.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-03-15", "month": "2025-03"}, {"id": 1082, "type": "savings", "amount": 7500.0, "desc": "", "cat": "Avanza", "date": "2025-03-15", "month": "2025-03"}, {"id": 1151, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-04-15", "month": "2025-04"}, {"id": 1152, "type": "income", "amount": 22974.0, "desc": "", "cat": "Lön", "date": "2025-04-25", "month": "2025-04"}, {"id": 1153, "type": "expense", "amount": 5776.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-04-15", "month": "2025-04"}, {"id": 1159, "type": "savings", "amount": 4316.0, "desc": "", "cat": "Avanza", "date": "2025-04-15", "month": "2025-04"}, {"id": 1429, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-05-15", "month": "2025-05"}, {"id": 1430, "type": "income", "amount": 23613.0, "desc": "", "cat": "Lön", "date": "2025-05-25", "month": "2025-05"}, {"id": 1431, "type": "expense", "amount": 5777.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-05-15", "month": "2025-05"}, {"id": 1435, "type": "savings", "amount": 4726.0, "desc": "", "cat": "Avanza", "date": "2025-05-15", "month": "2025-05"}, {"id": 1344, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-06-15", "month": "2025-06"}, {"id": 1345, "type": "income", "amount": 22409.0, "desc": "", "cat": "Lön", "date": "2025-06-25", "month": "2025-06"}, {"id": 1346, "type": "expense", "amount": 5671.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-06-15", "month": "2025-06"}, {"id": 1352, "type": "savings", "amount": 5300.0, "desc": "", "cat": "Avanza", "date": "2025-06-15", "month": "2025-06"}, {"id": 1313, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-07-15", "month": "2025-07"}, {"id": 1314, "type": "income", "amount": 26309.0, "desc": "", "cat": "Lön", "date": "2025-07-25", "month": "2025-07"}, {"id": 1315, "type": "expense", "amount": 5665.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-07-15", "month": "2025-07"}, {"id": 1319, "type": "savings", "amount": 7000.0, "desc": "", "cat": "Avanza", "date": "2025-07-15", "month": "2025-07"}, {"id": 1215, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-08-15", "month": "2025-08"}, {"id": 1216, "type": "income", "amount": 25477.0, "desc": "", "cat": "Lön", "date": "2025-08-25", "month": "2025-08"}, {"id": 1217, "type": "expense", "amount": 5666.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-08-15", "month": "2025-08"}, {"id": 1628, "type": "expense", "amount": 2351.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-09-15", "month": "2025-09"}, {"id": 1629, "type": "income", "amount": 26334.0, "desc": "", "cat": "Lön", "date": "2025-09-25", "month": "2025-09"}, {"id": 1630, "type": "expense", "amount": 5654.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-09-15", "month": "2025-09"}, {"id": 1510, "type": "expense", "amount": 2426.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-10-15", "month": "2025-10"}, {"id": 1511, "type": "income", "amount": 30687.0, "desc": "", "cat": "Lön", "date": "2025-10-25", "month": "2025-10"}, {"id": 1512, "type": "expense", "amount": 5449.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-10-15", "month": "2025-10"}, {"id": 1794, "type": "expense", "amount": 2426.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-11-15", "month": "2025-11"}, {"id": 1795, "type": "income", "amount": 30359.0, "desc": "", "cat": "Lön", "date": "2025-11-25", "month": "2025-11"}, {"id": 1796, "type": "expense", "amount": 5449.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-11-15", "month": "2025-11"}, {"id": 1801, "type": "savings", "amount": 6639.0, "desc": "Avanza", "cat": "Avanza", "date": "2025-11-15", "month": "2025-11"}, {"id": 1712, "type": "expense", "amount": 2426.0, "desc": "", "cat": "Boende (Avgift)", "date": "2025-12-15", "month": "2025-12"}, {"id": 1713, "type": "income", "amount": 28650.0, "desc": "", "cat": "Lön", "date": "2025-12-25", "month": "2025-12"}, {"id": 1714, "type": "expense", "amount": 5449.0, "desc": "", "cat": "Boende (Lån)", "date": "2025-12-15", "month": "2025-12"}, {"id": 1717, "type": "savings", "amount": 5000.0, "desc": "Avanza", "cat": "Avanza", "date": "2025-12-15", "month": "2025-12"}, {"id": 2053, "type": "expense", "amount": 2543.0, "desc": "", "cat": "Boende (Avgift)", "date": "2026-01-15", "month": "2026-01"}, {"id": 2054, "type": "income", "amount": 27096.0, "desc": "", "cat": "Lön", "date": "2026-01-25", "month": "2026-01"}, {"id": 2055, "type": "expense", "amount": 5213.0, "desc": "", "cat": "Boende (Lån)", "date": "2026-01-15", "month": "2026-01"}, {"id": 2059, "type": "savings", "amount": 10000.0, "desc": "Avanza", "cat": "Avanza", "date": "2026-01-15", "month": "2026-01"}, {"id": 1978, "type": "expense", "amount": 2543.0, "desc": "", "cat": "Boende (Avgift)", "date": "2026-01-23", "month": "2026-02"}, {"id": 1979, "type": "income", "amount": 27500.0, "desc": "", "cat": "Lön", "date": "2026-02-25", "month": "2026-02"}, {"id": 1980, "type": "expense", "amount": 5186.0, "desc": "", "cat": "Boende (Lån)", "date": "2026-01-23", "month": "2026-02"}, {"id": 1984, "type": "savings", "amount": 5000.0, "desc": "Avanza", "cat": "Avanza", "date": "2026-01-23", "month": "2026-02"}, {"id": 2211, "type": "expense", "amount": 2543.0, "desc": "", "cat": "Boende (Avgift)", "date": "2026-02-25", "month": "2026-03"}, {"id": 2212, "type": "income", "amount": 27500.0, "desc": "", "cat": "Lön", "date": "2026-03-25", "month": "2026-03"}, {"id": 2213, "type": "expense", "amount": 5182.0, "desc": "", "cat": "Boende (Lån)", "date": "2026-02-25", "month": "2026-03"}, {"id": 2217, "type": "savings", "amount": 5000.0, "desc": "Avanza", "cat": "Avanza", "date": "2026-02-25", "month": "2026-03"}, {"id": 1891, "type": "expense", "amount": 2543.0, "desc": "", "cat": "Boende (Avgift)", "date": "2026-03-25", "month": "2026-04"}, {"id": 1892, "type": "income", "amount": 27500.0, "desc": "", "cat": "Lön", "date": "2026-04-25", "month": "2026-04"}, {"id": 1893, "type": "expense", "amount": 5176.0, "desc": "", "cat": "Boende (Lån)", "date": "2026-03-25", "month": "2026-04"}, {"id": 1916, "type": "expense", "amount": 3020.0, "desc": "Kittel", "cat": "Fest", "date": "2026-04-06", "month": "2026-04"}, {"id": 1960, "type": "expense", "amount": 1100.0, "desc": "spanien", "cat": "Spanien", "date": "2026-04-23", "month": "2026-04"}, {"id": 2147, "type": "expense", "amount": 2543.0, "desc": "", "cat": "Boende (Avgift)", "date": "2026-04-24", "month": "2026-05"}, {"id": 2148, "type": "income", "amount": 27500.0, "desc": "", "cat": "Lön", "date": "2026-05-25", "month": "2026-05"}, {"id": 2149, "type": "expense", "amount": 6006.0, "desc": "", "cat": "Boende (Lån)", "date": "2026-04-24", "month": "2026-05"}, {"id": 2153, "type": "savings", "amount": 10000.0, "desc": "Seb", "cat": "SEB", "date": "2026-04-24", "month": "2026-05"}, {"id": 2195, "type": "expense", "amount": 224.0, "desc": "", "cat": "Mat (Ute)", "date": "2026-05-12", "month": "2026-05"}, {"id": 2199, "type": "expense", "amount": 248.0, "desc": "", "cat": "Fest", "date": "2026-05-12", "month": "2026-05"}, {"id": 2200, "type": "expense", "amount": 345.0, "desc": "", "cat": "Fest", "date": "2026-05-12", "month": "2026-05"}]));
-  }
-  if(!JSON.parse(localStorage.getItem('nws')||'[]').length){
-    localStorage.setItem('nws',JSON.stringify([{"period":"2025-09","cash":40000,"kontanter":1700,"stocks":107000,"klockor":25000,"apt":324000,"pension":24500,"ab":0,"other":0,"total":522200},{"period":"2025-10","cash":58000,"kontanter":200,"stocks":95200,"klockor":31000,"apt":326000,"pension":28000,"ab":0,"other":0,"total":538400},{"period":"2025-11","cash":31000,"kontanter":200,"stocks":127000,"klockor":31000,"apt":328000,"pension":32000,"ab":0,"other":0,"total":549200},{"period":"2025-12","cash":24500,"kontanter":200,"stocks":127000,"klockor":31000,"apt":331000,"pension":33500,"ab":0,"other":0,"total":547200},{"period":"2026-01","cash":33000,"kontanter":200,"stocks":130500,"klockor":31000,"apt":333000,"pension":35500,"ab":0,"other":0,"total":563200},{"period":"2026-02","cash":41500,"kontanter":200,"stocks":127172,"klockor":31000,"apt":335000,"pension":36500,"ab":0,"other":0,"total":571372},{"period":"2026-03","cash":237000,"kontanter":200,"stocks":119000,"klockor":31000,"apt":123000,"pension":38000,"ab":25000,"other":0,"total":573200},{"period":"2026-04","cash":226000,"kontanter":200,"stocks":129000,"klockor":31000,"apt":125000,"pension":41840,"ab":31300,"other":0,"total":584340}]));
-  }
-})();
 
 render();
 </script>
-
 </body></html>
