@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0061)file:///C:/Users/AugustNerpin/Downloads/privatekonomi_13.html -->
+<!-- saved from url=(0061)file:///C:/Users/AugustNerpin/Downloads/privatekonomi_15.html -->
 <html lang="sv"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -487,12 +487,12 @@ body{
 <body>
 
 <!-- ═══ BUDGET SCREEN ═══ -->
-<div class="screen active" id="screen-budget">
+<div class="screen" id="screen-budget">
   <div class="hdr">
     <div class="hdr-row">
       <div>
         <div class="hdr-label">Månadsbudget</div>
-        <div class="hdr-amount" id="bgt-month-t">Jun 2026</div>
+        <div class="hdr-amount" id="bgt-month-t">Maj 2026</div>
       </div>
       <div class="hdr-right">
         <button class="ibtn" onclick="openSettings()">⚙</button>
@@ -500,62 +500,798 @@ body{
     </div>
   </div>
   <div class="sgrid sg3" id="bgt-pills">
-    <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green);font-size:15px">0</div></div>
-    <div class="scard"><div class="scard-lbl">Utgifter</div><div class="scard-val" style="color:var(--red);font-size:15px">10k</div></div>
-    <div class="scard"><div class="scard-lbl">Sparkvot</div><div class="scard-val" style="color:var(--blue)">0%</div></div></div>
+    <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green);font-size:15px">28k</div></div>
+    <div class="scard"><div class="scard-lbl">Utgifter</div><div class="scard-val" style="color:var(--red);font-size:15px">17k</div></div>
+    <div class="scard"><div class="scard-lbl">Sparkvot</div><div class="scard-val" style="color:var(--blue)">36%</div></div></div>
   <div id="bgt-content" style="margin-top:18px"><div class="mnav">
     <button class="mnav-b" onclick="changeMonth(-1)">‹</button>
     <div style="text-align:center">
-      <div class="mnav-m">Jun 2026</div>
-      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:2px">Löneperiod 25 maj – 24 jun</div>
+      <div class="mnav-m">Maj 2026</div>
+      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:2px">Löneperiod 24 apr – 24 maj</div>
     </div>
     <button class="mnav-b" onclick="changeMonth(1)">›</button>
   </div><div class="card"><div class="card-inner">
     <div class="card-lbl">Kvar på lönekonto</div>
-    <div class="card-big" style="color:var(--red);margin-bottom:10px">-10k kr</div>
+    <div class="card-big" style="color:var(--green);margin-bottom:10px">+859 kr</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <span class="bdg" style="background:var(--blue2);color:var(--blue)">Sparande 0 kr</span>
-      <span class="bdg" style="background:var(--red2);color:var(--red)">Kvot 0%</span>
+      <span class="bdg" style="background:var(--blue2);color:var(--blue)">Sparande 10k kr</span>
+      <span class="bdg" style="background:var(--green2);color:var(--green)">Kvot 36%</span>
     </div>
   </div></div><div class="card"><div class="card-inner">
       <div class="card-lbl" style="margin-bottom:12px">Utgifter per kategori</div>
       <div style="display:flex;align-items:center;gap:16px">
         <div class="donut" style="width:120px;height:120px">
-          <svg viewBox="0 0 140 140" width="120" height="120"><circle cx="70" cy="70" r="52" fill="none" stroke="#34d399" stroke-width="13" stroke-dasharray="326.73 0.00" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(-90.00deg)"></circle></svg>
-          <div class="donut-c"><div class="donut-v">10k</div><div class="donut-l">utgifter</div></div>
+          <svg viewBox="0 0 140 140" width="120" height="120"><circle cx="70" cy="70" r="52" fill="none" stroke="#34d399" stroke-width="13" stroke-dasharray="114.48 212.24" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(-90.00deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#60a5fa" stroke-width="13" stroke-dasharray="49.06 277.66" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(36.14deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#a78bfa" stroke-width="13" stroke-dasharray="48.47 278.25" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(90.20deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#fbbf24" stroke-width="13" stroke-dasharray="38.37 288.36" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(143.61deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#f87171" stroke-width="13" stroke-dasharray="19.29 307.44" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(185.89deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#fb923c" stroke-width="13" stroke-dasharray="17.76 308.96" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(207.14deg)"></circle></svg>
+          <div class="donut-c"><div class="donut-v">17k</div><div class="donut-l">utgifter</div></div>
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:7px">
           <div style="display:flex;align-items:center;gap:8px;font-size:12px">
             <span style="width:8px;height:8px;border-radius:2px;background:#34d399;flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Resa</span>
-            <span style="font-family:var(--mono);color:var(--text)">10k</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Boende (Lån)</span>
+            <span style="font-family:var(--mono);color:var(--text)">6k</span>
+          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+            <span style="width:8px;height:8px;border-radius:2px;background:#60a5fa;flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Fest</span>
+            <span style="font-family:var(--mono);color:var(--text)">3k</span>
+          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+            <span style="width:8px;height:8px;border-radius:2px;background:#a78bfa;flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Boende (Avgift)</span>
+            <span style="font-family:var(--mono);color:var(--text)">3k</span>
+          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+            <span style="width:8px;height:8px;border-radius:2px;background:#fbbf24;flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Övrigt</span>
+            <span style="font-family:var(--mono);color:var(--text)">2k</span>
+          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+            <span style="width:8px;height:8px;border-radius:2px;background:#f87171;flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Boende (Resterande)</span>
+            <span style="font-family:var(--mono);color:var(--text)">1k</span>
+          </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+            <span style="width:8px;height:8px;border-radius:2px;background:#fb923c;flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Mat (Ute)</span>
+            <span style="font-family:var(--mono);color:var(--text)">932</span>
           </div>
         </div>
       </div>
-    </div></div><div class="sec"><span class="sec-t">Transaktioner</span><span class="sec-sub">1 st</span></div><div class="txl"><div class="txi" onclick="openEdit(1779831382628)">
+    </div></div><div class="sec"><span class="sec-t">Transaktioner</span><span class="sec-sub">64 st</span></div><div class="txl"><div class="txi" onclick="openEdit(2150)">
+        <div class="txav" style="background:var(--green2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-25</div>
+        </div>
+        <div class="txi-amt" style="color:var(--green)">+500</div>
+      </div><div class="txi" onclick="openEdit(2148)">
+        <div class="txav" style="background:var(--green2)">💰</div>
+        <div class="txi-info">
+          <div class="txi-name">Lön</div>
+          <div class="txi-meta">Lön · 05-25</div>
+        </div>
+        <div class="txi-amt" style="color:var(--green)">+28k</div>
+      </div><div class="txi" onclick="openEdit(2210)">
         <div class="txav" style="background:var(--red2)">○</div>
         <div class="txi-info">
-          <div class="txi-name">✈ malaga</div>
-          <div class="txi-meta">Resa · 05-26</div>
+          <div class="txi-name">ai</div>
+          <div class="txi-meta">Övrigt · 05-12</div>
         </div>
-        <div class="txi-amt" style="color:var(--sub)">−10k</div>
+        <div class="txi-amt" style="color:var(--sub)">−249</div>
+      </div><div class="txi" onclick="openEdit(2209)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">ai</div>
+          <div class="txi-meta">Övrigt · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−249</div>
+      </div><div class="txi" onclick="openEdit(2208)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−60</div>
+      </div><div class="txi" onclick="openEdit(2207)">
+        <div class="txav" style="background:var(--red2)">🥗</div>
+        <div class="txi-info">
+          <div class="txi-name">Lunch (Restaurang)</div>
+          <div class="txi-meta">Lunch (Restaurang) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−85</div>
+      </div><div class="txi" onclick="openEdit(2206)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−43</div>
+      </div><div class="txi" onclick="openEdit(2205)">
+        <div class="txav" style="background:var(--red2)">🛒</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Butik)</div>
+          <div class="txi-meta">Mat (Butik) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−14</div>
+      </div><div class="txi" onclick="openEdit(2204)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−89</div>
+      </div><div class="txi" onclick="openEdit(2203)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−30</div>
+      </div><div class="txi" onclick="openEdit(2202)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−51</div>
+      </div><div class="txi" onclick="openEdit(2201)">
+        <div class="txav" style="background:var(--red2)">🛒</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Butik)</div>
+          <div class="txi-meta">Mat (Butik) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−28</div>
+      </div><div class="txi" onclick="openEdit(2200)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−345</div>
+      </div><div class="txi" onclick="openEdit(2199)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−248</div>
+      </div><div class="txi" onclick="openEdit(2198)">
+        <div class="txav" style="background:var(--red2)">🎁</div>
+        <div class="txi-info">
+          <div class="txi-name">Bjuda andra/presenter</div>
+          <div class="txi-meta">Bjuda andra/presenter · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−47</div>
+      </div><div class="txi" onclick="openEdit(2197)">
+        <div class="txav" style="background:var(--red2)">🥗</div>
+        <div class="txi-info">
+          <div class="txi-name">Lunch (Restaurang)</div>
+          <div class="txi-meta">Lunch (Restaurang) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−75</div>
+      </div><div class="txi" onclick="openEdit(2196)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−40</div>
+      </div><div class="txi" onclick="openEdit(2195)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−224</div>
+      </div><div class="txi" onclick="openEdit(2194)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-12</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−39</div>
+      </div><div class="txi" onclick="openEdit(2193)">
+        <div class="txav" style="background:var(--red2)">🥗</div>
+        <div class="txi-info">
+          <div class="txi-name">Lunch (Restaurang)</div>
+          <div class="txi-meta">Lunch (Restaurang) · 05-07</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−85</div>
+      </div><div class="txi" onclick="openEdit(2192)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-06</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−10</div>
+      </div><div class="txi" onclick="openEdit(2191)">
+        <div class="txav" style="background:var(--red2)">🛒</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Butik)</div>
+          <div class="txi-meta">Mat (Butik) · 05-06</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−56</div>
+      </div><div class="txi" onclick="openEdit(2190)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-06</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−250</div>
+      </div><div class="txi" onclick="openEdit(2189)">
+        <div class="txav" style="background:var(--red2)">🛒</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Butik)</div>
+          <div class="txi-meta">Mat (Butik) · 05-05</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−92</div>
+      </div><div class="txi" onclick="openEdit(2188)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-05</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−68</div>
+      </div><div class="txi" onclick="openEdit(2187)">
+        <div class="txav" style="background:var(--red2)">🚗</div>
+        <div class="txi-info">
+          <div class="txi-name">Transport/Parkering</div>
+          <div class="txi-meta">Transport/Parkering · 05-05</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−36</div>
+      </div><div class="txi" onclick="openEdit(2186)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 05-04</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−36</div>
+      </div><div class="txi" onclick="openEdit(2185)">
+        <div class="txav" style="background:var(--red2)">🥗</div>
+        <div class="txi-info">
+          <div class="txi-name">Lunch (Restaurang)</div>
+          <div class="txi-meta">Lunch (Restaurang) · 05-04</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−75</div>
+      </div><div class="txi" onclick="openEdit(2184)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-03</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−78</div>
+      </div><div class="txi" onclick="openEdit(2183)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 05-03</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−144</div>
+      </div><div class="txi" onclick="openEdit(2182)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 05-03</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−60</div>
+      </div><div class="txi" onclick="openEdit(2181)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Snus</div>
+          <div class="txi-meta">Övrigt · 05-02</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−390</div>
+      </div><div class="txi" onclick="openEdit(2180)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 05-02</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−4</div>
+      </div><div class="txi" onclick="openEdit(2179)">
+        <div class="txav" style="background:var(--red2)">🛒</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Butik)</div>
+          <div class="txi-meta">Mat (Butik) · 05-02</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−100</div>
+      </div><div class="txi" onclick="openEdit(2178)">
+        <div class="txav" style="background:var(--red2)">🚗</div>
+        <div class="txi-info">
+          <div class="txi-name">Transport/Parkering</div>
+          <div class="txi-meta">Transport/Parkering · 05-02</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−119</div>
+      </div><div class="txi" onclick="openEdit(2177)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 05-02</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−384</div>
+      </div><div class="txi" onclick="openEdit(2176)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 04-29</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−169</div>
+      </div><div class="txi" onclick="openEdit(2175)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 04-29</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−159</div>
+      </div><div class="txi" onclick="openEdit(2174)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 04-29</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−175</div>
+      </div><div class="txi" onclick="openEdit(2173)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 04-29</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−338</div>
+      </div><div class="txi" onclick="openEdit(2172)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 04-28</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−43</div>
+      </div><div class="txi" onclick="openEdit(2171)">
+        <div class="txav" style="background:var(--red2)">🛒</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Butik)</div>
+          <div class="txi-meta">Mat (Butik) · 04-28</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−369</div>
+      </div><div class="txi" onclick="openEdit(2170)">
+        <div class="txav" style="background:var(--red2)">🥗</div>
+        <div class="txi-info">
+          <div class="txi-name">Lunch (Restaurang)</div>
+          <div class="txi-meta">Lunch (Restaurang) · 04-28</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−54</div>
+      </div><div class="txi" onclick="openEdit(2169)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−54</div>
+      </div><div class="txi" onclick="openEdit(2168)">
+        <div class="txav" style="background:var(--red2)">🚗</div>
+        <div class="txi-info">
+          <div class="txi-name">Transport/Parkering</div>
+          <div class="txi-meta">Transport/Parkering · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−21</div>
+      </div><div class="txi" onclick="openEdit(2167)">
+        <div class="txav" style="background:var(--red2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Övrigt</div>
+          <div class="txi-meta">Övrigt · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−129</div>
+      </div><div class="txi" onclick="openEdit(2166)">
+        <div class="txav" style="background:var(--red2)">💪</div>
+        <div class="txi-info">
+          <div class="txi-name">Gym</div>
+          <div class="txi-meta">Gym · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−19</div>
+      </div><div class="txi" onclick="openEdit(2165)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−90</div>
+      </div><div class="txi" onclick="openEdit(2164)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−230</div>
+      </div><div class="txi" onclick="openEdit(2163)">
+        <div class="txav" style="background:var(--red2)">🎁</div>
+        <div class="txi-info">
+          <div class="txi-name">Bjuda andra/presenter</div>
+          <div class="txi-meta">Bjuda andra/presenter · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−246</div>
+      </div><div class="txi" onclick="openEdit(2162)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−175</div>
+      </div><div class="txi" onclick="openEdit(2161)">
+        <div class="txav" style="background:var(--red2)">🚗</div>
+        <div class="txi-info">
+          <div class="txi-name">Transport/Parkering</div>
+          <div class="txi-meta">Transport/Parkering · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−206</div>
+      </div><div class="txi" onclick="openEdit(2160)">
+        <div class="txav" style="background:var(--red2)">🚗</div>
+        <div class="txi-info">
+          <div class="txi-name">Transport/Parkering</div>
+          <div class="txi-meta">Transport/Parkering · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−100</div>
+      </div><div class="txi" onclick="openEdit(2159)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−386</div>
+      </div><div class="txi" onclick="openEdit(2158)">
+        <div class="txav" style="background:var(--red2)">🍽</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Ute)</div>
+          <div class="txi-meta">Mat (Ute) · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−98</div>
+      </div><div class="txi" onclick="openEdit(2157)">
+        <div class="txav" style="background:var(--red2)">🎉</div>
+        <div class="txi-info">
+          <div class="txi-name">Fest</div>
+          <div class="txi-meta">Fest · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−382</div>
+      </div><div class="txi" onclick="openEdit(2156)">
+        <div class="txav" style="background:var(--red2)">🚗</div>
+        <div class="txi-info">
+          <div class="txi-name">Transport/Parkering</div>
+          <div class="txi-meta">Transport/Parkering · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−155</div>
+      </div><div class="txi" onclick="openEdit(2155)">
+        <div class="txav" style="background:var(--red2)">🛒</div>
+        <div class="txi-info">
+          <div class="txi-name">Mat (Butik)</div>
+          <div class="txi-meta">Mat (Butik) · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−20</div>
+      </div><div class="txi" onclick="openEdit(2154)">
+        <div class="txav" style="background:var(--red2)">🥗</div>
+        <div class="txi-info">
+          <div class="txi-name">Lunch (Restaurang)</div>
+          <div class="txi-meta">Lunch (Restaurang) · 04-27</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−59</div>
+      </div><div class="txi" onclick="openEdit(2153)">
+        <div class="txav" style="background:var(--blue2)">○</div>
+        <div class="txi-info">
+          <div class="txi-name">Seb</div>
+          <div class="txi-meta">Sparande · 04-24</div>
+        </div>
+        <div class="txi-amt" style="color:var(--blue)">−10k</div>
+      </div><div class="txi" onclick="openEdit(2152)">
+        <div class="txav" style="background:var(--red2)">🏠</div>
+        <div class="txi-info">
+          <div class="txi-name">Boende (Resterande)</div>
+          <div class="txi-meta">Boende (Resterande) · 04-24</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−124</div>
+      </div><div class="txi" onclick="openEdit(2151)">
+        <div class="txav" style="background:var(--red2)">🏠</div>
+        <div class="txi-info">
+          <div class="txi-name">Hemförsäkring</div>
+          <div class="txi-meta">Boende (Resterande) · 04-24</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−888</div>
+      </div><div class="txi" onclick="openEdit(2149)">
+        <div class="txav" style="background:var(--red2)">🏠</div>
+        <div class="txi-info">
+          <div class="txi-name">Boende (Lån)</div>
+          <div class="txi-meta">Boende (Lån) · 04-24</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−6k</div>
+      </div><div class="txi" onclick="openEdit(2147)">
+        <div class="txav" style="background:var(--red2)">🏠</div>
+        <div class="txi-info">
+          <div class="txi-name">Boende (Avgift)</div>
+          <div class="txi-meta">Boende (Avgift) · 04-24</div>
+        </div>
+        <div class="txi-amt" style="color:var(--sub)">−3k</div>
       </div></div></div>
 </div>
 
 <!-- ═══ NET WORTH SCREEN ═══ -->
-<div class="screen" id="screen-nw">
+<div class="screen active" id="screen-nw">
   <div class="hdr">
     <div class="hdr-row">
       <div>
         <div class="hdr-label">Nettoförmögenhet</div>
-        <div class="hdr-amount"><sub>kr</sub><span id="nw-hero-val">—</span></div>
-        <div id="nw-hero-pill" style="margin-top:8px"></div>
+        <div class="hdr-amount"><sub>kr</sub><span id="nw-hero-val">584k</span></div>
+        <div id="nw-hero-pill" style="margin-top:8px"><span class="pill pill-g">↑ 11k kr vs förra</span></div>
       </div>
       <button class="ibtn" onclick="openSettings()">⚙</button>
     </div>
   </div>
-  <div class="sgrid sg4" id="nw-pills" style="margin-bottom:14px"></div>
-  <div id="nw-content"></div>
+  <div class="sgrid sg4" id="nw-pills" style="margin-bottom:14px">
+    <div class="scard"><div class="scard-lbl">Mot mål</div><div class="scard-val" style="color:var(--acc)">83%</div></div>
+    <div class="scard"><div class="scard-lbl">Kvar till mål</div><div class="scard-val">116k</div></div>
+    <div class="scard"><div class="scard-lbl">Bästa månaden</div><div class="scard-val" style="color:var(--green)">+16k</div></div>
+    <div class="scard"><div class="scard-lbl">Snitt/månad</div><div class="scard-val" style="color:var(--green)">+9k</div></div></div>
+  <div id="nw-content"><div class="sec"><span class="sec-t">Förmögenhetsutveckling</span>
+      <span class="pill pill-g" style="font-size:11px">+62k kr</span></div><div class="card"><div class="card-inner">
+    <div class="card-lbl" style="margin-bottom:6px">Total förmögenhet — svep för detaljer</div>
+    <defs-holder style="display:none">
+      <svg style="width:0;height:0;position:absolute"><defs>
+        <lineargradient id="lgrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#34d399"></stop><stop offset="100%" stop-color="#60a5fa"></stop>
+        </lineargradient>
+      </defs></svg>
+    </defs-holder>
+    <div class="ichart-wrap" id="icw_nw_total" data-chartid="nw_total" style="position:relative;touch-action:none;cursor:crosshair">
+    <svg viewBox="0 0 400 110" preserveAspectRatio="none" style="width:100%;height:110px;display:block;overflow:visible">
+      <defs>
+        <lineargradient id="cg_nw_total" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#34d399" stop-opacity=".18"></stop>
+          <stop offset="100%" stop-color="#34d399" stop-opacity="0"></stop>
+        </lineargradient>
+      </defs>
+      <path d="M8.0,86.0L62.9,66.7L117.7,53.8L172.6,56.2L227.4,37.2L282.3,27.4L337.1,25.3L392.0,12.0L392.0,86L8.0,86Z" fill="url(#cg_nw_total)"></path>
+      <path d="M8.0,86.0L62.9,66.7L117.7,53.8L172.6,56.2L227.4,37.2L282.3,27.4L337.1,25.3L392.0,12.0" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+    <div id="icv_nw_total" style="display: none; position: absolute; top: 0px; bottom: 24px; width: 1.5px; background: rgb(52, 211, 153); pointer-events: none; opacity: 0.8; left: 352px;"></div>
+    <div id="icd_nw_total" style="display: none; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: rgb(52, 211, 153); border: 2px solid var(--bg1); pointer-events: none; transform: translate(-50%, -50%); left: 352px; top: 0px;"></div>
+    <div id="ict_nw_total" style="display: none; position: absolute; background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; padding: 7px 12px; font-size: 12px; font-family: var(--mono); white-space: nowrap; box-shadow: rgba(0, 0, 0, 0.4) 0px 4px 16px; pointer-events: none; bottom: 32px; transform: translateX(-50%); left: 272.167px;"><strong>26/04</strong>  584k kr <span style="color:var(--green)">+11k kr</span></div>
+    <div style="display:flex;justify-content:space-between;padding:2px 0 0;font-size:10px;font-family:var(--mono);color:var(--sub2)">
+      <span>25/09</span><span>25/11</span><span>26/01</span><span>26/03</span><span>26/04</span>
+    </div>
+  </div>
+  </div></div><div class="sec"><span class="sec-t">Mål &amp; prognos</span></div>
+  <div class="card"><div class="card-inner">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+      <div class="card-lbl">Förmögenhetsmål</div>
+      <span style="font-family:var(--mono);font-size:13px;color:var(--acc)">83.5%</span>
+    </div>
+    <div class="pbar"><div class="pfill" style="width:83.5%;background:linear-gradient(90deg,#34d399,#60a5fa)"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:3px;margin-bottom:14px">
+      <span>584k kr</span><span>700k kr</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div style="text-align:center">
+        <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Kvar</div>
+        <div style="font-size:15px;font-weight:600;font-family:var(--mono)">116k</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Snitt/mån</div>
+        <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--green)">+9k</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Beräknat</div>
+        <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--blue)">Jul 2027</div>
+      </div>
+    </div>
+  </div></div><div class="sec"><span class="sec-t">Tillgångsfördelning</span></div>
+  <div class="card"><div class="card-inner">
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="donut" style="width:120px;height:120px;flex-shrink:0">
+        <svg viewBox="0 0 140 140" width="120" height="120"><circle cx="70" cy="70" r="52" fill="none" stroke="#34d399" stroke-width="13" stroke-dasharray="126.36 200.36" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(-90.00deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#60a5fa" stroke-width="13" stroke-dasharray="72.13 254.60" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(49.23deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#a78bfa" stroke-width="13" stroke-dasharray="69.89 256.83" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(128.71deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#fbbf24" stroke-width="13" stroke-dasharray="23.39 303.33" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(205.72deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#f87171" stroke-width="13" stroke-dasharray="17.33 309.39" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(231.50deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#fb923c" stroke-width="13" stroke-dasharray="17.50 309.22" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(250.59deg)"></circle><circle cx="70" cy="70" r="52" fill="none" stroke="#f472b6" stroke-width="13" stroke-dasharray="0.11 326.61" stroke-dashoffset="81.68" style="transform-origin:70px 70px;transform:rotate(269.88deg)"></circle></svg>
+        <div class="donut-c"><div class="donut-v">584k</div><div class="donut-l">totalt</div></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:#34d399;flex-shrink:0"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Likvidamedel</span>
+          <span style="font-family:var(--mono);font-size:11px">39%</span>
+        </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:#60a5fa;flex-shrink:0"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Aktier/fonder</span>
+          <span style="font-family:var(--mono);font-size:11px">22%</span>
+        </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:#a78bfa;flex-shrink:0"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Lägenhet</span>
+          <span style="font-family:var(--mono);font-size:11px">21%</span>
+        </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:#fbbf24;flex-shrink:0"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Pension</span>
+          <span style="font-family:var(--mono);font-size:11px">7%</span>
+        </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:#f87171;flex-shrink:0"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Klockor</span>
+          <span style="font-family:var(--mono);font-size:11px">5%</span>
+        </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:#fb923c;flex-shrink:0"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">AB</span>
+          <span style="font-family:var(--mono);font-size:11px">5%</span>
+        </div><div style="display:flex;align-items:center;gap:8px;font-size:12px">
+          <span style="width:8px;height:8px;border-radius:2px;background:#f472b6;flex-shrink:0"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">Kontanter</span>
+          <span style="font-family:var(--mono);font-size:11px">0%</span>
+        </div>
+      </div>
+    </div>
+  </div></div><div class="sec"><span class="sec-t">Tillgångar</span><span class="sec-sub">tryck för historik</span></div><div class="txl"><div class="txi" onclick="openAssetDetail(&#39;cash&#39;,&#39;Likvidamedel&#39;,0)">
+      <div class="txav" style="background:#34d39918;color:#34d399;font-size:11px;font-weight:600;font-family:var(--mono)">39%</div>
+      <div class="txi-info">
+        <div class="txi-name">Likvidamedel</div>
+        <div class="txi-meta">↓ 11k kr</div>
+      </div>
+      <div style="text-align:right">
+        <div class="txi-amt">226k kr</div>
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
+          <div style="width:39%;height:100%;background:#34d399;border-radius:3px"></div>
+        </div>
+      </div>
+    </div><div class="txi" onclick="openAssetDetail(&#39;stocks&#39;,&#39;Aktier/fonder&#39;,1)">
+      <div class="txav" style="background:#60a5fa18;color:#60a5fa;font-size:11px;font-weight:600;font-family:var(--mono)">22%</div>
+      <div class="txi-info">
+        <div class="txi-name">Aktier/fonder</div>
+        <div class="txi-meta">↑ 10k kr</div>
+      </div>
+      <div style="text-align:right">
+        <div class="txi-amt">129k kr</div>
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
+          <div style="width:22%;height:100%;background:#60a5fa;border-radius:3px"></div>
+        </div>
+      </div>
+    </div><div class="txi" onclick="openAssetDetail(&#39;apt&#39;,&#39;Lägenhet&#39;,2)">
+      <div class="txav" style="background:#a78bfa18;color:#a78bfa;font-size:11px;font-weight:600;font-family:var(--mono)">21%</div>
+      <div class="txi-info">
+        <div class="txi-name">Lägenhet</div>
+        <div class="txi-meta">↑ 2k kr</div>
+      </div>
+      <div style="text-align:right">
+        <div class="txi-amt">125k kr</div>
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
+          <div style="width:21%;height:100%;background:#a78bfa;border-radius:3px"></div>
+        </div>
+      </div>
+    </div><div class="txi" onclick="openAssetDetail(&#39;pension&#39;,&#39;Pension&#39;,3)">
+      <div class="txav" style="background:#fbbf2418;color:#fbbf24;font-size:11px;font-weight:600;font-family:var(--mono)">7%</div>
+      <div class="txi-info">
+        <div class="txi-name">Pension</div>
+        <div class="txi-meta">↑ 4k kr</div>
+      </div>
+      <div style="text-align:right">
+        <div class="txi-amt">42k kr</div>
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
+          <div style="width:7%;height:100%;background:#fbbf24;border-radius:3px"></div>
+        </div>
+      </div>
+    </div><div class="txi" onclick="openAssetDetail(&#39;klockor&#39;,&#39;Klockor&#39;,4)">
+      <div class="txav" style="background:#f8717118;color:#f87171;font-size:11px;font-weight:600;font-family:var(--mono)">5%</div>
+      <div class="txi-info">
+        <div class="txi-name">Klockor</div>
+        <div class="txi-meta">↑ 0 kr</div>
+      </div>
+      <div style="text-align:right">
+        <div class="txi-amt">31k kr</div>
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
+          <div style="width:5%;height:100%;background:#f87171;border-radius:3px"></div>
+        </div>
+      </div>
+    </div><div class="txi" onclick="openAssetDetail(&#39;ab&#39;,&#39;AB&#39;,5)">
+      <div class="txav" style="background:#fb923c18;color:#fb923c;font-size:11px;font-weight:600;font-family:var(--mono)">5%</div>
+      <div class="txi-info">
+        <div class="txi-name">AB</div>
+        <div class="txi-meta">↑ 6k kr</div>
+      </div>
+      <div style="text-align:right">
+        <div class="txi-amt">31k kr</div>
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
+          <div style="width:5%;height:100%;background:#fb923c;border-radius:3px"></div>
+        </div>
+      </div>
+    </div><div class="txi" onclick="openAssetDetail(&#39;kontanter&#39;,&#39;Kontanter&#39;,6)">
+      <div class="txav" style="background:#f472b618;color:#f472b6;font-size:11px;font-weight:600;font-family:var(--mono)">0%</div>
+      <div class="txi-info">
+        <div class="txi-name">Kontanter</div>
+        <div class="txi-meta">↑ 0 kr</div>
+      </div>
+      <div style="text-align:right">
+        <div class="txi-amt">200 kr</div>
+        <div style="width:56px;margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-left:auto">
+          <div style="width:0%;height:100%;background:#f472b6;border-radius:3px"></div>
+        </div>
+      </div>
+    </div></div><div class="sec"><span class="sec-t">Månadsanalys</span></div>
+    <div class="sgrid sg3" style="margin-bottom:10px">
+      <div class="scard"><div class="scard-lbl">Positiva månader</div><div class="scard-val" style="color:var(--green)">6</div></div>
+      <div class="scard"><div class="scard-lbl">Negativa månader</div><div class="scard-val" style="color:var(--red)">1</div></div>
+      <div class="scard"><div class="scard-lbl">Längsta streak</div><div class="scard-val" style="color:var(--blue)">4mån</div></div>
+    </div><div class="card"><div class="card-inner" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="card-lbl">Bästa månaden</div>
+        <div style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green)">+16k</div>
+        <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:2px">Okt 2025</div>
+      </div>
+      <div>
+        <div class="card-lbl">Sämsta månaden</div>
+        <div style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red)">-2k</div>
+        <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:2px">Dec 2025</div>
+      </div>
+    </div></div><div class="sec"><span class="sec-t">Likviditet</span></div>
+  <div class="card"><div class="card-inner">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+      <div>
+        <div class="card-lbl">Likvida medel</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono)">226k kr</div>
+        <div style="font-size:11px;color:var(--sub2);margin-top:2px">39% av totalt</div>
+      </div>
+      <div>
+        <div class="card-lbl">Buffer (månader)</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--green)">8.9</div>
+        <div style="font-size:11px;color:var(--sub2);margin-top:2px">vs snitt utgifter</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.6;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">
+      ✅ Utmärkt buffert — över 6 månaders utgifter
+    </div>
+  </div></div><div class="sec"><span class="sec-t">Historik</span></div>
+    <div class="txl">
+      <div class="ytrow ythd" style="grid-template-columns:2fr 2fr 2fr 2fr"><span>Period</span><span>Total</span><span>+/−</span><span>Tillväxt</span></div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Apr 2026</span>
+        <span style="font-family:var(--mono)">584k</span>
+        <span style="font-family:var(--mono);color:var(--green)">+11k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">+1.9%</span>
+      </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Mar 2026</span>
+        <span style="font-family:var(--mono)">573k</span>
+        <span style="font-family:var(--mono);color:var(--green)">+2k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">+0.3%</span>
+      </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Feb 2026</span>
+        <span style="font-family:var(--mono)">571k</span>
+        <span style="font-family:var(--mono);color:var(--green)">+8k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">+1.5%</span>
+      </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Jan 2026</span>
+        <span style="font-family:var(--mono)">563k</span>
+        <span style="font-family:var(--mono);color:var(--green)">+16k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">+2.9%</span>
+      </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Dec 2025</span>
+        <span style="font-family:var(--mono)">547k</span>
+        <span style="font-family:var(--mono);color:var(--red)">-2k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">-0.4%</span>
+      </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Nov 2025</span>
+        <span style="font-family:var(--mono)">549k</span>
+        <span style="font-family:var(--mono);color:var(--green)">+11k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">+2.0%</span>
+      </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Okt 2025</span>
+        <span style="font-family:var(--mono)">538k</span>
+        <span style="font-family:var(--mono);color:var(--green)">+16k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">+3.1%</span>
+      </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+        <span style="font-weight:500">Sep 2025</span>
+        <span style="font-family:var(--mono)">522k</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">—</span>
+        <span style="font-family:var(--mono);color:var(--sub2)">—</span>
+      </div></div><div class="sec"><span class="sec-t">Sparkvot — historik</span></div>
+    <div class="card"><div class="card-inner">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Snitt</div>
+          <div style="font-size:22px;font-weight:600;color:var(--green)">24%</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Senaste</div>
+          <div style="font-size:22px;font-weight:600;color:var(--green)">36%</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Rekord</div>
+          <div style="font-size:22px;font-weight:600;color:var(--green)">36%</div>
+          <div style="font-size:10px;color:var(--sub2);font-family:var(--mono)">Maj 2026</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:3px;align-items:flex-end;height:48px">
+        <div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:27px;opacity:.8" title="Jun 2025: 22%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:31px;opacity:.8" title="Jul 2025: 25%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:33px;opacity:.8" title="Aug 2025: 27%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:28px;opacity:.8" title="Sep 2025: 23%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:28px;opacity:.8" title="Okt 2025: 23%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:31px;opacity:.8" title="Nov 2025: 25%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:38px;opacity:.8" title="Dec 2025: 31%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:40px;opacity:.8" title="Jan 2026: 33%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:43px;opacity:.8" title="Feb 2026: 35%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:26px;opacity:.8" title="Mar 2026: 21%"></div><div style="flex:1;background:var(--red);border-radius:3px 3px 0 0;height:4px;opacity:.8" title="Apr 2026: 0%"></div><div style="flex:1;background:var(--green);border-radius:3px 3px 0 0;height:44px;opacity:.8" title="Maj 2026: 36%"></div>
+      </div>
+      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:4px;text-align:center">Senaste 12 månader</div>
+    </div></div><div style="height:16px"></div></div>
 </div>
 
 <!-- ═══ YEAR SCREEN ═══ -->
@@ -641,7 +1377,7 @@ body{
 <!-- ═══ NAV ═══ -->
 <nav class="nav">
   <div class="nav-dock">
-    <button class="nb active" onclick="showScreen(&#39;budget&#39;)" id="nav-budget">
+    <button class="nb" onclick="showScreen(&#39;budget&#39;)" id="nav-budget">
       <div class="nb-icon">
         <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"></rect><rect x="13" y="3" width="8" height="8" rx="2"></rect><rect x="3" y="13" width="8" height="8" rx="2"></rect><rect x="13" y="13" width="8" height="8" rx="2"></rect></svg>
       </div>
@@ -653,7 +1389,7 @@ body{
       </div>
       <span>Resor</span>
     </button>
-    <button class="nb" onclick="showScreen(&#39;nw&#39;)" id="nav-nw">
+    <button class="nb active" onclick="showScreen(&#39;nw&#39;)" id="nav-nw">
       <div class="nb-icon">
         <svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"></polyline><polyline points="14 7 21 7 21 14"></polyline></svg>
       </div>
@@ -747,7 +1483,8 @@ body{
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">Registrera snapshot</div>
-    <div class="field"><label>Period</label><input type="month" id="nwm-period"></div>
+    <div id="nwm-hint" style="font-size:12px;color:var(--sub2);font-family:var(--mono);margin-bottom:12px"></div>
+    <div class="field"><label>Period</label><input type="month" id="nwm-period" onchange="updateNWMHint()"></div>
     <div id="nwm-fields"></div>
     <button class="btn-p" onclick="saveNW()">Spara snapshot</button>
     <button class="btn-s" onclick="closeOverlay(&#39;nw-modal&#39;)">Avbryt</button>
@@ -919,10 +1656,76 @@ body{
 <div class="slide" id="asset-detail">
   <div class="slide-hd">
     <button class="back-btn" onclick="closeAssetDetail()">‹</button>
-    <span id="detail-t" style="font-size:19px;font-weight:500"></span>
-    <span id="detail-badge" class="detail-badge"></span>
+    <span id="detail-t" style="font-size:19px;font-weight:500">Likvidamedel</span>
+    <span id="detail-badge" class="detail-badge" style="background: rgba(52, 211, 153, 0.125); color: rgb(52, 211, 153);">226k kr</span>
   </div>
-  <div id="detail-content" style="padding-bottom:20px"></div>
+  <div id="detail-content" style="padding-bottom:20px"><div class="card" style="margin-top:16px"><div class="card-inner">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+        <div><div class="card-lbl">Total förändring</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--green)">+186k kr</div></div>
+        <div style="text-align:right"><div class="card-lbl">Snapshots</div><div style="font-size:14px;font-family:var(--mono)">8 st</div></div>
+      </div>
+      <div class="ichart-wrap" id="icw_asset_cash" data-chartid="asset_cash" style="position:relative;touch-action:none;cursor:crosshair">
+    <svg viewBox="0 0 400 110" preserveAspectRatio="none" style="width:100%;height:110px;display:block;overflow:visible">
+      <defs>
+        <lineargradient id="cg_asset_cash" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#34d399" stop-opacity=".18"></stop>
+          <stop offset="100%" stop-color="#34d399" stop-opacity="0"></stop>
+        </lineargradient>
+      </defs>
+      <path d="M8.0,80.6L62.9,74.3L117.7,83.7L172.6,86.0L227.4,83.0L282.3,80.1L337.1,12.0L392.0,15.8L392.0,86L8.0,86Z" fill="url(#cg_asset_cash)"></path>
+      <path d="M8.0,80.6L62.9,74.3L117.7,83.7L172.6,86.0L227.4,83.0L282.3,80.1L337.1,12.0L392.0,15.8" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+    <div id="icv_asset_cash" style="display: none; position: absolute; top: 0px; bottom: 24px; width: 1.5px; background: rgb(52, 211, 153); pointer-events: none; opacity: 0.8; left: 957.333px;"></div>
+    <div id="icd_asset_cash" style="display: none; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: rgb(52, 211, 153); border: 2px solid var(--bg1); pointer-events: none; transform: translate(-50%, -50%); left: 957.333px; top: 0px;"></div>
+    <div id="ict_asset_cash" style="display: none; position: absolute; background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; padding: 7px 12px; font-size: 12px; font-family: var(--mono); white-space: nowrap; box-shadow: rgba(0, 0, 0, 0.4) 0px 4px 16px; pointer-events: none; bottom: 32px; transform: translateX(-50%); left: 957.333px;"><strong>26/03</strong>  237k kr <span style="color:var(--green)">+196k kr</span></div>
+    <div style="display:flex;justify-content:space-between;padding:2px 0 0;font-size:10px;font-family:var(--mono);color:var(--sub2)">
+      <span>25/09</span><span>25/11</span><span>26/01</span><span>26/03</span><span>26/04</span>
+    </div>
+  </div>
+    </div></div><div class="sec"><span class="sec-t">Historik</span></div>
+  <div class="txl" style="margin:0 16px">
+    <div class="ytrow ythd" style="grid-template-columns:2fr 2fr 2fr 2fr"><span>Period</span><span>Värde</span><span>Förändring</span><span>% av tot</span></div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Apr 2026</span>
+      <span style="font-family:var(--mono)">226k</span>
+      <span style="font-family:var(--mono);color:var(--red)">-11k</span>
+      <span style="font-family:var(--mono);color:var(--sub)">39%</span>
+    </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Mar 2026</span>
+      <span style="font-family:var(--mono)">237k</span>
+      <span style="font-family:var(--mono);color:var(--green)">+196k</span>
+      <span style="font-family:var(--mono);color:var(--sub)">41%</span>
+    </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Feb 2026</span>
+      <span style="font-family:var(--mono)">42k</span>
+      <span style="font-family:var(--mono);color:var(--green)">+9k</span>
+      <span style="font-family:var(--mono);color:var(--sub)">7%</span>
+    </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Jan 2026</span>
+      <span style="font-family:var(--mono)">33k</span>
+      <span style="font-family:var(--mono);color:var(--green)">+9k</span>
+      <span style="font-family:var(--mono);color:var(--sub)">6%</span>
+    </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Dec 2025</span>
+      <span style="font-family:var(--mono)">25k</span>
+      <span style="font-family:var(--mono);color:var(--red)">-7k</span>
+      <span style="font-family:var(--mono);color:var(--sub)">4%</span>
+    </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Nov 2025</span>
+      <span style="font-family:var(--mono)">31k</span>
+      <span style="font-family:var(--mono);color:var(--red)">-27k</span>
+      <span style="font-family:var(--mono);color:var(--sub)">6%</span>
+    </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Okt 2025</span>
+      <span style="font-family:var(--mono)">58k</span>
+      <span style="font-family:var(--mono);color:var(--green)">+18k</span>
+      <span style="font-family:var(--mono);color:var(--sub)">11%</span>
+    </div><div class="ytrow" style="grid-template-columns:2fr 2fr 2fr 2fr;cursor:default">
+      <span style="font-weight:500">Sep 2025</span>
+      <span style="font-family:var(--mono)">40k</span>
+      <span style="font-family:var(--mono);color:var(--sub2)">—</span>
+      <span style="font-family:var(--mono);color:var(--sub)">8%</span>
+    </div></div></div>
 </div>
 
 <script>
@@ -984,7 +1787,15 @@ function applyGroups(byCat){
   return result;
 }
 
-function fmt(n){return Math.round(n).toLocaleString('sv-SE')}
+function fmt(n){
+  if(n===null||n===undefined||isNaN(n))return'0';
+  // Show decimals only if they exist
+  const rounded=Math.round(n*100)/100;
+  if(Number.isInteger(rounded)){
+    return rounded.toLocaleString('sv-SE');
+  }
+  return rounded.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
 function fmt(n){if(Math.abs(n)>=1000000)return (n/1000000).toFixed(1)+'M';if(Math.abs(n)>=1000)return (n/1000).toFixed(0)+'k';return Math.round(n).toString()}
 function mLabel(ym){const[y,m]=ym.split('-');return['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'][+m-1]+' '+y}
 function shortDate(d){return String(d.getDate()).padStart(2,'0')+' '+['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][d.getMonth()]}
@@ -1179,12 +1990,47 @@ function deleteTx(){
 // ═══════════════════════════════════════════
 // NW MODAL
 // ═══════════════════════════════════════════
+function updateNWMHint(){
+  const nws=getNWs();
+  const latest=nws[nws.length-1];
+  const period=document.getElementById('nwm-period').value;
+  const hint=document.getElementById('nwm-hint');
+  if(!hint)return;
+  const parts=[];
+  if(latest)parts.push('Föregående: '+mLabel(latest.period));
+  if(period)parts.push('Registrerar: '+mLabel(period));
+  hint.textContent=parts.join(' · ');
+}
+
 function openNWModal(){
-  document.getElementById('nwm-period').value=todayYM();
+  const nws=getNWs();
+  const latest=nws[nws.length-1];
   const cats=getNWCats();
-  document.getElementById('nwm-fields').innerHTML=cats.map(c=>
-    `<div class="field"><label>${c.label}</label><input type="number" id="nwm-${c.key}" placeholder="0" inputmode="decimal"></div>`
-  ).join('');
+
+  // Suggest next period
+  let suggestedPeriod;
+  if(latest){
+    const[y,m]=latest.period.split('-').map(Number);
+    const nextM=m>=12?1:m+1;
+    const nextY=m>=12?y+1:y;
+    suggestedPeriod=nextY+'-'+String(nextM).padStart(2,'0');
+  } else {
+    suggestedPeriod=todayYM();
+  }
+  document.getElementById('nwm-period').value=suggestedPeriod;
+  updateNWMHint();
+
+  // Build fields dynamically, pre-filling with last snapshot values
+  const prevValues=latest||{};
+  document.getElementById('nwm-fields').innerHTML=cats.map(c=>{
+    const prev=prevValues[c.key];
+    const prevStr=prev>0?` (förra: ${fmt(prev)} kr)`:'';
+    return`<div class="field">
+      <label>${c.label}<span style="color:var(--sub2);font-size:10px;font-family:var(--mono);font-weight:400">${prevStr}</span></label>
+      <input type="number" id="nwm-${c.key}" placeholder="${prev>0?prev:0}" inputmode="decimal" value="${prev>0?prev:''}">
+    </div>`;
+  }).join('');
+
   openOverlay('nw-modal');
 }
 function saveNW(){
@@ -1322,104 +2168,23 @@ let _lcNWs=[];
 function makeNWChart(nws){
   if(nws.length<2)return'';
   _lcNWs=nws;
-  const vals=nws.map(n=>n.total);
-  const minV=Math.min(...vals),maxV=Math.max(...vals);
-  const rng=maxV-minV||1;
-  const W=400,H=120,pad=10;
-  const xStep=(W-pad*2)/(nws.length-1);
-  const pts=nws.map((n,i)=>({
-    x:pad+i*xStep,
-    y:H-pad-(n.total-minV)/rng*(H-pad*2),
-    n
-  }));
-  const pathD='M'+pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('L');
-  const areaD=pathD+`L${pts[pts.length-1].x.toFixed(1)},${H}L${pts[0].x.toFixed(1)},${H}Z`;
-  const step=Math.ceil(nws.length/6);
-  const lblPts=pts.filter((_,i)=>i%step===0||i===pts.length-1);
-
+  const dataPoints=nws.map(n=>({label:n.period.slice(2).replace('-','/'),value:n.total}));
   return`<div class="card"><div class="card-inner">
-    <div class="card-lbl" style="margin-bottom:2px">Total förmögenhet — svep för detaljer</div>
-    <div class="nwchart-wrap" id="nwc-wrap" style="position:relative;height:140px;touch-action:none">
-      <svg class="nwchart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:120px;display:block;overflow:visible">
-        <defs>
-          <linearGradient id="lgrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#34d399"/>
-            <stop offset="100%" stop-color="#60a5fa"/>
-          </linearGradient>
-          <linearGradient id="agrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#34d399" stop-opacity=".18"/>
-            <stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        <path d="${areaD}" fill="url(#agrad)"/>
-        <path d="${pathD}" fill="none" stroke="url(#lgrad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <div id="nwc-vline" style="display:none;position:absolute;top:0;bottom:20px;width:1px;background:var(--acc);pointer-events:none"></div>
-      <div id="nwc-dot" style="display:none;position:absolute;width:10px;height:10px;border-radius:50%;background:var(--acc);border:2px solid var(--bg1);pointer-events:none;transform:translate(-50%,-50%)"></div>
-      <div id="nwc-tip" style="display:none;position:absolute;bottom:24px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:7px 12px;font-size:12px;font-family:var(--mono);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;transform:translateX(-50%)"></div>
-      <div style="position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;padding:0 ${pad*100/W}%;font-size:10px;font-family:var(--mono);color:var(--sub2)">
-        ${lblPts.map(p=>`<span>${p.n.period.slice(2).replace('-','/')}</span>`).join('')}
-      </div>
-    </div>
+    <div class="card-lbl" style="margin-bottom:6px">Total förmögenhet — svep för detaljer</div>
+    <defs-holder style="display:none">
+      <svg style="width:0;height:0;position:absolute"><defs>
+        <linearGradient id="lgrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#60a5fa"/>
+        </linearGradient>
+      </defs></svg>
+    </defs-holder>
+    ${makeInteractiveChart('nw_total',dataPoints,'#34d399')}
   </div></div>`;
 }
 
 function initNWChartEvents(){
-  const wrap=document.getElementById('nwc-wrap');
-  const vline=document.getElementById('nwc-vline');
-  const dot=document.getElementById('nwc-dot');
-  const tip=document.getElementById('nwc-tip');
-  if(!wrap||!_lcNWs.length)return;
-
-  const svg=wrap.querySelector('svg');
-  const svgH=120; // matches height:120px on svg
-  const pad=10;
-  const vals=_lcNWs.map(n=>n.total);
-  const minV=Math.min(...vals),maxV=Math.max(...vals),rng=maxV-minV||1;
-
-  function update(clientX){
-    const rect=wrap.getBoundingClientRect();
-    const x=Math.max(0,Math.min(clientX-rect.left,rect.width));
-    const frac=x/rect.width;
-    const idx=Math.round(frac*(_lcNWs.length-1));
-    const i=Math.max(0,Math.min(idx,_lcNWs.length-1));
-    const n=_lcNWs[i];
-    const prev=_lcNWs[i-1];
-    const diff=prev?n.total-prev.total:null;
-
-    // dot Y position: map value to pixel in svg, then scale to actual rendered height
-    const svgY=svgH-pad-(n.total-minV)/rng*(svgH-pad*2);
-    const dotY=svgY*(rect.height-20)/svgH; // scale to rendered svg height
-
-    vline.style.display='block';
-    vline.style.left=x+'px';
-
-    dot.style.display='block';
-    dot.style.left=x+'px';
-    dot.style.top=dotY+'px';
-
-    const diffStr=diff!==null?` <span style="color:${diff>=0?'var(--green)':'var(--red)'}">${diff>=0?'+':''}${fmt(Math.abs(diff))}</span>`:'';
-    tip.innerHTML=`<strong>${mLabel(n.period)}</strong>  ${fmt(n.total)} kr${diffStr}`;
-    tip.style.display='block';
-
-    // keep tooltip inside bounds
-    const tipW=tip.offsetWidth||160;
-    let tipX=x;
-    tipX=Math.max(tipW/2,Math.min(tipX,rect.width-tipW/2));
-    tip.style.left=tipX+'px';
-  }
-
-  function hide(){
-    vline.style.display='none';
-    dot.style.display='none';
-    tip.style.display='none';
-  }
-
-  wrap.addEventListener('mousemove',e=>update(e.clientX));
-  wrap.addEventListener('mouseleave',hide);
-  wrap.addEventListener('touchstart',e=>{e.preventDefault();update(e.touches[0].clientX)},{passive:false});
-  wrap.addEventListener('touchmove',e=>{e.preventDefault();update(e.touches[0].clientX)},{passive:false});
-  wrap.addEventListener('touchend',hide);
+  // Now handled by initInteractiveCharts
+  initInteractiveCharts();
 }
 
 function renderNetWorth(){
@@ -1671,12 +2436,115 @@ function renderNetWorth(){
   html+=`<div style="height:16px"></div>`;
 
   document.getElementById('nw-content').innerHTML=html;
-  setTimeout(initNWChartEvents,50);
+  setTimeout(initInteractiveCharts,50);
 }
 
 // ═══════════════════════════════════════════
 // ASSET DETAIL
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// INTERAKTIV GRAF — återanvändbar
+// ═══════════════════════════════════════════
+let _chartData={}; // keyed by chartId
+
+function makeInteractiveChart(id, dataPoints, color, labelFn, valueFn){
+  // dataPoints: [{label, value}, ...]
+  if(dataPoints.length<2) return '';
+  _chartData[id]=dataPoints;
+  const vals=dataPoints.map(d=>d.value);
+  const minV=Math.min(...vals), maxV=Math.max(...vals), rng=maxV-minV||1;
+  const W=400, H=110, padL=8, padR=8, padT=12, padB=24;
+  const xStep=(W-padL-padR)/(dataPoints.length-1);
+  const pts=dataPoints.map((d,i)=>({
+    x:padL+i*xStep,
+    y:H-padB-(d.value-minV)/rng*(H-padT-padB),
+    d
+  }));
+  const pathD='M'+pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('L');
+  const areaD=pathD+`L${pts[pts.length-1].x.toFixed(1)},${H-padB}L${pts[0].x.toFixed(1)},${H-padB}Z`;
+  const gid='cg_'+id;
+  const step=Math.ceil(dataPoints.length/5);
+  const labels=pts.filter((_,i)=>i%step===0||i===pts.length-1);
+  return `<div class="ichart-wrap" id="icw_${id}" data-chartid="${id}" style="position:relative;touch-action:none;cursor:crosshair">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">
+      <defs>
+        <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity=".18"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${areaD}" fill="url(#${gid})"/>
+      <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div id="icv_${id}" style="display:none;position:absolute;top:0;bottom:${padB}px;width:1.5px;background:${color};pointer-events:none;opacity:.8"></div>
+    <div id="icd_${id}" style="display:none;position:absolute;width:10px;height:10px;border-radius:50%;background:${color};border:2px solid var(--bg1);pointer-events:none;transform:translate(-50%,-50%)"></div>
+    <div id="ict_${id}" style="display:none;position:absolute;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;font-size:12px;font-family:var(--mono);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;bottom:${padB+8}px;transform:translateX(-50%)"></div>
+    <div style="display:flex;justify-content:space-between;padding:2px 0 0;font-size:10px;font-family:var(--mono);color:var(--sub2)">
+      ${labels.map(p=>`<span>${p.d.label}</span>`).join('')}
+    </div>
+  </div>`;
+}
+
+function initInteractiveCharts(){
+  document.querySelectorAll('.ichart-wrap').forEach(wrap=>{
+    const id=wrap.dataset.chartid;
+    const data=_chartData[id];
+    if(!data||data.length<2) return;
+    // Remove old listeners by cloning
+    const fresh=wrap.cloneNode(true);
+    wrap.parentNode.replaceChild(fresh,wrap);
+
+    const vline=fresh.querySelector(`#icv_${id}`);
+    const dot=fresh.querySelector(`#icd_${id}`);
+    const tip=fresh.querySelector(`#ict_${id}`);
+    const svg=fresh.querySelector('svg');
+    const H=110, padB=24;
+
+    function update(clientX){
+      const rect=fresh.getBoundingClientRect();
+      const x=Math.max(0,Math.min(clientX-rect.left,rect.width));
+      const frac=x/rect.width;
+      const idx=Math.round(frac*(data.length-1));
+      const i=Math.max(0,Math.min(idx,data.length-1));
+      const d=data[i];
+      const prev=data[i-1];
+      const diff=prev?d.value-prev.value:null;
+
+      const vals=data.map(p=>p.value);
+      const minV=Math.min(...vals),maxV=Math.max(...vals),rng=maxV-minV||1;
+      const svgH=H-padB;
+      const yFrac=1-(d.value-minV)/rng;
+      const svgRect=svg.getBoundingClientRect();
+      const dotY=yFrac*svgRect.height;
+
+      vline.style.display='block';vline.style.left=x+'px';
+      dot.style.display='block';dot.style.left=x+'px';dot.style.top=dotY+'px';
+
+      const sign=diff===null?'':diff>=0?'+':'';
+      const diffCol=diff===null?'var(--sub2)':diff>=0?'var(--green)':'var(--red)';
+      const diffStr=diff!==null?` <span style="color:${diffCol}">${sign}${fmt(diff)} kr</span>`:'';
+      tip.innerHTML=`<strong>${d.label}</strong>  ${fmt(d.value)} kr${diffStr}`;
+      tip.style.display='block';
+
+      const tipW=tip.offsetWidth||180;
+      const tipX=Math.max(tipW/2,Math.min(x,rect.width-tipW/2));
+      tip.style.left=tipX+'px';
+    }
+
+    function hide(){
+      vline.style.display='none';
+      dot.style.display='none';
+      tip.style.display='none';
+    }
+
+    fresh.addEventListener('mousemove',e=>update(e.clientX));
+    fresh.addEventListener('mouseleave',hide);
+    fresh.addEventListener('touchstart',e=>{e.preventDefault();update(e.touches[0].clientX)},{passive:false});
+    fresh.addEventListener('touchmove',e=>{e.preventDefault();update(e.touches[0].clientX)},{passive:false});
+    fresh.addEventListener('touchend',hide);
+  });
+}
+
 function openAssetDetail(key,label,colorIdx){
   const nws=getNWs().filter(n=>n[key]>0);
   const color=COLORS[colorIdx];
@@ -1691,33 +2559,16 @@ function openAssetDetail(key,label,colorIdx){
 
   let html='';
 
-  // Mini chart for this asset
   if(nws.length>=2){
-    const vals=nws.map(n=>n[key]);
-    const minV=Math.min(...vals),maxV=Math.max(...vals),rng=maxV-minV||1;
-    const W=370,H=90,pad=8;
-    const xStep=(W-pad*2)/(nws.length-1);
-    const pts=nws.map((n,i)=>({x:pad+i*xStep,y:H-pad-(n[key]-minV)/rng*(H-pad*2)}));
-    const pathD='M'+pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('L');
-    const areaD=pathD+`L${pts[pts.length-1].x.toFixed(1)},${H}L${pts[0].x.toFixed(1)},${H}Z`;
-    const gid='dg'+Date.now();
-    const step=Math.ceil(nws.length/5);
+    const chartId='asset_'+key;
+    const dataPoints=nws.map(n=>({label:n.period.slice(2).replace('-','/'),value:n[key]}));
     html+=`<div class="card" style="margin-top:16px"><div class="card-inner">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
         <div><div class="card-lbl">Total förändring</div>
         <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:${totalGrowth>=0?'var(--green)':'var(--red)'}">${totalGrowth!==null?(totalGrowth>=0?'+':'')+fmt(totalGrowth)+' kr':'—'}</div></div>
         <div style="text-align:right"><div class="card-lbl">Snapshots</div><div style="font-size:14px;font-family:var(--mono)">${nws.length} st</div></div>
       </div>
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:90px;display:block;overflow:visible">
-        <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${color}" stop-opacity=".2"/>
-          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-        </linearGradient></defs>
-        <path d="${areaD}" fill="url(#${gid})"/>
-        <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        ${pts.filter((_,i)=>i%step===0||i===pts.length-1).map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${color}" stroke="var(--bg1)" stroke-width="1.5"/>`).join('')}
-      </svg>
-      <div class="nwc-labels" style="padding:4px 0 0">${nws.filter((_,i)=>i%step===0||i===nws.length-1).map(n=>`<span>${n.period.slice(2).replace('-','/')}</span>`).join('')}</div>
+      ${makeInteractiveChart(chartId,dataPoints,color)}
     </div></div>`;
   }
 
@@ -1740,6 +2591,7 @@ function openAssetDetail(key,label,colorIdx){
 
   document.getElementById('detail-content').innerHTML=html;
   document.getElementById('asset-detail').classList.add('open');
+  setTimeout(initInteractiveCharts,50);
 }
 function closeAssetDetail(){document.getElementById('asset-detail').classList.remove('open')}
 
