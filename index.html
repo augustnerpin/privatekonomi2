@@ -843,6 +843,12 @@ body.light .slide-hd{
     <div class="field"><label>Belopp (kr)</label><input type="number" id="tx-amt" placeholder="0" inputmode="decimal"></div>
     <div class="field"><label>Beskrivning</label><input type="text" id="tx-desc" placeholder="Valfritt"></div>
     <div class="field"><label>Kategori</label><select id="tx-cat"></select></div>
+    <div class="field" id="tx-pay-field"><label>Betalmetod</label>
+      <select id="tx-pay">
+        <option value="lonekonto">Lönekonto</option>
+        <option value="amex">AMEX</option>
+      </select>
+    </div>
     <div class="field"><label>Datum</label><input type="date" id="tx-date"></div>
     <button class="btn-p" onclick="saveTx()">Spara</button>
     <button class="btn-del" id="tx-del-btn" onclick="deleteTx()" style="display:none">Ta bort</button>
@@ -1277,6 +1283,7 @@ function openAdd(){
   setType('expense');
   document.getElementById('tx-amt').value='';
   document.getElementById('tx-desc').value='';
+  document.getElementById('tx-pay').value='lonekonto';
   const d=new Date();
   document.getElementById('tx-date').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   openOverlay('tx-modal');
@@ -1293,6 +1300,7 @@ function openEdit(id){
   document.getElementById('tx-amt').value=tx.amount;
   document.getElementById('tx-desc').value=tx.desc||'';
   document.getElementById('tx-date').value=tx.date;
+  document.getElementById('tx-pay').value=tx.pay||'lonekonto';
   // set category after type is set
   setTimeout(()=>{
     const sel=document.getElementById('tx-cat');
@@ -1309,6 +1317,8 @@ function setType(type){
   });
   const cats=type==='expense'?getExpCats():type==='income'?getIncCats():getSavCats();
   document.getElementById('tx-cat').innerHTML=cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  // Payment method only relevant for expenses
+  document.getElementById('tx-pay-field').style.display=type==='expense'?'block':'none';
 }
 
 function saveTx(){
@@ -1321,7 +1331,8 @@ function saveTx(){
     desc:document.getElementById('tx-desc').value.trim(),
     cat:document.getElementById('tx-cat').value,
     date:dateVal,
-    month:periodForDate(dateVal)
+    month:periodForDate(dateVal),
+    pay:state.txType==='expense'?document.getElementById('tx-pay').value:'lonekonto'
   };
   let txs=getTxs();
   if(state.editId){txs=txs.map(t=>t.id===state.editId?obj:t)}
@@ -1422,7 +1433,13 @@ function renderBudget(){
   const income=txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
   const expense=txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const savings=txs.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
-  const balance=income-expense-savings;
+
+  // Split expenses by payment method
+  const expLonekonto=txs.filter(t=>t.type==='expense'&&(t.pay||'lonekonto')==='lonekonto').reduce((s,t)=>s+t.amount,0);
+  const expAmex=txs.filter(t=>t.type==='expense'&&t.pay==='amex').reduce((s,t)=>s+t.amount,0);
+
+  // "Kvar på lönekonto" = inkomst − lönekonto-utgifter − sparande (AMEX dras INTE här)
+  const balance=income-expLonekonto-savings;
   const sRate=income>0?Math.round(savings/income*100):0;
 
   document.getElementById('bgt-pills').innerHTML=`
@@ -1457,6 +1474,20 @@ function renderBudget(){
     </div>
   </div></div>`;
 
+  // AMEX debt card — only show if there are AMEX expenses this period
+  if(expAmex>0){
+    html+=`<div class="card"><div class="card-inner">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="flex:1">
+          <div class="card-lbl">💳 AMEX denna period</div>
+          <div class="card-big" style="color:var(--amber);margin-bottom:4px">${fmt(expAmex)} kr</div>
+          <div style="font-size:11px;color:var(--sub);line-height:1.5">Detta blir nästa kreditkortsräkning. Dras inte från lönekontot förrän du bokför betalningen.</div>
+        </div>
+      </div>
+      <button onclick="payAmex('${month}',${expAmex})" style="width:100%;margin-top:12px;padding:11px;border-radius:var(--rsm);background:var(--amber2);border:1px solid rgba(255,214,10,.3);color:var(--amber);font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer">Bokför AMEX-betalning (−${fmt(expAmex)} kr från lönekonto)</button>
+    </div></div>`;
+  }
+
   // donut
   if(sortedCats.length>0){
     html+=`<div class="card"><div class="card-inner">
@@ -1486,10 +1517,11 @@ function renderBudget(){
       const col=tx.type==='income'?'var(--green)':tx.type==='savings'?'var(--blue)':'var(--sub)';
       const bg=tx.type==='income'?'var(--green2)':tx.type==='savings'?'var(--blue2)':'var(--red2)';
       const sign=tx.type==='income'?'+':'−';
+      const amexTag=tx.pay==='amex'?` <span style="font-size:9px;color:var(--amber);background:var(--amber2);padding:1px 5px;border-radius:8px;font-family:var(--mono)">AMEX</span>`:'';
       html+=`<div class="txi" onclick="openEdit(${tx.id})">
         <div class="txav" style="background:${bg}">${ICONS[tx.cat]||'○'}</div>
         <div class="txi-info">
-          <div class="txi-name">${tx.desc||tx.cat}</div>
+          <div class="txi-name">${tx.desc||tx.cat}${amexTag}</div>
           <div class="txi-meta">${tx.cat} · ${tx.date.slice(5)}</div>
         </div>
         <div class="txi-amt" style="color:${col}">${sign}${fmt(tx.amount)}</div>
@@ -1499,6 +1531,21 @@ function renderBudget(){
   }
 
   document.getElementById('bgt-content').innerHTML=html;
+}
+
+// Bokför AMEX-betalning — drar summan från lönekontot utan att dubbelräkna utgifter
+function payAmex(month, amount){
+  if(!confirm(`Bokför AMEX-betalning på ${fmt(amount)} kr? Detta drar summan från lönekontot. Utgifterna är redan registrerade per kategori, så detta påverkar bara "kvar på lönekonto".`))return;
+  const txs=getTxs();
+  const today=new Date().toISOString().slice(0,10);
+  // En "betalning" som markerar att AMEX-utgifterna nu lämnat lönekontot.
+  // Vi flaggar AMEX-transaktionerna som betalda istället för att skapa en ny utgift.
+  txs.forEach(t=>{
+    if(t.month===month&&t.pay==='amex')t.pay='lonekonto';
+  });
+  svTxs(txs);
+  alert('AMEX-betalning bokförd. De köpen räknas nu mot lönekontot.');
+  render();
 }
 
 function changeMonth(dir){
@@ -2566,11 +2613,19 @@ function updateAiStatus(){
   const noteEl=document.getElementById('ai-key-note');
   if(!statusEl)return;
   if(key){
-    statusEl.textContent='Claude är redo · full dataåtkomst';
+    const totalCost=getAiTotalCost();
+    statusEl.textContent='Claude Opus 4.8'+(totalCost>0?' · spenderat '+fmtCost(totalCost):' · full dataåtkomst');
+    if(totalCost>0){statusEl.style.cursor='pointer';statusEl.onclick=resetAiCost;}
     if(noteEl)noteEl.style.display='none';
   } else {
     statusEl.textContent='Ange din API-nyckel i inställningar';
     if(noteEl)noteEl.style.display='block';
+  }
+}
+function resetAiCost(){
+  if(confirm('Nollställ kostnadsräknaren för AI?')){
+    localStorage.setItem('ai_total_cost','0');
+    updateAiStatus();
   }
 }
 // ── Discuss with AI (context card) ────────
@@ -2618,7 +2673,19 @@ function buildCtx(){
   const mem=getAiMemory();
   const memSection=mem.length?`\nVAD JAG VET OM ANVÄNDAREN:\n${mem.map((m,i)=>`${i+1}. ${m}`).join('\n')}`:'';
 
-  return`Du är en personlig ekonomicoach. Svara alltid på svenska. Var konkret och visuell.
+  // Beskrivningar från "Övrigt"-kategorin — så AI kan svara på "när köpte jag X senast"
+  const describedTxs=txs
+    .filter(t=>t.cat==='Övrigt'&&t.desc&&t.desc.trim())
+    .sort((a,b)=>b.date.localeCompare(a.date))
+    .map(t=>{
+      const payLbl=t.pay==='amex'?' (AMEX)':'';
+      return `${t.date}: "${t.desc}" — ${Math.round(t.amount)} kr${payLbl}`;
+    });
+  const describedSection=describedTxs.length
+    ? `\n\nÖVRIGT-TRANSAKTIONER MED BESKRIVNING (nyast först — använd för frågor som "när köpte jag X senast", "hur ofta", "vad kostade Y"):\n${describedTxs.slice(0,200).join('\n')}`
+    : '';
+
+  return`Du är en personlig ekonomicoach. Du körs på Claude Opus 4.8 via Anthropics API — om användaren frågar vilken modell du är, svara Claude Opus 4.8. Svara alltid på svenska. Var konkret och visuell.
 
 VIKTIGT — DU KAN RENDERA WIDGETS:
 Istället för långa textsvar, använd widgets när det passar. Placera dem var som helst i ditt svar.
@@ -2656,7 +2723,7 @@ FÖRMÖGENHETSUTVECKLING:
 ${nwHistory||'Ingen data'}
 ${ln?`Senaste: Total ${Math.round(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${Math.round(ln[c.key])}`).join(' | ')}`:''}
 
-MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}`;
+MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${describedSection}`;
 }
 
 // ── Extrahera och spara minnen ──────────────
@@ -2695,7 +2762,7 @@ async function sendAi(){
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1200,system:buildCtxWithExtra(),messages:aiHistory.slice(-16)})
+      body:JSON.stringify({model:'claude-opus-4-8',max_tokens:1200,system:buildCtxWithExtra(),messages:aiHistory.slice(-16)})
     });
     const data=await res.json();
     document.getElementById(tid)?.remove();
@@ -2705,12 +2772,46 @@ async function sendAi(){
       const reply=extractAndSaveMemory(raw);
       aiHistory.push({role:'assistant',content:reply});
       addAiMsg(reply,'bot');
+      // Beräkna och visa kostnad
+      if(data.usage){
+        const cost=calcCost(data.usage.input_tokens,data.usage.output_tokens);
+        addCostBadge(cost,data.usage);
+      }
     }
   }catch{
     document.getElementById(tid)?.remove();
     addAiMsg('⚠️ Anslutningsfel — kontrollera nätverk och API-nyckel','bot');
   }
   document.getElementById('ai-send').disabled=false;
+}
+
+// ── Kostnadsberäkning (Opus 4.8) ──────────
+// Priser: $5 / miljon input-tokens, $25 / miljon output-tokens
+const USD_TO_SEK=10.5; // ungefärlig växelkurs
+function calcCost(inTok,outTok){
+  const usd=(inTok/1e6)*5 + (outTok/1e6)*25;
+  return usd*USD_TO_SEK;
+}
+function getAiTotalCost(){return parseFloat(localStorage.getItem('ai_total_cost')||'0')}
+function addAiCost(sek){
+  const tot=getAiTotalCost()+sek;
+  localStorage.setItem('ai_total_cost',tot.toString());
+  return tot;
+}
+function fmtCost(sek){
+  if(sek<0.01)return'<0,01 kr';
+  if(sek<1)return sek.toFixed(2).replace('.',',')+' kr';
+  return sek.toFixed(2).replace('.',',')+' kr';
+}
+function addCostBadge(cost,usage){
+  const total=addAiCost(cost);
+  const msgs=document.getElementById('ai-msgs');
+  const div=document.createElement('div');
+  div.style.cssText='align-self:flex-start;font-size:10px;color:var(--sub2);font-family:var(--mono);padding:2px 4px 4px;margin-top:-4px';
+  div.innerHTML=`💰 ${fmtCost(cost)} · ${usage.input_tokens+usage.output_tokens} tokens · totalt ${fmtCost(total)}`;
+  msgs.appendChild(div);
+  updateAiStatus();
+  requestAnimationFrame(()=>{msgs.scrollTop=msgs.scrollHeight});
 }
 
 function renderWidget(tag){
