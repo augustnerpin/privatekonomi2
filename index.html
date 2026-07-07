@@ -96,7 +96,7 @@ body.light{
 }
 
 /* ── SCREENS ── */
-.screen{display:none;min-height:100dvh;padding-bottom:calc(96px + var(--safe-b))}
+.screen{display:none;min-height:100dvh;padding-bottom:calc(84px + var(--safe-b))}
 .screen.active{display:block;animation:su .38s var(--spring)}
 @keyframes su{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 
@@ -215,7 +215,7 @@ body.light .txi:active{background:rgba(0,0,0,0.04)}
 
 /* ── NAV — solid dark pill, icon-only (Instagram-style) ── */
 .nav{
-  position:fixed;bottom:calc(14px + var(--safe-b));left:50%;transform:translateX(-50%);
+  position:fixed;bottom:max(calc(var(--safe-b) - 6px), 10px);left:50%;transform:translateX(-50%);
   width:calc(100% - 44px);max-width:380px;
   background:rgba(24,24,30,0.92);
   backdrop-filter:blur(30px) saturate(160%);
@@ -267,7 +267,7 @@ body.light .nav{
 
 /* ── FAB ── */
 .fab{
-  position:fixed;bottom:calc(92px + var(--safe-b));right:18px;
+  position:fixed;bottom:calc(64px + var(--safe-b));right:18px;
   width:52px;height:52px;border-radius:26px;
   background:linear-gradient(160deg, #3ee09a 0%, var(--acc) 70%);
   color:#06241a;
