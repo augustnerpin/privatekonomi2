@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Förmögenhet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg0:    #07070d;
@@ -39,7 +39,7 @@
   --r:      24px;
   --rsm:    16px;
   --sans:   'DM Sans', sans-serif;
-  --mono:   'DM Mono', monospace;
+  --mono:   'DM Sans', sans-serif;
   --safe-b: env(safe-area-inset-bottom,0px);
   --safe-t: env(safe-area-inset-top,0px);
   /* Liquid Glass tokens */
@@ -69,6 +69,11 @@ body.light{
   --specular:     rgba(255,255,255,0.95);
   --shadow-float: 0 8px 28px rgba(20,30,60,.10), 0 2px 8px rgba(20,30,60,.06);
 }
+/* ── FONT THEMES ── */
+body[data-font="inter"]{--sans:'Inter',sans-serif;--mono:'Inter',sans-serif}
+body[data-font="manrope"]{--sans:'Manrope',sans-serif;--mono:'Manrope',sans-serif}
+body[data-font="grotesk"]{--sans:'Space Grotesk',sans-serif;--mono:'Space Grotesk',sans-serif}
+body{font-variant-numeric:tabular-nums lining-nums}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg0)}
 body{
@@ -91,7 +96,7 @@ body.light{
 }
 
 /* ── SCREENS ── */
-.screen{display:none;min-height:100dvh;padding-bottom:calc(76px + var(--safe-b))}
+.screen{display:none;min-height:100dvh;padding-bottom:calc(96px + var(--safe-b))}
 .screen.active{display:block;animation:su .38s var(--spring)}
 @keyframes su{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 
@@ -198,60 +203,71 @@ body.light{
 .txi:last-child{border-bottom:none}
 .txi:active{background:rgba(255,255,255,0.07);transform:scale(.99)}
 body.light .txi:active{background:rgba(0,0,0,0.04)}
-.txav{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,0.1)}
+.txav{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;font-family:var(--mono);letter-spacing:.02em;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,0.1)}
 .txi-info{flex:1;min-width:0}
 .txi-name{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .txi-meta{font-size:11px;color:var(--sub);margin-top:1px;font-family:var(--mono)}
 .txi-amt{font-family:var(--mono);font-size:14px;font-weight:500;white-space:nowrap}
 
 /* ── PROGRESS ── */
-.pbar{background:var(--bg3);border-radius:4px;height:4px;overflow:hidden;margin:10px 0 3px}
+.pbar{background:var(--bg3);border-radius:3px;height:3px;overflow:hidden;margin:10px 0 3px}
 .pfill{height:100%;border-radius:4px;transition:width .8s var(--spring)}
 
-/* ── NAV — Liquid Glass tab bar, shrinks on scroll ── */
+/* ── NAV — solid dark pill, icon-only (Instagram-style) ── */
 .nav{
-  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-  width:100%;max-width:430px;
-  background:rgba(14,14,22,0.62);
-  backdrop-filter:var(--blur-heavy);-webkit-backdrop-filter:var(--blur-heavy);
-  border-top:1px solid rgba(255,255,255,0.13);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 -6px 24px rgba(0,0,0,.25);
+  position:fixed;bottom:calc(14px + var(--safe-b));left:50%;transform:translateX(-50%);
+  width:calc(100% - 44px);max-width:380px;
+  background:rgba(24,24,30,0.92);
+  backdrop-filter:blur(30px) saturate(160%);
+  -webkit-backdrop-filter:blur(30px) saturate(160%);
+  border-radius:999px;
   display:flex;
-  padding:0 0 var(--safe-b);
+  padding:6px;
   z-index:100;
-  transition:padding .3s var(--spring);
+  border:0.5px solid rgba(255,255,255,0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.07),
+    0 16px 44px rgba(0,0,0,.5),
+    0 4px 12px rgba(0,0,0,.35);
+  transition:padding .35s var(--spring);
 }
 body.light .nav{
-  background:rgba(255,255,255,0.6);
-  border-top:1px solid rgba(255,255,255,0.9);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.95), 0 -6px 24px rgba(20,30,60,.08);
+  background:rgba(28,28,34,0.94);
+  border:0.5px solid rgba(255,255,255,0.08);
 }
-.nav-dock{display:flex;flex:1}
+.nav-dock{display:flex;flex:1;position:relative}
+/* subtle round highlight behind active icon */
+.nav-pill{
+  position:absolute;top:0;left:0;height:100%;
+  border-radius:999px;
+  background:rgba(255,255,255,0.10);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.10);
+  transition:transform .45s var(--spring), width .45s var(--spring);
+  z-index:0;pointer-events:none;
+}
 .nb{
-  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+  flex:1;display:flex;align-items:center;justify-content:center;
   background:none;border:none;cursor:pointer;
-  color:var(--sub2);
-  font-family:var(--sans);font-size:10px;letter-spacing:.02em;
-  padding:10px 0;
-  transition:color .2s, padding .3s var(--spring), font-size .3s;
+  color:rgba(255,255,255,0.42);
+  padding:13px 0;position:relative;z-index:1;
+  transition:color .3s, padding .35s var(--spring);
 }
 .nb-icon{
-  width:24px;height:24px;
+  width:26px;height:26px;
   display:flex;align-items:center;justify-content:center;
-  transition:transform .25s var(--spring);
+  transition:transform .35s var(--spring);
 }
-.nb svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.6;fill:none;transition:width .3s,height .3s}
-.nb.active{color:var(--acc)}
-.nb.active .nb-icon{transform:translateY(-1px)}
+.nb svg{width:24px;height:24px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:width .3s,height .3s}
+.nb.active{color:#fff}
+.nb.active svg{stroke-width:2.1}
 .nb:active .nb-icon{transform:scale(.82)}
 /* shrunk state on scroll */
-.nav.shrunk .nb{padding:5px 0;font-size:0;gap:0}
-.nav.shrunk .nb span{opacity:0;height:0;overflow:hidden}
-.nav.shrunk .nb svg{width:20px;height:20px}
+.nav.shrunk .nb{padding:9px 0}
+.nav.shrunk .nb svg{width:22px;height:22px}
 
 /* ── FAB ── */
 .fab{
-  position:fixed;bottom:calc(76px + var(--safe-b));right:18px;
+  position:fixed;bottom:calc(92px + var(--safe-b));right:18px;
   width:52px;height:52px;border-radius:26px;
   background:linear-gradient(160deg, #3ee09a 0%, var(--acc) 70%);
   color:#06241a;
@@ -696,6 +712,7 @@ body.light .slide-hd{
     <div class="ai-ctx-text" id="ai-ctx-text"></div>
   </div>
   <div class="ai-chips-row">
+    <div class="ai-chip" onclick="trainAi()" style="border-color:var(--acc);color:var(--acc)">🎓 Träna AI</div>
     <div class="ai-chip" onclick="sendChip('Hur ser min ekonomi ut denna månaden?')">📊 Månaden</div>
     <div class="ai-chip" onclick="sendChip('Analysera mitt totala sparande och ge konkreta tips')">💡 Spartips</div>
     <div class="ai-chip" onclick="sendChip('Visa mina topputgifter det senaste året')">🔍 Topputgifter</div>
@@ -719,114 +736,47 @@ body.light .slide-hd{
   </div>
 </div>
 
-<!-- ═══ TRAVEL SCREEN ═══ -->
-<div class="screen" id="screen-travel">
-  <div class="hdr">
-    <div class="hdr-row">
-      <div>
-        <div class="hdr-label">Resor</div>
-        <div class="hdr-amount" style="font-size:28px">Mina resor</div>
-      </div>
-      <button class="ibtn" onclick="openNewTripModal()">+</button>
-    </div>
-  </div>
-  <div id="travel-content"></div>
-</div>
-
-<!-- ═══ TRIP DETAIL SCREEN ═══ -->
-<div class="slide" id="trip-detail">
-  <div class="slide-hd">
-    <button class="back-btn" onclick="closeTripDetail()">‹</button>
-    <div style="flex:1">
-      <div id="trip-detail-title" style="font-size:19px;font-weight:500"></div>
-      <div id="trip-detail-sub" style="font-size:11px;color:var(--sub);font-family:var(--mono)"></div>
-    </div>
-    <button class="ibtn" onclick="openAddTripTx()">+</button>
-  </div>
-  <div id="trip-detail-content" style="padding-bottom:40px"></div>
-</div>
-
 <!-- ═══ NAV ═══ -->
 <nav class="nav">
   <div class="nav-dock">
-    <button class="nb active" onclick="showScreen('budget')" id="nav-budget">
+    <div class="nav-pill" id="nav-pill"></div>
+    <button class="nb active" onclick="showScreen('budget')" id="nav-budget" aria-label="Budget">
       <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+        <svg viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/></svg>
       </div>
-      <span>Budget</span>
     </button>
-    <button class="nb" onclick="showScreen('travel')" id="nav-travel">
+    <button class="nb" onclick="showScreen('nw')" id="nav-nw" aria-label="Förmögenhet">
       <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 19-7z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M3.5 17.5L9 11.5l4 4 7-8"/><path d="M15.5 7.5H20v4.5"/></svg>
       </div>
-      <span>Resor</span>
     </button>
-    <button class="nb" onclick="showScreen('nw')" id="nav-nw">
+    <button class="nb" onclick="showScreen('year')" id="nav-year" aria-label="Årsöversikt">
       <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>
       </div>
-      <span>Förmögenhet</span>
     </button>
-    <button class="nb" onclick="showScreen('year')" id="nav-year">
+    <button class="nb" onclick="showScreen('ai')" id="nav-ai" aria-label="AI-assistent">
       <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
       </div>
-      <span>År</span>
-    </button>
-    <button class="nb" onclick="showScreen('ai')" id="nav-ai">
-      <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      </div>
-      <span>AI</span>
     </button>
   </div>
 </nav>
 <button class="fab" id="fab" onclick="openAdd()" style="display:flex">+</button>
 
-<!-- ═══ NEW TRIP MODAL ═══ -->
-<div class="overlay" id="trip-modal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-title" id="trip-modal-title">Ny resa</div>
-    <div class="field"><label>Namn / Destination</label><input type="text" id="trip-name" placeholder="t.ex. Barcelona"></div>
-    <div class="f2">
-      <div class="field"><label>Startdatum</label><input type="date" id="trip-start"></div>
-      <div class="field"><label>Slutdatum</label><input type="date" id="trip-end"></div>
+<!-- ═══ ONBOARDING ═══ -->
+<div class="overlay" id="onboard-modal" style="align-items:center">
+  <div class="modal" style="border-radius:28px;max-width:360px;margin:0 auto">
+    <div style="text-align:center;padding:8px 0 4px">
+      <div style="width:64px;height:64px;margin:0 auto 14px;border-radius:20px;background:linear-gradient(160deg,#4f8ef7,#22b07d);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 24px rgba(34,176,125,.3)"><svg viewBox="0 0 24 24" width="32" height="32" style="stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round"><path d="M3.5 17.5L9 11.5l4 4 7-8"/><path d="M15.5 7.5H20v4.5"/></svg></div>
+      <div style="font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px">Välkommen till Ekonomi</div>
+      <div style="font-size:13px;color:var(--sub);line-height:1.55;margin-bottom:20px">Din privata budget- och förmögenhetsapp. All data sparas lokalt på din enhet — ingenting lämnar telefonen.</div>
     </div>
-    <div class="field"><label>Pengepott (kr)</label><input type="number" id="trip-budget" placeholder="0" inputmode="decimal"></div>
-    <div class="field"><label>Budgetmånad (bokförs i)</label><input type="month" id="trip-month"></div>
-    <div style="font-size:12px;color:var(--sub2);font-family:var(--mono);margin-bottom:14px">Pengepotten läggs in som en utgift i vald budgetmånad.</div>
-    <div class="f2">
-      <div class="field"><label>Boende (kr)</label><input type="number" id="trip-housing" placeholder="0" inputmode="decimal"></div>
-      <div class="field"><label>Transport (kr)</label><input type="number" id="trip-transport" placeholder="0" inputmode="decimal"></div>
-    </div>
-    <button class="btn-p" onclick="saveTrip()">Skapa resa</button>
-    <button class="btn-del" id="trip-del-btn" onclick="deleteTrip()" style="display:none">Ta bort resa</button>
-    <button class="btn-s" onclick="closeOverlay('trip-modal')">Avbryt</button>
-  </div>
-</div>
-
-<!-- ═══ TRIP TX MODAL ═══ -->
-<div class="overlay" id="trip-tx-modal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Lägg till utgift</div>
-    <div class="field"><label>Belopp (kr)</label><input type="number" id="ttx-amt" placeholder="0" inputmode="decimal"></div>
-    <div class="field"><label>Beskrivning</label><input type="text" id="ttx-desc" placeholder="t.ex. Middag, Museum…"></div>
-    <div class="field"><label>Kategori</label>
-      <select id="ttx-cat">
-        <option>Mat & dryck</option>
-        <option>Aktiviteter</option>
-        <option>Shopping</option>
-        <option>Transport lokalt</option>
-        <option>Boende extra</option>
-        <option>Övrigt</option>
-      </select>
-    </div>
-    <div class="field"><label>Datum</label><input type="date" id="ttx-date"></div>
-    <button class="btn-p" onclick="saveTripTx()">Spara</button>
-    <button class="btn-del" id="ttx-del-btn" onclick="deleteTripTx()" style="display:none">Ta bort</button>
-    <button class="btn-s" onclick="closeOverlay('trip-tx-modal')">Avbryt</button>
+    <div class="field"><label>Din månadslön (kr, efter skatt)</label><input type="number" id="ob-salary" placeholder="t.ex. 27 500" inputmode="numeric"></div>
+    <div class="field"><label>Förmögenhetsmål (kr)</label><input type="number" id="ob-goal" placeholder="t.ex. 700 000" inputmode="numeric"></div>
+    <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-bottom:12px;line-height:1.5">Du kan ändra allt senare i inställningar — kategorier, löneperioder, mål och mer.</div>
+    <button class="btn-p" onclick="finishOnboarding()">Kom igång</button>
+    <button class="btn-s" onclick="skipOnboarding()">Hoppa över</button>
   </div>
 </div>
 
@@ -976,6 +926,11 @@ body.light .slide-hd{
   </div>
 
   <div class="s-sec">
+    <div class="s-lbl">Typsnitt</div>
+    <div class="s-card" id="font-picker"></div>
+  </div>
+
+  <div class="s-sec">
     <div class="s-lbl">Löneperioder <span style="font-size:10px;color:var(--sub2);font-weight:400">— startdatum per budgetmånad</span></div>
     <div class="s-card" id="pay-periods-list"></div>
   </div>
@@ -1092,19 +1047,23 @@ body.light .slide-hd{
 // ═══════════════════════════════════════════
 // DATA LAYER
 // ═══════════════════════════════════════════
-const DEF_EXP=['Boende (Lån)','Boende (Avgift)','Boende (Resterande)','Mat (Butik)','Mat (Ute)','Lunch (Restaurang)','Transport/Parkering','Gym','Fest','Kläder','Bjuda andra/presenter','Övrigt','Skuld föregående'];
+const DEF_EXP=['Boende (Lån)','Boende (Avgift)','Boende (Resterande)','Mat (Butik)','Mat (Ute)','Lunch (Restaurang)','Transport/Parkering','Gym','Fest','Kläder','Resa','Bjuda andra/presenter','Övrigt','Skuld föregående'];
 const DEF_SAV=['Avanza','SEB','Annat'];
 const DEF_INC=['Lön','Spelvinst/förlust','Övrigt'];
 
-const ICONS={
-  'Boende (Lån)':'🏠','Boende (Avgift)':'🏠','Boende (Resterande)':'🏠',
-  'Mat (Butik)':'🛒','Mat (Ute)':'🍽','Lunch (Restaurang)':'🥗',
-  'Transport/Parkering':'🚗','Gym':'💪','Fest':'🎉','Kläder':'👕',
-  'Bjuda andra/presenter':'🎁','Övrigt':'○','Skuld föregående':'↩',
-  'Lön':'💰','Spelvinst/förlust':'🎲','Avanza':'📈','SEB':'🏦','Annat':'○',
-};
+// Kategori-avatar: stram initial-monogram (som professionella bankappar)
+function catIcon(cat){
+  if(!cat)return'·';
+  // Ta initialer: "Boende (Lån)" → "BL", "Mat (Butik)" → "MB", "Lön" → "L"
+  const clean=cat.replace(/[()]/g,' ').trim();
+  const words=clean.split(/[\s/]+/).filter(Boolean);
+  if(words.length>=2)return(words[0][0]+words[1][0]).toUpperCase();
+  return clean.slice(0,2).toUpperCase();
+}
+const ICONS=new Proxy({},{get:(_,cat)=>catIcon(String(cat))});
 
-const COLORS=['#34d399','#60a5fa','#a78bfa','#fbbf24','#f87171','#fb923c','#f472b6','#34d399'];
+// Professionell finanspalett — dämpad, seriös (inspirerad av moderna banking-appar)
+const COLORS=['#4f8ef7','#22b07d','#8b7cf6','#e8a13c','#e05d5d','#3cbfc4','#c96fa8','#6b7a99'];
 
 function ld(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v??d}catch{return d}}
 function sv(k,v){localStorage.setItem(k,JSON.stringify(v))}
@@ -1245,7 +1204,8 @@ function payPeriodLabel(ym){
 }
 
 // Aktiv period idag
-function currentPayPeriod(){return periodForDate(new Date().toISOString().slice(0,10))}
+function todayLocal(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function currentPayPeriod(){return periodForDate(todayLocal())}
 
 let state={screen:'budget',month:currentPayPeriod(),txType:'expense',editId:null};
 
@@ -1253,6 +1213,7 @@ let state={screen:'budget',month:currentPayPeriod(),txType:'expense',editId:null
 // NAV
 // ═══════════════════════════════════════════
 function showScreen(name){
+  haptic(8);
   state.screen=name;
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
@@ -1260,13 +1221,46 @@ function showScreen(name){
   scr.classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
   document.getElementById('fab').style.display=(name==='year'||name==='ai')?'none':'flex';
+  movePill(name);
   if(name==='ai'){initAi();}
   render();
+}
+
+function movePill(name){
+  const pill=document.getElementById('nav-pill');
+  const btn=document.getElementById('nav-'+name);
+  if(!pill||!btn)return;
+  const dock=btn.parentElement;
+  const dockRect=dock.getBoundingClientRect();
+  const btnRect=btn.getBoundingClientRect();
+  pill.style.width=btnRect.width+'px';
+  pill.style.transform=`translateX(${btnRect.left-dockRect.left}px)`;
 }
 
 // ═══════════════════════════════════════════
 // OVERLAYS/MODALS
 // ═══════════════════════════════════════════
+// ── Toast + haptics (iOS-känsla) ──────────
+function haptic(ms=12){if(navigator.vibrate)navigator.vibrate(ms)}
+function toast(msg,type='ok'){
+  const old=document.getElementById('app-toast');if(old)old.remove();
+  const t=document.createElement('div');
+  t.id='app-toast';
+  const col=type==='err'?'var(--red)':type==='warn'?'var(--amber)':'var(--green)';
+  t.style.cssText=`position:fixed;top:calc(var(--safe-t) + 14px);left:50%;transform:translateX(-50%) translateY(-8px);
+    background:rgba(255,255,255,0.06);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+    border:0.5px solid rgba(255,255,255,0.22);border-radius:20px;padding:11px 18px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.25),0 10px 32px rgba(0,0,0,.4);
+    color:var(--text);font-family:var(--sans);font-size:13px;font-weight:500;
+    display:flex;align-items:center;gap:8px;z-index:600;opacity:0;
+    transition:opacity .28s,transform .34s var(--spring);max-width:86%;`;
+  t.innerHTML=`<span style="width:7px;height:7px;border-radius:50%;background:${col};flex-shrink:0"></span><span>${msg}</span>`;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>{t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)'});
+  haptic();
+  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(-8px)';setTimeout(()=>t.remove(),320)},2400);
+}
+
 function openOverlay(id){document.getElementById(id).classList.add('open')}
 function closeOverlay(id){document.getElementById(id).classList.remove('open')}
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
@@ -1276,7 +1270,6 @@ document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
 // ═══════════════════════════════════════════
 function openAdd(){
   if(state.screen==='nw'){openNWModal();return}
-  if(state.screen==='travel'){openNewTripModal();return}
   state.editId=null;
   document.getElementById('tx-modal-title').textContent='Lägg till';
   document.getElementById('tx-del-btn').style.display='none';
@@ -1323,7 +1316,7 @@ function setType(type){
 
 function saveTx(){
   const amt=parseFloat(document.getElementById('tx-amt').value);
-  if(!amt||amt<=0){alert('Ange ett belopp');return}
+  if(!amt||amt<=0){toast('Ange ett belopp','warn');haptic(30);return}
   const dateVal=document.getElementById('tx-date').value;
   const obj={
     id:state.editId||Date.now(),
@@ -1337,13 +1330,14 @@ function saveTx(){
   let txs=getTxs();
   if(state.editId){txs=txs.map(t=>t.id===state.editId?obj:t)}
   else{txs.push(obj)}
-  svTxs(txs);closeOverlay('tx-modal');state.editId=null;render();
+  svTxs(txs);closeOverlay('tx-modal');const wasEdit=!!state.editId;state.editId=null;toast(wasEdit?'Transaktion uppdaterad ✓':'Transaktion sparad ✓');render();
 }
 
 function deleteTx(){
   if(!state.editId)return;
+  if(!confirm('Ta bort transaktionen?'))return;
   svTxs(getTxs().filter(t=>t.id!==state.editId));
-  closeOverlay('tx-modal');state.editId=null;render();
+  closeOverlay('tx-modal');state.editId=null;toast('Transaktion borttagen');render();
 }
 
 // ═══════════════════════════════════════════
@@ -1394,7 +1388,7 @@ function openNWModal(){
 }
 function saveNW(){
   const period=document.getElementById('nwm-period').value;
-  if(!period){alert('Välj period');return}
+  if(!period){toast('Välj period','warn');return}
   const cats=getNWCats();
   const snap={period};
   let total=0;
@@ -1406,13 +1400,13 @@ function saveNW(){
   const nws=getNWs().filter(n=>n.period!==period);
   nws.push(snap);
   nws.sort((a,b)=>a.period.localeCompare(b.period));
-  svNWs(nws);closeOverlay('nw-modal');render();
+  svNWs(nws);closeOverlay('nw-modal');toast('Snapshot sparad ✓');render();
 }
 
 // ═══════════════════════════════════════════
 // DONUT SVG
 // ═══════════════════════════════════════════
-function makeDonut(slices,total,cx=70,cy=70,r=52,sw=13){
+function makeDonut(slices,total,cx=70,cy=70,r=54,sw=9){
   if(!total)return`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="${sw}"/>`;
   let out='';let off=0;const circ=2*Math.PI*r;
   slices.forEach(s=>{
@@ -1479,7 +1473,7 @@ function renderBudget(){
     html+=`<div class="card"><div class="card-inner">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div style="flex:1">
-          <div class="card-lbl">💳 AMEX denna period</div>
+          <div class="card-lbl">AMEX denna period</div>
           <div class="card-big" style="color:var(--amber);margin-bottom:4px">${fmt(expAmex)} kr</div>
           <div style="font-size:11px;color:var(--sub);line-height:1.5">Detta blir nästa kreditkortsräkning. Dras inte från lönekontot förrän du bokför betalningen.</div>
         </div>
@@ -1537,14 +1531,14 @@ function renderBudget(){
 function payAmex(month, amount){
   if(!confirm(`Bokför AMEX-betalning på ${fmt(amount)} kr? Detta drar summan från lönekontot. Utgifterna är redan registrerade per kategori, så detta påverkar bara "kvar på lönekonto".`))return;
   const txs=getTxs();
-  const today=new Date().toISOString().slice(0,10);
+  // (datum behövs ej — vi flaggar bara om transaktionerna)
   // En "betalning" som markerar att AMEX-utgifterna nu lämnat lönekontot.
   // Vi flaggar AMEX-transaktionerna som betalda istället för att skapa en ny utgift.
   txs.forEach(t=>{
     if(t.month===month&&t.pay==='amex')t.pay='lonekonto';
   });
   svTxs(txs);
-  alert('AMEX-betalning bokförd. De köpen räknas nu mot lönekontot.');
+  toast('AMEX-betalning bokförd ✓');
   render();
 }
 
@@ -2068,7 +2062,7 @@ function openMonthDetail(m){
     html+=`<div class="sec"><span class="sec-t">Sparande</span><span class="sec-sub">${fmt(sav)} kr totalt</span></div><div class="txl">`;
     savCats.forEach(([cat,amt])=>{
       html+=`<div class="txi" style="cursor:default">
-        <div class="txav" style="background:var(--blue2)">📈</div>
+        <div class="txav" style="background:var(--blue2);color:var(--blue)">${catIcon(cat)}</div>
         <div class="txi-info"><div class="txi-name">${cat}</div></div>
         <div class="txi-amt" style="color:var(--blue)">${fmt(amt)} kr</div>
       </div>`;
@@ -2237,7 +2231,7 @@ function renderYear(){
     savEntries.forEach(([cat,amt])=>{
       const p=totSav>0?Math.round(amt/totSav*100):0;
       html+=`<div class="txi" style="cursor:default">
-        <div class="txav" style="background:var(--blue2)">📈</div>
+        <div class="txav" style="background:var(--blue2);color:var(--blue)">${catIcon(cat)}</div>
         <div class="txi-info">
           <div class="txi-name">${cat}</div>
           <div style="margin-top:4px;height:3px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden">
@@ -2333,6 +2327,7 @@ function renderSettings(){
   document.getElementById('s-salary').value=ld('salary',0)||'';
   document.getElementById('s-goal').value=ld('goal',700000)||'';
   document.getElementById('s-apikey').value=getApiKey();
+  renderFontPicker();
   renderPayPeriodsList();
   renderCatList('exp-cats',getExpCats(),'expense');
   renderCatList('inc-cats',getIncCats(),'income');
@@ -2340,6 +2335,36 @@ function renderSettings(){
   renderNWCatList();
   renderGroupList();
 }
+
+// ── Typsnittsväljare ───────────────────────
+const FONT_THEMES=[
+  {id:'dm',name:'DM Sans',desc:'Standard — mjuk & geometrisk',sans:"'DM Sans',sans-serif",mono:"'DM Sans',sans-serif"},
+  {id:'inter',name:'Inter',desc:'Modern fintech-standard',sans:"'Inter',sans-serif",mono:"'Inter',sans-serif"},
+  {id:'manrope',name:'Manrope',desc:'Elegant & luftig',sans:"'Manrope',sans-serif",mono:"'Manrope',sans-serif"},
+  {id:'grotesk',name:'Space Grotesk',desc:'Karaktärsfull tech-känsla',sans:"'Space Grotesk',sans-serif",mono:"'Space Grotesk',sans-serif"}
+];
+function applyFont(id){
+  if(id==='dm')document.body.removeAttribute('data-font');
+  else document.body.setAttribute('data-font',id);
+  localStorage.setItem('font_theme',id);
+}
+function pickFont(id){applyFont(id);renderFontPicker();toast('Typsnitt ändrat ✓')}
+function renderFontPicker(){
+  const el=document.getElementById('font-picker');
+  if(!el)return;
+  const cur=localStorage.getItem('font_theme')||'dm';
+  el.innerHTML=FONT_THEMES.map(f=>`
+    <div class="s-row" style="cursor:pointer;align-items:flex-start" onclick="pickFont('${f.id}')">
+      <div style="flex:1">
+        <div style="font-family:${f.sans};font-size:15px;font-weight:600;margin-bottom:2px">${f.name}</div>
+        <div style="font-size:11px;color:var(--sub2);margin-bottom:6px">${f.desc}</div>
+        <div style="font-family:${f.sans};font-size:13px;color:var(--sub)">Kvar på lönekonto</div>
+        <div style="font-family:${f.mono};font-size:17px;font-weight:500;color:var(--green)">+10 250 kr · 0123456789</div>
+      </div>
+      <span style="color:${cur===f.id?'var(--acc)':'var(--sub2)'};font-size:17px;margin-top:4px">${cur===f.id?'●':'○'}</span>
+    </div>`).join('');
+}
+(function(){const s=localStorage.getItem('font_theme');if(s&&s!=='dm')applyFont(s)})();
 
 // ── Pay periods ───────────────────────────
 let editingPP=null;
@@ -2390,7 +2415,7 @@ function openPayPeriodModal(ym){
 function savePayPeriod(){
   if(!editingPP)return;
   const start=document.getElementById('pp-start-date').value;
-  if(!start){alert('Välj ett datum');return}
+  if(!start){toast('Välj ett datum','warn');return}
   const periods=getPayPeriods().filter(p=>p.period!==editingPP);
   periods.push({period:editingPP,startDate:start});
   svPayPeriods(periods);
@@ -2495,9 +2520,9 @@ function toggleGrpCat(el){
 
 function saveGroup(){
   const name=document.getElementById('grp-name').value.trim();
-  if(!name){alert('Ange ett gruppnamn');return;}
+  if(!name){toast('Ange ett gruppnamn','warn');return;}
   const cats=[...document.querySelectorAll('#grp-cat-checks [data-selected="1"]')].map(el=>el.dataset.cat);
-  if(cats.length<2){alert('Välj minst 2 kategorier');return;}
+  if(cats.length<2){toast('Välj minst 2 kategorier','warn');return;}
   const groups=getGroups();
   const grp={name,cats};
   if(editGroupIdx!==null){groups[editGroupIdx]=grp;}
@@ -2536,8 +2561,10 @@ function addCat(type){
 
 
 function exportData(){
-  const data={version:1,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
-    settings:{goal:ld('goal',700000),salary:ld('salary',0),theme:ld('theme','dark'),cats_exp:getExpCats(),cats_sav:getSavCats()}};
+  const data={version:2,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
+    ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
+    settings:{goal:ld('goal',700000),salary:ld('salary',0),theme:ld('theme','dark'),font:localStorage.getItem('font_theme')||'dm',
+      cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods()}};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -2556,7 +2583,7 @@ function importData(e){
       document.getElementById('import-info').innerHTML=`Fil: <b>${file.name}</b><br>Transaktioner: ${data.txs.length} st<br>NW-snapshots: ${data.nws.length} st<br><br>Befintlig data skrivs över.`;
       closeOverlay('import-modal');
       document.getElementById('import-modal').classList.add('open');
-    }catch{alert('Ogiltig fil')}
+    }catch{toast('Ogiltig fil','err')}
     e.target.value='';
   };reader.readAsText(file);
 }
@@ -2569,8 +2596,18 @@ function confirmImport(){
     if(d.settings.salary)sv('salary',d.settings.salary);
     if(d.settings.theme)sv('theme',d.settings.theme);
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
+    if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
+    if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
+    if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
+    if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
+    if(d.settings.font){localStorage.setItem('font_theme',d.settings.font);applyFont(d.settings.font);}
     toggleTheme(d.settings.theme==='light');
+  }
+  if(d.ai){
+    if(d.ai.memory)svAiMemory(d.ai.memory);
+    if(d.ai.history){sv('ai_history',d.ai.history);aiHistory=d.ai.history;}
+    if(d.ai.totalCost)localStorage.setItem('ai_total_cost',d.ai.totalCost);
   }
   pendingImport=null;closeOverlay('import-modal');closeSettings();render();
 }
@@ -2578,7 +2615,13 @@ function confirmImport(){
 // ═══════════════════════════════════════════
 // AI
 // ═══════════════════════════════════════════
-let aiHistory=[];
+let aiHistory=ld('ai_history',[]);
+function persistAiHistory(){sv('ai_history',aiHistory.slice(-80))}
+
+// ── Träna AI — intervjuläge ────────────────
+function trainAi(){
+  sendChip('Starta träningsläget: intervjua mig för att lära känna min ekonomi. Ställ EN fråga i taget (max 12 frågor totalt) om sådant du inte redan vet: min livssituation, boende, familj, inkomster, fasta kostnader, sparmål, riskprofil, pension, lån, vanor och vad jag vill få ut av min ekonomi. Spara allt viktigt med <memory>-taggar. Börja nu med din första fråga.');
+}
 
 // ── Minne ──────────────────────────────────
 function getAiMemory(){return ld('ai_memory',[])}
@@ -2636,10 +2679,15 @@ function clearAiCtx(){
 // ── Build full context ─────────────────────
 function buildCtxWithExtra(){return buildCtx();}
 
+let _histRendered=false;
 function initAi(){
   updateAiStatus();
   updateMemBar();
   document.getElementById('s-apikey').value=getApiKey();
+  if(!_histRendered&&aiHistory.length){
+    _histRendered=true;
+    aiHistory.slice(-30).forEach(m=>addAiMsg(m.content,m.role==='user'?'user':'bot'));
+  }
 }
 
 // ── Bygg fullständig kontext ────────────────
@@ -2711,7 +2759,8 @@ Regler:
 - Kombinera kort text + widgets för bästa upplevelse
 - Använd ALLTID widgets för sifferjämförelser, trender och rekommendationer
 - Håll textdelar korta, låt widgets visa data
-- Avsluta med <memory>[...]</memory> om du lär dig något viktigt${memSection}
+- Avsluta med <memory>["..."]</memory> VARJE gång du lär dig något nytt om användaren (mål, familj, boende, lån, vanor, preferenser, riskprofil) — var generös med att spara
+- Använd dina sparade minnen aktivt för personliga råd; ställ gärna en kort följdfråga när information saknas${memSection}
 
 TRANSAKTIONSHISTORIK (${allMonths.length} månader):
 ${monthSums.join('\n')}
@@ -2734,7 +2783,7 @@ function extractAndSaveMemory(reply){
     const newMems=JSON.parse(match[1]);
     if(Array.isArray(newMems)&&newMems.length){
       const existing=getAiMemory();
-      svAiMemory([...existing,...newMems].slice(-20)); // max 20 minnen
+      svAiMemory([...existing,...newMems].slice(-60)); // max 60 minnen
       updateMemBar();
     }
   }catch{}
@@ -2754,7 +2803,7 @@ async function sendAi(){
   if(!key){openSettings();return}
   inp.value='';inp.style.height='auto';
   addAiMsg(txt,'user');
-  aiHistory.push({role:'user',content:txt});
+  aiHistory.push({role:'user',content:txt});persistAiHistory();
   const tid='t'+Date.now();
   addAiMsg('Analyserar…','bot thinking',tid);
   document.getElementById('ai-send').disabled=true;
@@ -2771,6 +2820,7 @@ async function sendAi(){
       const raw=data.content[0].text;
       const reply=extractAndSaveMemory(raw);
       aiHistory.push({role:'assistant',content:reply});
+      persistAiHistory();
       addAiMsg(reply,'bot');
       // Beräkna och visa kostnad
       if(data.usage){
@@ -2808,7 +2858,7 @@ function addCostBadge(cost,usage){
   const msgs=document.getElementById('ai-msgs');
   const div=document.createElement('div');
   div.style.cssText='align-self:flex-start;font-size:10px;color:var(--sub2);font-family:var(--mono);padding:2px 4px 4px;margin-top:-4px';
-  div.innerHTML=`💰 ${fmtCost(cost)} · ${usage.input_tokens+usage.output_tokens} tokens · totalt ${fmtCost(total)}`;
+  div.innerHTML=`${fmtCost(cost)} · ${usage.input_tokens+usage.output_tokens} tokens · totalt ${fmtCost(total)}`;
   msgs.appendChild(div);
   updateAiStatus();
   requestAnimationFrame(()=>{msgs.scrollTop=msgs.scrollHeight});
@@ -2908,299 +2958,10 @@ function addAiMsg(txt,cls,id=''){
 // ═══════════════════════════════════════════
 // MASTER RENDER
 // ═══════════════════════════════════════════
-// ═══════════════════════════════════════════
-// TRAVEL
-// ═══════════════════════════════════════════
-const getTrips=()=>ld('trips',[]);
-const svTrips=v=>sv('trips',v);
-
-let activeTripId=null;
-let editTripTxId=null;
-let editTripId=null;
-
-function openNewTripModal(){
-  editTripId=null;
-  document.getElementById('trip-modal-title').textContent='Ny resa';
-  document.getElementById('trip-del-btn').style.display='none';
-  document.getElementById('trip-name').value='';
-  document.getElementById('trip-budget').value='';
-  document.getElementById('trip-housing').value='';
-  document.getElementById('trip-transport').value='';
-  const today=new Date();
-  const ym=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0');
-  const dd=today.toISOString().slice(0,10);
-  document.getElementById('trip-start').value=dd;
-  document.getElementById('trip-end').value=dd;
-  document.getElementById('trip-month').value=ym;
-  openOverlay('trip-modal');
-}
-
-function openEditTripModal(id){
-  const trip=getTrips().find(t=>t.id===id);
-  if(!trip)return;
-  editTripId=id;
-  document.getElementById('trip-modal-title').textContent='Redigera resa';
-  document.getElementById('trip-del-btn').style.display='block';
-  document.getElementById('trip-name').value=trip.name;
-  document.getElementById('trip-budget').value=trip.budget;
-  document.getElementById('trip-housing').value=trip.housing||'';
-  document.getElementById('trip-transport').value=trip.transport||'';
-  document.getElementById('trip-start').value=trip.startDate;
-  document.getElementById('trip-end').value=trip.endDate;
-  document.getElementById('trip-month').value=trip.month;
-  openOverlay('trip-modal');
-}
-
-function saveTrip(){
-  const name=document.getElementById('trip-name').value.trim();
-  if(!name){alert('Ange ett namn');return}
-  const budget=parseFloat(document.getElementById('trip-budget').value)||0;
-  const housing=parseFloat(document.getElementById('trip-housing').value)||0;
-  const transport=parseFloat(document.getElementById('trip-transport').value)||0;
-  const startDate=document.getElementById('trip-start').value;
-  const endDate=document.getElementById('trip-end').value;
-  const month=document.getElementById('trip-month').value;
-
-  const trips=getTrips();
-
-  if(editTripId){
-    const idx=trips.findIndex(t=>t.id===editTripId);
-    if(idx>=0){
-      trips[idx]={...trips[idx],name,budget,housing,transport,startDate,endDate,month};
-    }
-    // Update the budget tx
-    const txs=getTxs().map(t=>t.tripId===editTripId&&t.isTripBudget
-      ?{...t,amount:budget,month:periodForDate(startDate),desc:name}:t);
-    svTxs(txs);
-  } else {
-    const id=Date.now();
-    trips.push({id,name,budget,housing,transport,startDate,endDate,month,txs:[]});
-    // Add budget as expense in monthly budget
-    const existing=getTxs();
-    existing.push({
-      id:id+1,type:'expense',amount:budget,
-      desc:'✈ '+name,cat:'Resa',
-      date:startDate,month:periodForDate(startDate),
-      tripId:id,isTripBudget:true
-    });
-    svTxs(existing);
-  }
-
-  svTrips(trips);
-  closeOverlay('trip-modal');
-  editTripId=null;
-  renderTravel();
-}
-
-function deleteTrip(){
-  if(!editTripId)return;
-  if(!confirm('Ta bort resan?'))return;
-  svTrips(getTrips().filter(t=>t.id!==editTripId));
-  svTxs(getTxs().filter(t=>t.tripId!==editTripId));
-  closeOverlay('trip-modal');
-  editTripId=null;
-  renderTravel();
-}
-
-function openTripDetail(id){
-  activeTripId=id;
-  renderTripDetail();
-  document.getElementById('trip-detail').classList.add('open');
-}
-function closeTripDetail(){
-  document.getElementById('trip-detail').classList.remove('open');
-  activeTripId=null;
-}
-
-function renderTripDetail(){
-  const trip=getTrips().find(t=>t.id===activeTripId);
-  if(!trip)return;
-  const runningSpent=(trip.txs||[]).reduce((s,t)=>s+t.amount,0);
-  const fixedSpent=(trip.housing||0)+(trip.transport||0);
-  const spent=runningSpent+fixedSpent;
-  const remaining=trip.budget-spent;
-  const pct=trip.budget>0?Math.min(spent/trip.budget*100,100):0;
-
-  document.getElementById('trip-detail-title').textContent='✈ '+trip.name;
-  document.getElementById('trip-detail-sub').textContent=trip.startDate+' → '+trip.endDate;
-
-  let html='';
-
-  // ── Top stats row
-  html+=`<div class="sgrid sg2" style="margin-top:14px;margin-bottom:10px">
-    <div class="scard"><div class="scard-lbl">Pengepott</div><div class="scard-val">${fmt(trip.budget)} kr</div></div>
-    <div class="scard"><div class="scard-lbl">Totalt spenderat</div><div class="scard-val" style="color:var(--red)">${fmt(spent)} kr</div></div>
-  </div>`;
-
-  // ── Kvar-kort — stort och tydligt
-  html+=`<div class="card" style="margin-bottom:10px"><div class="card-inner">
-    <div class="card-lbl">Kvar på resekonto</div>
-    <div style="font-size:34px;font-weight:600;font-family:var(--mono);letter-spacing:-.03em;color:${remaining>=0?'var(--green)':'var(--red)'};margin:6px 0 12px">
-      ${remaining>=0?'+':''}${fmt(remaining)} kr
-    </div>
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;color:var(--sub)">
-      <span>Förbrukad budget</span>
-      <span style="font-family:var(--mono)">${pct.toFixed(0)}%</span>
-    </div>
-    <div class="pbar" style="height:6px"><div class="pfill" style="width:${Math.min(pct,100).toFixed(1)}%;background:${pct>90?'var(--red)':pct>70?'var(--amber)':'var(--green)'}"></div></div>
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:4px">
-      <span>${fmt(spent)} kr spenderat</span><span>${fmt(trip.budget)} kr total pott</span>
-    </div>
-  </div></div>`;
-
-  // ── Löpande utgifter (högst upp av listorna)
-  const ttxs=[...(trip.txs||[])].sort((a,b)=>b.date.localeCompare(a.date));
-  html+=`<div class="sec"><span class="sec-t">Löpande utgifter</span><span class="sec-sub">${ttxs.length} st · ${fmt(runningSpent)} kr</span></div>`;
-  if(!ttxs.length){
-    html+=`<div class="empty" style="padding:28px 24px"><div class="empty-i">🧾</div><div class="empty-t">Inga löpande utgifter ännu.<br>Tryck + för att lägga till.</div></div>`;
-  } else {
-    html+=`<div class="txl">`;
-    ttxs.forEach(tx=>{
-      const icons={'Mat & dryck':'🍽','Aktiviteter':'🎭','Shopping':'🛍','Transport lokalt':'🚌','Boende extra':'🏨','Övrigt':'○'};
-      html+=`<div class="txi" onclick="openEditTripTx(${activeTripId},'${tx.id}')">
-        <div class="txav" style="background:var(--red2)">${icons[tx.cat]||'○'}</div>
-        <div class="txi-info">
-          <div class="txi-name">${tx.desc||tx.cat}</div>
-          <div class="txi-meta">${tx.cat} · ${tx.date.slice(5)}</div>
-        </div>
-        <div class="txi-amt" style="color:var(--red)">−${fmt(tx.amount)} kr</div>
-      </div>`;
-    });
-    html+=`</div>`;
-  }
-
-  // ── Fasta kostnader (längst ner)
-  if(fixedSpent>0){
-    html+=`<div class="sec"><span class="sec-t">Fasta kostnader</span><span class="sec-sub">${fmt(fixedSpent)} kr</span></div><div class="txl">`;
-    if(trip.housing>0) html+=`<div class="txi" style="cursor:default">
-      <div class="txav" style="background:var(--blue2)">🏨</div>
-      <div class="txi-info"><div class="txi-name">Boende</div><div class="txi-meta">Fast kostnad</div></div>
-      <div class="txi-amt" style="color:var(--red)">−${fmt(trip.housing)} kr</div>
-    </div>`;
-    if(trip.transport>0) html+=`<div class="txi" style="cursor:default">
-      <div class="txav" style="background:var(--purple2)">✈️</div>
-      <div class="txi-info"><div class="txi-name">Transport</div><div class="txi-meta">Fast kostnad</div></div>
-      <div class="txi-amt" style="color:var(--red)">−${fmt(trip.transport)} kr</div>
-    </div>`;
-    html+=`</div>`;
-  }
-
-  html+=`<div style="padding:16px">
-    <button onclick="openEditTripModal(${activeTripId})" style="width:100%;padding:12px;border-radius:var(--rsm);background:var(--glass);border:1px solid var(--glass-border);color:var(--sub);font-family:var(--sans);font-size:14px;cursor:pointer">Redigera resa</button>
-  </div>`;
-
-  document.getElementById('trip-detail-content').innerHTML=html;
-}
-
-function openAddTripTx(){
-  if(!activeTripId)return;
-  editTripTxId=null;
-  document.getElementById('ttx-amt').value='';
-  document.getElementById('ttx-desc').value='';
-  document.getElementById('ttx-date').value=new Date().toISOString().slice(0,10);
-  document.getElementById('ttx-del-btn').style.display='none';
-  openOverlay('trip-tx-modal');
-  setTimeout(()=>document.getElementById('ttx-amt').focus(),300);
-}
-
-function openEditTripTx(tripId,txId){
-  activeTripId=tripId;
-  const trip=getTrips().find(t=>t.id===tripId);
-  const tx=(trip?.txs||[]).find(t=>t.id===txId);
-  if(!tx)return;
-  editTripTxId=txId;
-  document.getElementById('ttx-amt').value=tx.amount;
-  document.getElementById('ttx-desc').value=tx.desc||'';
-  document.getElementById('ttx-date').value=tx.date;
-  document.getElementById('ttx-del-btn').style.display='block';
-  const sel=document.getElementById('ttx-cat');
-  for(let i=0;i<sel.options.length;i++){if(sel.options[i].value===tx.cat){sel.selectedIndex=i;break}}
-  openOverlay('trip-tx-modal');
-}
-
-function saveTripTx(){
-  const amt=parseFloat(document.getElementById('ttx-amt').value);
-  if(!amt||amt<=0){alert('Ange ett belopp');return}
-  const trips=getTrips();
-  const trip=trips.find(t=>t.id===activeTripId);
-  if(!trip)return;
-  if(!trip.txs)trip.txs=[];
-  const tx={
-    id:editTripTxId||'tx'+Date.now(),
-    amount:amt,
-    desc:document.getElementById('ttx-desc').value.trim(),
-    cat:document.getElementById('ttx-cat').value,
-    date:document.getElementById('ttx-date').value
-  };
-  if(editTripTxId){
-    trip.txs=trip.txs.map(t=>t.id===editTripTxId?tx:t);
-  } else {
-    trip.txs.push(tx);
-  }
-  svTrips(trips);
-  closeOverlay('trip-tx-modal');
-  editTripTxId=null;
-  renderTripDetail();
-}
-
-function deleteTripTx(){
-  if(!editTripTxId||!activeTripId)return;
-  const trips=getTrips();
-  const trip=trips.find(t=>t.id===activeTripId);
-  if(!trip)return;
-  trip.txs=(trip.txs||[]).filter(t=>t.id!==editTripTxId);
-  svTrips(trips);
-  closeOverlay('trip-tx-modal');
-  editTripTxId=null;
-  renderTripDetail();
-}
-
-function renderTravel(){
-  const trips=getTrips();
-  const active=trips.filter(t=>t.endDate>=new Date().toISOString().slice(0,10));
-  const past=trips.filter(t=>t.endDate<new Date().toISOString().slice(0,10));
-
-  let html='';
-  if(!trips.length){
-    html=`<div class="empty"><div class="empty-i">✈️</div><div class="empty-t">Inga resor ännu.<br>Tryck + för att skapa din första resa.</div></div>`;
-    document.getElementById('travel-content').innerHTML=html;
-    return;
-  }
-
-  const renderTripCard=(trip)=>{
-    const spent=(trip.txs||[]).reduce((s,t)=>s+t.amount,0)+(trip.housing||0)+(trip.transport||0);
-    const remaining=trip.budget-spent;
-    const pct=trip.budget>0?Math.min(spent/trip.budget*100,100):0;
-    return`<div class="txi" onclick="openTripDetail(${trip.id})">
-      <div class="txav" style="background:var(--acc2);font-size:20px">✈️</div>
-      <div class="txi-info">
-        <div class="txi-name">${trip.name}</div>
-        <div class="txi-meta">${trip.startDate} → ${trip.endDate}</div>
-        <div style="margin-top:6px">
-          <div class="pbar" style="margin:0 0 3px"><div class="pfill" style="width:${pct.toFixed(1)}%;background:${pct>90?'var(--red)':pct>70?'var(--amber)':'var(--green)'}"></div></div>
-        </div>
-      </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div class="txi-amt" style="color:${remaining>=0?'var(--green)':'var(--red)'}">${remaining>=0?'+':''}${fmt(remaining)}</div>
-        <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:2px">kvar av ${fmt(trip.budget)}</div>
-      </div>
-    </div>`;
-  };
-
-  if(active.length){
-    html+=`<div class="sec"><span class="sec-t">Aktiva resor</span></div><div class="txl">${active.map(renderTripCard).join('')}</div>`;
-  }
-  if(past.length){
-    html+=`<div class="sec"><span class="sec-t">Tidigare resor</span></div><div class="txl">${past.map(renderTripCard).join('')}</div>`;
-  }
-  document.getElementById('travel-content').innerHTML=html;
-}
-
 function render(){
   if(state.screen==='budget')renderBudget();
   else if(state.screen==='nw')renderNetWorth();
   else if(state.screen==='year')renderYear();
-  else if(state.screen==='travel')renderTravel();
 }
 
 // apply saved theme
@@ -3208,19 +2969,7 @@ function render(){
 
 
 
-// ═══════════════════════════════════════════
-// SEED DATA — Mars & April 2026
-// ═══════════════════════════════════════════
-(function(){
-  const existing = JSON.parse(localStorage.getItem('txs')||'[]');
-  const hasMars = existing.some(t=>t.month==='2026-03');
-  const hasApril = existing.some(t=>t.month==='2026-04');
-  if(!hasMars || !hasApril){
-    const newTxs = [{"id":9001,"type":"income","amount":27500.0,"desc":"","cat":"Lön","date":"2026-02-25","month":"2026-03"},{"id":9002,"type":"expense","amount":2543.0,"desc":"","cat":"Boende (Avgift)","date":"2026-02-25","month":"2026-03"},{"id":9003,"type":"expense","amount":5182.0,"desc":"","cat":"Boende (Lån)","date":"2026-02-25","month":"2026-03"},{"id":9004,"type":"expense","amount":416.0,"desc":"","cat":"Gym","date":"2026-02-25","month":"2026-03"},{"id":9005,"type":"expense","amount":123.0,"desc":"","cat":"Boende (Resterande)","date":"2026-02-25","month":"2026-03"},{"id":9006,"type":"savings","amount":10000.0,"desc":"Avanza","cat":"Avanza","date":"2026-02-25","month":"2026-03"},{"id":9007,"type":"expense","amount":623.0,"desc":"","cat":"Skuld föregående","date":"2026-02-25","month":"2026-03"},{"id":9008,"type":"savings","amount":5000.0,"desc":"Avanza","cat":"Avanza","date":"2026-02-25","month":"2026-03"},{"id":9009,"type":"savings","amount":691.0,"desc":"Spanien resa seb","cat":"Avanza","date":"2026-02-25","month":"2026-03"},{"id":9010,"type":"expense","amount":260.0,"desc":"Golf","cat":"Övrigt","date":"2026-02-25","month":"2026-03"},{"id":9011,"type":"expense","amount":78.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-02-25","month":"2026-03"},{"id":9012,"type":"expense","amount":21.0,"desc":"","cat":"Transport/Parkering","date":"2026-02-25","month":"2026-03"},{"id":9013,"type":"expense","amount":44.0,"desc":"","cat":"Mat (Butik)","date":"2026-02-27","month":"2026-03"},{"id":9014,"type":"expense","amount":63.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-03-02","month":"2026-03"},{"id":9015,"type":"expense","amount":200.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-03-03","month":"2026-03"},{"id":9016,"type":"expense","amount":393.0,"desc":"","cat":"Fest","date":"2026-03-03","month":"2026-03"},{"id":9017,"type":"expense","amount":149.0,"desc":"","cat":"Fest","date":"2026-03-03","month":"2026-03"},{"id":9018,"type":"expense","amount":149.0,"desc":"","cat":"Bjuda andra/presenter","date":"2026-03-03","month":"2026-03"},{"id":9019,"type":"expense","amount":258.0,"desc":"","cat":"Fest","date":"2026-03-03","month":"2026-03"},{"id":9020,"type":"expense","amount":145.0,"desc":"","cat":"Övrigt","date":"2026-03-03","month":"2026-03"},{"id":9021,"type":"expense","amount":250.0,"desc":"","cat":"Mat (Ute)","date":"2026-03-03","month":"2026-03"},{"id":9022,"type":"expense","amount":249.0,"desc":"","cat":"Fest","date":"2026-03-03","month":"2026-03"},{"id":9023,"type":"expense","amount":197.0,"desc":"","cat":"Övrigt","date":"2026-03-03","month":"2026-03"},{"id":9024,"type":"expense","amount":150.0,"desc":"","cat":"Transport/Parkering","date":"2026-03-03","month":"2026-03"},{"id":9025,"type":"expense","amount":145.0,"desc":"","cat":"Övrigt","date":"2026-03-03","month":"2026-03"},{"id":9026,"type":"expense","amount":60.0,"desc":"","cat":"Mat (Ute)","date":"2026-03-03","month":"2026-03"},{"id":9027,"type":"expense","amount":110.0,"desc":"","cat":"Mat (Ute)","date":"2026-03-03","month":"2026-03"},{"id":9028,"type":"expense","amount":230.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-03","month":"2026-03"},{"id":9029,"type":"expense","amount":349.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-03","month":"2026-03"},{"id":9030,"type":"expense","amount":45.0,"desc":"","cat":"Övrigt","date":"2026-03-03","month":"2026-03"},{"id":9031,"type":"expense","amount":40.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-05","month":"2026-03"},{"id":9032,"type":"expense","amount":78.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-03-06","month":"2026-03"},{"id":9033,"type":"expense","amount":369.0,"desc":"Snus","cat":"Övrigt","date":"2026-03-06","month":"2026-03"},{"id":9034,"type":"expense","amount":70.0,"desc":"","cat":"Mat (Ute)","date":"2026-03-06","month":"2026-03"},{"id":9035,"type":"expense","amount":23.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-06","month":"2026-03"},{"id":9036,"type":"expense","amount":323.0,"desc":"Leonard","cat":"Fest","date":"2026-03-06","month":"2026-03"},{"id":9037,"type":"expense","amount":198.0,"desc":"","cat":"Fest","date":"2026-03-07","month":"2026-03"},{"id":9038,"type":"expense","amount":160.0,"desc":"","cat":"Transport/Parkering","date":"2026-03-08","month":"2026-03"},{"id":9039,"type":"expense","amount":206.0,"desc":"","cat":"Bjuda andra/presenter","date":"2026-03-08","month":"2026-03"},{"id":9040,"type":"expense","amount":175.0,"desc":"","cat":"Fest","date":"2026-03-08","month":"2026-03"},{"id":9041,"type":"expense","amount":110.0,"desc":"","cat":"Fest","date":"2026-03-08","month":"2026-03"},{"id":9042,"type":"expense","amount":170.0,"desc":"","cat":"Fest","date":"2026-03-08","month":"2026-03"},{"id":9043,"type":"expense","amount":39.0,"desc":"","cat":"Övrigt","date":"2026-03-08","month":"2026-03"},{"id":9044,"type":"expense","amount":198.0,"desc":"","cat":"Fest","date":"2026-03-08","month":"2026-03"},{"id":9045,"type":"expense","amount":249.0,"desc":"","cat":"Transport/Parkering","date":"2026-03-08","month":"2026-03"},{"id":9046,"type":"expense","amount":91.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-08","month":"2026-03"},{"id":9047,"type":"expense","amount":6.0,"desc":"","cat":"Övrigt","date":"2026-03-10","month":"2026-03"},{"id":9048,"type":"expense","amount":92.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-03-10","month":"2026-03"},{"id":9049,"type":"expense","amount":70.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-10","month":"2026-03"},{"id":9050,"type":"expense","amount":260.0,"desc":"Golf","cat":"Övrigt","date":"2026-03-10","month":"2026-03"},{"id":9051,"type":"expense","amount":29.0,"desc":"","cat":"Hygien","date":"2026-03-11","month":"2026-03"},{"id":9052,"type":"expense","amount":57.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-03-11","month":"2026-03"},{"id":9053,"type":"expense","amount":75.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-11","month":"2026-03"},{"id":9054,"type":"expense","amount":67.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-03-12","month":"2026-03"},{"id":9055,"type":"expense","amount":60.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-12","month":"2026-03"},{"id":9056,"type":"expense","amount":175.0,"desc":"","cat":"Fest","date":"2026-03-15","month":"2026-03"},{"id":9057,"type":"expense","amount":200.0,"desc":"","cat":"Fest","date":"2026-03-15","month":"2026-03"},{"id":9058,"type":"expense","amount":375.0,"desc":"","cat":"Fest","date":"2026-03-15","month":"2026-03"},{"id":9059,"type":"expense","amount":14.0,"desc":"","cat":"Övrigt","date":"2026-03-15","month":"2026-03"},{"id":9060,"type":"expense","amount":84.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-03-15","month":"2026-03"},{"id":9061,"type":"expense","amount":109.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-15","month":"2026-03"},{"id":9062,"type":"expense","amount":63.0,"desc":"","cat":"Övrigt","date":"2026-03-18","month":"2026-03"},{"id":9063,"type":"expense","amount":88.0,"desc":"","cat":"Transport/Parkering","date":"2026-03-18","month":"2026-03"},{"id":9064,"type":"expense","amount":75.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-18","month":"2026-03"},{"id":9065,"type":"expense","amount":17.0,"desc":"","cat":"Övrigt","date":"2026-03-19","month":"2026-03"},{"id":9066,"type":"expense","amount":74.0,"desc":"","cat":"Övrigt","date":"2026-03-19","month":"2026-03"},{"id":9067,"type":"expense","amount":164.0,"desc":"","cat":"Bjuda andra/presenter","date":"2026-03-19","month":"2026-03"},{"id":9068,"type":"expense","amount":94.0,"desc":"","cat":"Fest","date":"2026-03-22","month":"2026-03"},{"id":9069,"type":"expense","amount":26.0,"desc":"","cat":"Transport/Parkering","date":"2026-03-22","month":"2026-03"},{"id":9070,"type":"expense","amount":18.0,"desc":"","cat":"Transport/Parkering","date":"2026-03-22","month":"2026-03"},{"id":9071,"type":"expense","amount":206.0,"desc":"","cat":"Fest","date":"2026-03-22","month":"2026-03"},{"id":9072,"type":"expense","amount":260.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-22","month":"2026-03"},{"id":9073,"type":"expense","amount":123.0,"desc":"","cat":"Övrigt","date":"2026-03-22","month":"2026-03"},{"id":9074,"type":"expense","amount":15.0,"desc":"","cat":"Övrigt","date":"2026-03-22","month":"2026-03"},{"id":9075,"type":"expense","amount":232.0,"desc":"","cat":"Transport/Parkering","date":"2026-03-22","month":"2026-03"},{"id":9076,"type":"expense","amount":667.0,"desc":"Tavla pappa","cat":"Bjuda andra/presenter","date":"2026-03-22","month":"2026-03"},{"id":9077,"type":"expense","amount":2435.0,"desc":"liftkort","cat":"Övrigt","date":"2026-03-24","month":"2026-03"},{"id":9078,"type":"expense","amount":130.0,"desc":"","cat":"Bjuda andra/presenter","date":"2026-03-24","month":"2026-03"},{"id":9079,"type":"expense","amount":278.0,"desc":"","cat":"Bjuda andra/presenter","date":"2026-03-24","month":"2026-03"},{"id":9080,"type":"expense","amount":240.0,"desc":"","cat":"Mat (Ute)","date":"2026-03-24","month":"2026-03"},{"id":9081,"type":"income","amount":27500.0,"desc":"","cat":"Lön","date":"2026-03-25","month":"2026-04"},{"id":9082,"type":"income","amount":1225.0,"desc":"","cat":"Spelvinst/förlust","date":"2026-03-25","month":"2026-04"},{"id":9083,"type":"expense","amount":2543.0,"desc":"","cat":"Boende (Avgift)","date":"2026-03-25","month":"2026-04"},{"id":9084,"type":"expense","amount":5176.0,"desc":"","cat":"Boende (Lån)","date":"2026-03-25","month":"2026-04"},{"id":9085,"type":"expense","amount":391.0,"desc":"","cat":"Gym","date":"2026-03-25","month":"2026-04"},{"id":9086,"type":"expense","amount":276.0,"desc":"","cat":"Boende (Resterande)","date":"2026-03-25","month":"2026-04"},{"id":9087,"type":"expense","amount":4309.0,"desc":"","cat":"Skuld föregående","date":"2026-03-25","month":"2026-04"},{"id":9088,"type":"expense","amount":76.0,"desc":"","cat":"Fest","date":"2026-03-25","month":"2026-04"},{"id":9089,"type":"expense","amount":280.0,"desc":"","cat":"Övrigt","date":"2026-03-26","month":"2026-04"},{"id":9090,"type":"expense","amount":86.0,"desc":"","cat":"Övrigt","date":"2026-03-26","month":"2026-04"},{"id":9091,"type":"expense","amount":696.0,"desc":"Skidor","cat":"Övrigt","date":"2026-03-26","month":"2026-04"},{"id":9092,"type":"expense","amount":208.0,"desc":"","cat":"Övrigt","date":"2026-03-26","month":"2026-04"},{"id":9093,"type":"expense","amount":204.0,"desc":"","cat":"Bjuda andra/presenter","date":"2026-03-26","month":"2026-04"},{"id":9094,"type":"expense","amount":92.0,"desc":"","cat":"Övrigt","date":"2026-03-27","month":"2026-04"},{"id":9095,"type":"expense","amount":23.0,"desc":"","cat":"Övrigt","date":"2026-03-28","month":"2026-04"},{"id":9096,"type":"expense","amount":44.0,"desc":"","cat":"Övrigt","date":"2026-03-28","month":"2026-04"},{"id":9097,"type":"expense","amount":94.0,"desc":"","cat":"Övrigt","date":"2026-03-29","month":"2026-04"},{"id":9098,"type":"expense","amount":47.0,"desc":"","cat":"Övrigt","date":"2026-03-29","month":"2026-04"},{"id":9099,"type":"expense","amount":120.0,"desc":"","cat":"Mat (Butik)","date":"2026-03-30","month":"2026-04"},{"id":9100,"type":"expense","amount":369.0,"desc":"Snus ","cat":"Övrigt","date":"2026-03-30","month":"2026-04"},{"id":9101,"type":"expense","amount":9.0,"desc":"","cat":"Övrigt","date":"2026-04-01","month":"2026-04"},{"id":9102,"type":"expense","amount":85.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-04-01","month":"2026-04"},{"id":9103,"type":"expense","amount":35.0,"desc":"","cat":"Övrigt","date":"2026-04-01","month":"2026-04"},{"id":9104,"type":"expense","amount":400.0,"desc":"Biljett","cat":"Fest","date":"2026-04-02","month":"2026-04"},{"id":9105,"type":"expense","amount":91.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-03","month":"2026-04"},{"id":9106,"type":"expense","amount":3020.0,"desc":"Kittel","cat":"Fest","date":"2026-04-06","month":"2026-04"},{"id":9107,"type":"expense","amount":115.0,"desc":"","cat":"Fest","date":"2026-04-08","month":"2026-04"},{"id":9108,"type":"expense","amount":65.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-08","month":"2026-04"},{"id":9109,"type":"expense","amount":75.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-08","month":"2026-04"},{"id":9110,"type":"expense","amount":39.0,"desc":"","cat":"Övrigt","date":"2026-04-08","month":"2026-04"},{"id":9111,"type":"expense","amount":1400.0,"desc":"Arabba","cat":"Övrigt","date":"2026-04-08","month":"2026-04"},{"id":9112,"type":"expense","amount":92.0,"desc":"","cat":"Övrigt","date":"2026-04-08","month":"2026-04"},{"id":9113,"type":"expense","amount":535.0,"desc":"Klippning","cat":"Övrigt","date":"2026-04-10","month":"2026-04"},{"id":9114,"type":"expense","amount":230.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-10","month":"2026-04"},{"id":9115,"type":"expense","amount":260.0,"desc":"Golf","cat":"Övrigt","date":"2026-04-10","month":"2026-04"},{"id":9116,"type":"expense","amount":84.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-10","month":"2026-04"},{"id":9117,"type":"expense","amount":580.0,"desc":"Stockholm ","cat":"Övrigt","date":"2026-04-10","month":"2026-04"},{"id":9118,"type":"expense","amount":249.0,"desc":"ChatGPT","cat":"Övrigt","date":"2026-04-10","month":"2026-04"},{"id":9119,"type":"expense","amount":32.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-10","month":"2026-04"},{"id":9120,"type":"expense","amount":175.0,"desc":"","cat":"Fest","date":"2026-04-12","month":"2026-04"},{"id":9121,"type":"expense","amount":979.0,"desc":"","cat":"Fest","date":"2026-04-12","month":"2026-04"},{"id":9122,"type":"expense","amount":637.0,"desc":"","cat":"Fest","date":"2026-04-12","month":"2026-04"},{"id":9123,"type":"expense","amount":99.0,"desc":"","cat":"Fest","date":"2026-04-12","month":"2026-04"},{"id":9124,"type":"expense","amount":69.0,"desc":"","cat":"Övrigt","date":"2026-04-12","month":"2026-04"},{"id":9125,"type":"expense","amount":60.0,"desc":"","cat":"Övrigt","date":"2026-04-12","month":"2026-04"},{"id":9126,"type":"expense","amount":76.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-12","month":"2026-04"},{"id":9127,"type":"expense","amount":198.0,"desc":"","cat":"Fest","date":"2026-04-12","month":"2026-04"},{"id":9128,"type":"expense","amount":59.0,"desc":"","cat":"Lunch (Resturang)","date":"2026-04-13","month":"2026-04"},{"id":9129,"type":"expense","amount":63.0,"desc":"","cat":"Övrigt","date":"2026-04-14","month":"2026-04"},{"id":9130,"type":"expense","amount":158.0,"desc":"","cat":"Mat (Butik)","date":"2026-04-14","month":"2026-04"},{"id":9131,"type":"expense","amount":95.0,"desc":"","cat":"Övrigt","date":"2026-04-14","month":"2026-04"},{"id":9132,"type":"expense","amount":55.0,"desc":"","cat":"Mat (Ute)","date":"2026-04-14","month":"2026-04"},{"id":9133,"type":"expense","amount":60.0,"desc":"","cat":"Övrigt","date":"2026-04-14","month":"2026-04"},{"id":9134,"type":"expense","amount":54.0,"desc":"","cat":"Fest","date":"2026-04-15","month":"2026-04"},{"id":9135,"type":"expense","amount":120.0,"desc":"","cat":"Mat (Ute)","date":"2026-04-15","month":"2026-04"},{"id":9136,"type":"expense","amount":355.0,"desc":"","cat":"Övrigt","date":"2026-04-15","month":"2026-04"},{"id":9137,"type":"expense","amount":98.0,"desc":"","cat":"Fest","date":"2026-04-15","month":"2026-04"},{"id":9138,"type":"expense","amount":75.0,"desc":"","cat":"Övrigt","date":"2026-04-16","month":"2026-04"},{"id":9139,"type":"expense","amount":175.0,"desc":"","cat":"Fest","date":"2026-04-19","month":"2026-04"},{"id":9140,"type":"expense","amount":49.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9141,"type":"expense","amount":215.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9142,"type":"expense","amount":400.0,"desc":"","cat":"Fest","date":"2026-04-19","month":"2026-04"},{"id":9143,"type":"expense","amount":293.0,"desc":"","cat":"Mat (Ute)","date":"2026-04-19","month":"2026-04"},{"id":9144,"type":"expense","amount":204.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9145,"type":"expense","amount":17.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9146,"type":"expense","amount":60.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9147,"type":"expense","amount":22.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9148,"type":"expense","amount":199.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9149,"type":"expense","amount":221.0,"desc":"","cat":"Övrigt","date":"2026-04-19","month":"2026-04"},{"id":9150,"type":"expense","amount":1100.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9151,"type":"expense","amount":1000.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9152,"type":"expense","amount":77.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9153,"type":"expense","amount":567.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9154,"type":"expense","amount":150.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9155,"type":"expense","amount":704.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9156,"type":"expense","amount":313.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9157,"type":"expense","amount":1652.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9158,"type":"expense","amount":154.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9159,"type":"expense","amount":135.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9160,"type":"expense","amount":59.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9161,"type":"expense","amount":70.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9162,"type":"expense","amount":133.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9163,"type":"expense","amount":79.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9164,"type":"expense","amount":171.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9165,"type":"expense","amount":282.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9166,"type":"expense","amount":175.0,"desc":"spanien","cat":"Spanien","date":"2026-04-23","month":"2026-04"},{"id":9167,"type":"expense","amount":3060.0,"desc":"golf medlemskap","cat":"Övrigt","date":"2026-04-23","month":"2026-04"}];
-    const filtered = existing.filter(t=>t.month!=='2026-03'&&t.month!=='2026-04');
-    localStorage.setItem('txs', JSON.stringify([...filtered, ...newTxs]));
-  }
-})();
+
 
 // ═══════════════════════════════════════════
 // SWIPE TO CLOSE — alla slide-screens
@@ -3253,11 +3002,10 @@ function initSwipeToClose(el,closeFn){
   },{passive:true});
 }
 setTimeout(()=>{
-  ['settings-screen','trip-detail','month-detail','asset-detail'].forEach(id=>{
+  ['settings-screen','month-detail','asset-detail'].forEach(id=>{
     const el=document.getElementById(id);
     const fns={
       'settings-screen':closeSettings,
-      'trip-detail':closeTripDetail,
       'month-detail':closeMonthDetail,
       'asset-detail':closeAssetDetail
     };
@@ -3283,6 +3031,81 @@ setTimeout(()=>{
       ticking=false;
     });
   },{passive:true});
+})();
+
+// ── Initiera nav-pill + dra-stöd ─────────────
+(function(){
+  const screens=['budget','nw','year','ai'];
+  function initPill(){if(typeof movePill==='function')movePill(state.screen);}
+  setTimeout(initPill,80);
+  window.addEventListener('resize',initPill);
+
+  const dock=document.querySelector('.nav-dock');
+  const pill=document.getElementById('nav-pill');
+  if(!dock||!pill)return;
+  let dragging=false;
+
+  function tabAtX(clientX){
+    const btns=[...dock.querySelectorAll('.nb')];
+    for(const b of btns){
+      const r=b.getBoundingClientRect();
+      if(clientX>=r.left&&clientX<=r.right)return b.id.replace('nav-','');
+    }
+    const first=btns[0].getBoundingClientRect();
+    const last=btns[btns.length-1].getBoundingClientRect();
+    if(clientX<first.left)return btns[0].id.replace('nav-','');
+    if(clientX>last.right)return btns[btns.length-1].id.replace('nav-','');
+    return null;
+  }
+  function onMove(clientX){
+    const dockRect=dock.getBoundingClientRect();
+    const w=pill.offsetWidth;
+    let x=clientX-dockRect.left-w/2;
+    x=Math.max(0,Math.min(x,dockRect.width-w));
+    pill.style.transition='none';
+    pill.style.transform=`translateX(${x}px)`;
+  }
+  dock.addEventListener('touchstart',e=>{
+    const t=e.touches[0];
+    const pr=pill.getBoundingClientRect();
+    if(t.clientX>=pr.left-14&&t.clientX<=pr.right+14)dragging=true;
+  },{passive:true});
+  dock.addEventListener('touchmove',e=>{
+    if(!dragging)return;
+    onMove(e.touches[0].clientX);
+  },{passive:true});
+  dock.addEventListener('touchend',e=>{
+    if(!dragging)return;
+    dragging=false;
+    pill.style.transition='';
+    const name=tabAtX(e.changedTouches[0].clientX);
+    if(name&&screens.includes(name))showScreen(name);
+    else movePill(state.screen);
+  },{passive:true});
+})();
+
+// ── Onboarding för nya användare ──────────
+function finishOnboarding(){
+  const sal=parseFloat(document.getElementById('ob-salary').value)||0;
+  const goal=parseFloat(document.getElementById('ob-goal').value)||0;
+  if(sal>0)sv('salary',sal);
+  if(goal>0)sv('goal',goal);
+  localStorage.setItem('onboarded','1');
+  closeOverlay('onboard-modal');
+  toast('Välkommen! Tryck + för din första transaktion');
+  render();
+}
+function skipOnboarding(){
+  localStorage.setItem('onboarded','1');
+  closeOverlay('onboard-modal');
+}
+(function(){
+  const hasData=getTxs().length>0||getNWs().length>0;
+  if(!localStorage.getItem('onboarded')&&!hasData){
+    setTimeout(()=>openOverlay('onboard-modal'),400);
+  } else if(hasData){
+    localStorage.setItem('onboarded','1');
+  }
 })();
 
 render();
