@@ -587,6 +587,42 @@ body.light .slide-hd{
   display:flex;align-items:center;gap:8px;
   padding:0 0 8px;font-size:11px;color:var(--sub2);font-family:var(--mono);
 }
+/* ── IMPORT ── */
+.tbtn.tt{background:var(--bg4);border-color:var(--sub2);color:var(--text)}
+.type-row .tbtn{font-size:12px}
+.imp-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:0 16px 12px;padding:26px 16px;border:1.5px dashed var(--line2);border-radius:var(--r);background:var(--glass);cursor:pointer;text-align:center;transition:border-color .15s,background .15s}
+.imp-drop.over{border-color:var(--acc);background:var(--acc2)}
+.imp-drop-ic{width:46px;height:46px;border-radius:15px;background:var(--acc2);color:var(--acc);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:4px}
+.imp-file{padding:14px 16px;border-bottom:1px solid var(--line)}
+.imp-file:last-child{border-bottom:none}
+.imp-file-hd{display:flex;align-items:center;gap:10px}
+.imp-file-name{flex:1;min-width:0;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imp-meta{font-size:11px;color:var(--sub);font-family:var(--mono);margin-top:4px;line-height:1.5}
+.imp-sel{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px 8px;color:var(--text);font-family:var(--sans);font-size:12px;outline:none;max-width:100%}
+body.light .imp-sel,body.light .field input,body.light .field select{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12)}
+.imp-map{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.imp-map label{display:block;font-size:10px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:3px}
+.imp-map select{width:100%}
+.imp-link{background:none;border:none;color:var(--acc);font-size:12px;cursor:pointer;padding:6px 0 0;font-family:var(--sans)}
+.imp-bar{position:fixed;left:0;right:0;bottom:0;max-width:430px;margin:0 auto;padding:12px 16px calc(14px + var(--safe-b));background:linear-gradient(180deg,transparent,var(--bg0) 30%);z-index:12}
+.imp-grp{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.imp-grp:last-child{border-bottom:none}
+.imp-grp.off{opacity:.4}
+.imp-grp-info{flex:1;min-width:0}
+.imp-grp-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imp-grp select{width:128px;flex-shrink:0}
+.imp-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.imp-rows{padding:0 14px 8px 31px;font-size:11px;color:var(--sub);font-family:var(--mono);line-height:1.7;border-bottom:1px solid var(--line)}
+.imp-progress{margin:30px 16px;text-align:center}
+.imp-spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--acc);margin:0 auto 14px;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:14px;font-size:12px;background:var(--glass);border:1px solid var(--glass-border);color:var(--sub);cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
+.bgt-tools{display:flex;gap:8px;align-items:center;padding:0 16px 10px}
+.bgt-search{flex:1;min-width:0;background:var(--glass);border:1px solid var(--glass-border);border-radius:14px;padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none}
+.acc-tag{font-size:9px;padding:1px 6px;border-radius:8px;font-family:var(--mono);background:var(--bg3);color:var(--sub);margin-left:4px;vertical-align:1px}
+.txi.trf .txi-name,.txi.trf .txi-amt{opacity:.55}
+
 /* Modell- & effort-väljare */
 .ai-opts{display:flex;gap:6px;align-items:center;margin-bottom:8px}
 .ai-seg{display:flex;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:2px;flex-shrink:0}
@@ -782,13 +818,25 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
     <div style="text-align:center;padding:8px 0 4px">
       <div style="width:64px;height:64px;margin:0 auto 14px;border-radius:20px;background:linear-gradient(160deg,#4f8ef7,#22b07d);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 24px rgba(34,176,125,.3)"><svg viewBox="0 0 24 24" width="32" height="32" style="stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round"><path d="M3.5 17.5L9 11.5l4 4 7-8"/><path d="M15.5 7.5H20v4.5"/></svg></div>
       <div style="font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px">Välkommen till Ekonomi</div>
-      <div style="font-size:13px;color:var(--sub);line-height:1.55;margin-bottom:20px">Din privata budget- och förmögenhetsapp. All data sparas lokalt på din enhet — ingenting lämnar telefonen.</div>
+      <div style="font-size:13px;color:var(--sub);line-height:1.55;margin-bottom:20px">Din privata budget- och förmögenhetsapp. Importera kontoutdrag från banken och kreditkortet — AI kategoriserar allt åt dig. Data sparas lokalt på din enhet; bara det du skickar till AI:n lämnar telefonen.</div>
     </div>
     <div class="field"><label>Din månadslön (kr, efter skatt)</label><input type="number" id="ob-salary" placeholder="t.ex. 27 500" inputmode="numeric"></div>
     <div class="field"><label>Förmögenhetsmål (kr)</label><input type="number" id="ob-goal" placeholder="t.ex. 700 000" inputmode="numeric"></div>
     <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-bottom:12px;line-height:1.5">Du kan ändra allt senare i inställningar — kategorier, löneperioder, mål och mer.</div>
     <button class="btn-p" onclick="finishOnboarding()">Kom igång</button>
     <button class="btn-s" onclick="skipOnboarding()">Hoppa över</button>
+  </div>
+</div>
+
+<!-- ═══ ADD CHOICE SHEET ═══ -->
+<div class="overlay" id="add-sheet">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Lägg till</div>
+    <button class="btn-p" onclick="closeOverlay('add-sheet');openImport()">⇪ Importera kontoutdrag</button>
+    <div style="font-size:11px;color:var(--sub2);text-align:center;margin:6px 0 4px;line-height:1.5">CSV, Excel, PDF eller skärmdump från banken eller kreditkortet</div>
+    <button class="btn-s" onclick="closeOverlay('add-sheet');openManualAdd()">＋ Lägg till en transaktion manuellt</button>
+    <button class="btn-s" onclick="closeOverlay('add-sheet')">Avbryt</button>
   </div>
 </div>
 
@@ -801,16 +849,12 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
       <button class="tbtn" id="tbtn-expense" onclick="setType('expense')">Utgift</button>
       <button class="tbtn" id="tbtn-income" onclick="setType('income')">Inkomst</button>
       <button class="tbtn" id="tbtn-savings" onclick="setType('savings')">Sparande</button>
+      <button class="tbtn" id="tbtn-transfer" onclick="setType('transfer')">Överföring</button>
     </div>
     <div class="field"><label>Belopp (kr)</label><input type="number" id="tx-amt" placeholder="0" inputmode="decimal"></div>
     <div class="field"><label>Beskrivning</label><input type="text" id="tx-desc" placeholder="Valfritt"></div>
     <div class="field"><label>Kategori</label><select id="tx-cat"></select></div>
-    <div class="field" id="tx-pay-field"><label>Betalmetod</label>
-      <select id="tx-pay">
-        <option value="lonekonto">Lönekonto</option>
-        <option value="amex">AMEX</option>
-      </select>
-    </div>
+    <div class="field"><label>Konto</label><select id="tx-acc"></select></div>
     <div class="field"><label>Datum</label><input type="date" id="tx-date"></div>
     <button class="btn-p" onclick="saveTx()">Spara</button>
     <button class="btn-del" id="tx-del-btn" onclick="deleteTx()" style="display:none">Ta bort</button>
@@ -890,6 +934,28 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
         <input type="password" id="s-apikey" placeholder="sk-ant-..." oninput="saveApiKey(this.value)">
       </div>
     </div>
+  </div>
+
+  <div class="s-sec">
+    <div class="s-lbl">Konton <span style="font-size:10px;color:var(--sub2);font-weight:400">— som du importerar kontoutdrag från</span></div>
+    <div class="s-card" id="acc-list"></div>
+    <div class="tag-add" style="padding:0;margin-top:-6px;margin-bottom:16px">
+      <input type="text" id="new-acc-name" placeholder="Nytt konto, t.ex. Sparkonto…" onkeydown="if(event.key==='Enter')addAccount()">
+      <select id="new-acc-kind" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:var(--rsm);padding:0 10px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none">
+        <option value="bank">Bank</option><option value="card">Kort</option>
+      </select>
+      <button class="tag-add-btn" onclick="addAccount()">+</button>
+    </div>
+  </div>
+
+  <div class="s-sec">
+    <div class="s-lbl">Importer <span style="font-size:10px;color:var(--sub2);font-weight:400">— ångra en import tar bort dess transaktioner</span></div>
+    <div class="s-card" id="imp-hist"></div>
+  </div>
+
+  <div class="s-sec">
+    <div class="s-lbl">Inlärd kategorisering <span style="font-size:10px;color:var(--sub2);font-weight:400">— butik → kategori</span></div>
+    <div class="s-card" id="rule-list"></div>
   </div>
 
   <div class="s-sec">
@@ -1014,6 +1080,17 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
   </div>
 
   <div class="s-sec">
+    <div class="s-lbl">Överföringskategorier <span style="font-size:10px;color:var(--sub2);font-weight:400">— räknas inte som utgift</span></div>
+    <div class="s-card">
+      <div class="tag-list" id="trf-cats"></div>
+      <div class="tag-add">
+        <input type="text" id="new-trf-cat" placeholder="Ny överföringstyp…" onkeydown="if(event.key==='Enter')addCat('transfer')">
+        <button class="tag-add-btn" onclick="addCat('transfer')">+</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="s-sec">
     <div class="s-lbl">Säkerhetskopiering</div>
     <div class="s-card">
       <div class="s-row" style="flex-direction:column;align-items:stretch;gap:10px">
@@ -1030,6 +1107,19 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
     </div>
   </div>
   <div style="height:20px"></div>
+</div>
+
+<!-- ═══ IMPORT SCREEN ═══ -->
+<div class="slide" id="import-screen">
+  <div class="slide-hd">
+    <button class="back-btn" onclick="closeImport()">‹</button>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:19px;font-weight:500">Importera kontoutdrag</div>
+      <div id="imp-sub" style="font-size:11px;color:var(--sub);font-family:var(--mono)"></div>
+    </div>
+  </div>
+  <div id="imp-body" style="padding:14px 0 130px"></div>
+  <div class="imp-bar" id="imp-bar"></div>
 </div>
 
 <!-- ═══ MONTH DETAIL SCREEN ═══ -->
@@ -1102,6 +1192,24 @@ const getNWCats=()=>ld('cats_nw',DEF_NW_CATS);
 const svNWCats=v=>sv('cats_nw',v);
 const getGroups=()=>ld('cat_groups',[]);
 const svGroups=v=>sv('cat_groups',v);
+
+// ── Konton & överföringar ─────────────────
+// kind: 'bank' (negativa belopp = pengar ut) eller 'card' (kreditkort — köp brukar vara positiva i exporten)
+const DEF_ACCOUNTS=[{id:'lonekonto',name:'Lönekonto',kind:'bank'},{id:'amex',name:'AMEX',kind:'card'}];
+function getAccounts(){const a=ld('accounts',null);return Array.isArray(a)&&a.length?a:DEF_ACCOUNTS.map(x=>({...x}))}
+function svAccounts(v){sv('accounts',v)}
+function accountName(id){return getAccounts().find(a=>a.id===id)?.name||id||'—'}
+// Överföringar (kortfaktura, egna konton) räknas varken som utgift eller inkomst
+const DEF_TRF=['Kreditkortsbetalning','Egen överföring'];
+const getTrfCats=()=>ld('cats_trf',DEF_TRF);
+function catsForType(t){return t==='expense'?getExpCats():t==='income'?getIncCats():t==='savings'?getSavCats():getTrfCats()}
+const TYPE_LABEL={expense:'Utgift',income:'Inkomst',savings:'Sparande',transfer:'Överföring'};
+// Migrera äldre transaktioner: betalmetod (pay) → konto (account)
+(function(){
+  const txs=getTxs();let ch=false;
+  txs.forEach(t=>{if(!t.account){t.account=t.pay==='amex'?'amex':'lonekonto';delete t.pay;ch=true}});
+  if(ch)localStorage.setItem('txs',JSON.stringify(txs));
+})();
 
 // Merge grouped categories into group name for display purposes only
 function applyGroups(byCat){
@@ -1290,13 +1398,25 @@ document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
 // ═══════════════════════════════════════════
 function openAdd(){
   if(state.screen==='nw'){openNWModal();return}
+  openOverlay('add-sheet');
+}
+
+function fillAccountSelect(sel,value){
+  const accs=getAccounts();
+  const opts=accs.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`);
+  if(value&&!accs.some(a=>a.id===value))opts.push(`<option value="${esc(value)}">${esc(value)}</option>`);
+  sel.innerHTML=opts.join('');
+  sel.value=value||accs[0].id;
+}
+
+function openManualAdd(){
   state.editId=null;
   document.getElementById('tx-modal-title').textContent='Lägg till';
   document.getElementById('tx-del-btn').style.display='none';
   setType('expense');
   document.getElementById('tx-amt').value='';
   document.getElementById('tx-desc').value='';
-  document.getElementById('tx-pay').value='lonekonto';
+  fillAccountSelect(document.getElementById('tx-acc'));
   const d=new Date();
   document.getElementById('tx-date').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   openOverlay('tx-modal');
@@ -1313,8 +1433,7 @@ function openEdit(id){
   document.getElementById('tx-amt').value=tx.amount;
   document.getElementById('tx-desc').value=tx.desc||'';
   document.getElementById('tx-date').value=tx.date;
-  document.getElementById('tx-pay').value=tx.pay||'lonekonto';
-  // set category after type is set
+  fillAccountSelect(document.getElementById('tx-acc'),tx.account);
   // Om kategorin tagits bort ur listan: lägg till den så att den inte byts tyst vid sparning
   const sel=document.getElementById('tx-cat');
   if(![...sel.options].some(o=>o.value===tx.cat)){
@@ -1326,32 +1445,43 @@ function openEdit(id){
 
 function setType(type){
   state.txType=type;
-  ['expense','income','savings'].forEach(t=>{
+  ['expense','income','savings','transfer'].forEach(t=>{
     const b=document.getElementById('tbtn-'+t);
     b.className='tbtn'+(t===type?' t'+t[0]:'');
   });
-  const cats=type==='expense'?getExpCats():type==='income'?getIncCats():getSavCats();
+  const cats=catsForType(type);
   document.getElementById('tx-cat').innerHTML=cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  // Payment method only relevant for expenses
-  document.getElementById('tx-pay-field').style.display=type==='expense'?'block':'none';
 }
 
 function saveTx(){
   const amt=parseFloat(document.getElementById('tx-amt').value);
-  if(!amt||amt<=0){toast('Ange ett belopp','warn');haptic(30);return}
+  // Negativt belopp tillåts (t.ex. en retur som minskar en utgiftskategori)
+  if(!amt){toast('Ange ett belopp','warn');haptic(30);return}
   const dateVal=document.getElementById('tx-date').value;
+  if(!dateVal){toast('Välj datum','warn');return}
+  let txs=getTxs();
+  const prev=state.editId?txs.find(t=>t.id===state.editId):null;
   const obj={
+    ...(prev||{source:'manual'}),
     id:state.editId||Date.now(),
     type:state.txType,amount:amt,
     desc:document.getElementById('tx-desc').value.trim(),
     cat:document.getElementById('tx-cat').value,
     date:dateVal,
     month:periodForDate(dateVal),
-    pay:state.txType==='expense'?document.getElementById('tx-pay').value:'lonekonto'
+    account:document.getElementById('tx-acc').value
   };
-  let txs=getTxs();
   if(state.editId){txs=txs.map(t=>t.id===state.editId?obj:t)}
   else{txs.push(obj)}
+  // Ändrad kategori på en importerad transaktion → lär in regeln och erbjud att uppdatera samma butik
+  if(prev&&prev.mkey&&(prev.cat!==obj.cat||prev.type!==obj.type)){
+    setRule(prev.mkey,obj.type,obj.cat);
+    const same=txs.filter(t=>t.id!==obj.id&&t.mkey===prev.mkey&&(t.cat!==obj.cat||t.type!==obj.type));
+    if(same.length&&confirm(`Ändra även ${same.length} andra transaktion${same.length>1?'er':''} från "${prev.desc}" till ${obj.cat}?`)){
+      const ids=new Set(same.map(t=>t.id));
+      txs=txs.map(t=>ids.has(t.id)?{...t,type:obj.type,cat:obj.cat}:t);
+    }
+  }
   svTxs(txs);closeOverlay('tx-modal');const wasEdit=!!state.editId;state.editId=null;toast(wasEdit?'Transaktion uppdaterad ✓':'Transaktion sparad ✓');render();
 }
 
@@ -1395,9 +1525,25 @@ function openNWModal(){
   document.getElementById('nwm-period').value=suggestedPeriod;
   updateNWMHint();
 
+  // Hjälp från importerna: senaste saldon och flöden sedan förra snapshoten
+  const withBal=getAccounts().filter(a=>a.balance);
+  let help='';
+  if(withBal.length){
+    help+=withBal.map(a=>`${esc(a.name)}: <b>${fmt(a.balance.value)} kr</b> <span style="color:var(--sub2)">(${a.balance.date})</span>`).join('<br>');
+  }
+  if(latest){
+    const since=getTxs().filter(t=>t.month>latest.period);
+    if(since.length){
+      const s=type=>since.filter(t=>t.type===type).reduce((x,t)=>x+t.amount,0);
+      help+=(help?'<br>':'')+`Sedan ${mLabel(latest.period)}: sparat <b>${fmt(s('savings'))} kr</b> · över <b>${fmtSigned(s('income')-s('expense')-s('savings'))} kr</b>`;
+    }
+  }
+  const helpHtml=help?`<div style="background:var(--bg2);border:1px solid var(--line);border-radius:var(--rsm);padding:10px 12px;font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:12px">
+    <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--sub2);font-family:var(--mono);margin-bottom:2px">Från dina importer</div>${help}</div>`:'';
+
   // Build fields dynamically, pre-filling with last snapshot values
   const prevValues=latest||{};
-  document.getElementById('nwm-fields').innerHTML=cats.map(c=>{
+  document.getElementById('nwm-fields').innerHTML=helpHtml+cats.map(c=>{
     const prev=prevValues[c.key];
     const prevStr=prev>0?` (förra: ${fmt(prev)} kr)`:'';
     return`<div class="field">
@@ -1442,20 +1588,34 @@ function makeDonut(slices,total,cx=70,cy=70,r=54,sw=9){
 // ═══════════════════════════════════════════
 // RENDER BUDGET
 // ═══════════════════════════════════════════
+// Gemensam rad för transaktionslistor
+function txRowHtml(tx,clickable=true){
+  const neg=tx.amount<0;
+  const col=tx.type==='income'?'var(--green)':tx.type==='savings'?'var(--blue)':tx.type==='transfer'?'var(--sub2)':neg?'var(--green)':'var(--sub)';
+  const bg=tx.type==='income'?'var(--green2)':tx.type==='savings'?'var(--blue2)':tx.type==='transfer'?'var(--bg3)':'var(--red2)';
+  const sign=tx.type==='transfer'?(neg?'−':'+'):tx.type==='income'?(neg?'−':'+'):(neg?'+':'−');
+  const accs=getAccounts();
+  const accTag=accs.length>1&&tx.account?`<span class="acc-tag">${esc(accountName(tx.account))}</span>`:'';
+  return`<div class="txi${tx.type==='transfer'?' trf':''}"${clickable?` onclick="openEdit(${tx.id})"`:' style="cursor:default"'}>
+    <div class="txav" style="background:${bg}">${tx.type==='transfer'?'⇄':esc(catIcon(tx.cat))}</div>
+    <div class="txi-info">
+      <div class="txi-name">${esc(tx.desc||tx.cat)}${accTag}</div>
+      <div class="txi-meta">${esc(tx.cat)} · ${tx.date.slice(5)}</div>
+    </div>
+    <div class="txi-amt" style="color:${col}">${sign}${fmt(Math.abs(tx.amount))}</div>
+  </div>`;
+}
+
+let _bgt={cat:null,q:'',showAll:false,showTrf:false};
+
 function renderBudget(){
   const month=state.month;
   document.getElementById('bgt-month-t').textContent=mLabel(month);
-  const txs=getTxs().filter(t=>t.month===month);
-  const income=txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const expense=txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  const savings=txs.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
-
-  // Split expenses by payment method
-  const expLonekonto=txs.filter(t=>t.type==='expense'&&(t.pay||'lonekonto')==='lonekonto').reduce((s,t)=>s+t.amount,0);
-  const expAmex=txs.filter(t=>t.type==='expense'&&t.pay==='amex').reduce((s,t)=>s+t.amount,0);
-
-  // "Kvar på lönekonto" = inkomst − lönekonto-utgifter − sparande (AMEX dras INTE här)
-  const balance=income-expLonekonto-savings;
+  const allTx=getTxs();
+  const txs=allTx.filter(t=>t.month===month);
+  const sumT=type=>txs.filter(t=>t.type===type).reduce((s,t)=>s+t.amount,0);
+  const income=sumT('income'),expense=sumT('expense'),savings=sumT('savings');
+  const balance=income-expense-savings;
   const sRate=income>0?Math.round(savings/income*100):0;
 
   document.getElementById('bgt-pills').innerHTML=`
@@ -1465,58 +1625,59 @@ function renderBudget(){
 
   const byCat={};
   txs.filter(t=>t.type==='expense').forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
-  const byCatGrouped=applyGroups(byCat);
-  const sortedCats=Object.entries(byCatGrouped).sort((a,b)=>b[1]-a[1]);
+  const sortedCats=Object.entries(applyGroups(byCat)).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
   const slices=sortedCats.slice(0,6).map(([c,v],i)=>({val:v,color:COLORS[i],cat:c}));
-
-  const periodLbl=payPeriodLabel(month);
+  const restVal=sortedCats.slice(6).reduce((s,[,v])=>s+v,0);
+  const donutTotal=slices.reduce((s,x)=>s+x.val,0)+restVal;
+  if(restVal>0)slices.push({val:restVal,color:'#6b7a99',cat:'Övriga kategorier',rest:true});
 
   let html=`<div class="mnav">
     <button class="mnav-b" onclick="changeMonth(-1)">‹</button>
     <div style="text-align:center">
       <div class="mnav-m">${mLabel(month)}</div>
-      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:2px">${periodLbl}</div>
+      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:2px">${payPeriodLabel(month)}</div>
     </div>
     <button class="mnav-b" onclick="changeMonth(1)">›</button>
   </div>`;
 
-  // balance card
+  // Import-genväg
+  const imps=getImports();
+  const lastImp=imps[imps.length-1];
+  html+=`<div class="card" style="cursor:pointer" onclick="openImport()"><div class="card-inner" style="display:flex;align-items:center;gap:14px;padding:14px 17px">
+    <div class="imp-drop-ic" style="margin:0;width:40px;height:40px;font-size:19px">⇪</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:600">Importera kontoutdrag</div>
+      <div style="font-size:11px;color:var(--sub);margin-top:2px">${lastImp?`Senast ${lastImp.date.slice(0,10)} · ${lastImp.count} transaktioner`:'Bank eller kreditkort — AI kategoriserar'}</div>
+    </div>
+    <span style="color:var(--sub2);font-size:18px">›</span>
+  </div></div>`;
+
+  // Balans
+  const accs=getAccounts();
+  const perAcc=accs.map(a=>({a,v:txs.filter(t=>t.type==='expense'&&t.account===a.id).reduce((s,t)=>s+t.amount,0)})).filter(x=>x.v);
   html+=`<div class="card"><div class="card-inner">
-    <div class="card-lbl">Kvar på lönekonto</div>
-    <div class="card-big" style="color:${balance>=0?'var(--green)':'var(--red)'};margin-bottom:10px">${balance>=0?'+':''}${fmt(balance)} kr</div>
+    <div class="card-lbl">Över denna period</div>
+    <div class="card-big" style="color:${balance>=0?'var(--green)':'var(--red)'};margin-bottom:10px">${fmtSigned(balance)} kr</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <span class="bdg" style="background:var(--blue2);color:var(--blue)">Sparande ${fmt(savings)} kr</span>
       <span class="bdg" style="background:${sRate>=20?'var(--green2)':'var(--red2)'};color:${sRate>=20?'var(--green)':'var(--red)'}">Kvot ${sRate}%</span>
+      ${perAcc.length>1?perAcc.map(x=>`<span class="bdg" style="background:var(--bg3);color:var(--sub)">${esc(x.a.name)} ${fmt(x.v)} kr</span>`).join(''):''}
     </div>
   </div></div>`;
 
-  // AMEX debt card — only show if there are AMEX expenses this period
-  if(expAmex>0){
+  // Donut
+  if(sortedCats.length){
     html+=`<div class="card"><div class="card-inner">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div style="flex:1">
-          <div class="card-lbl">AMEX denna period</div>
-          <div class="card-big" style="color:var(--amber);margin-bottom:4px">${fmt(expAmex)} kr</div>
-          <div style="font-size:11px;color:var(--sub);line-height:1.5">Detta blir nästa kreditkortsräkning. Dras inte från lönekontot förrän du bokför betalningen.</div>
-        </div>
-      </div>
-      <button onclick="payAmex('${month}',${expAmex})" style="width:100%;margin-top:12px;padding:11px;border-radius:var(--rsm);background:var(--amber2);border:1px solid rgba(255,214,10,.3);color:var(--amber);font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer">Bokför AMEX-betalning (−${fmt(expAmex)} kr från lönekonto)</button>
-    </div></div>`;
-  }
-
-  // donut
-  if(sortedCats.length>0){
-    html+=`<div class="card"><div class="card-inner">
-      <div class="card-lbl" style="margin-bottom:12px">Utgifter per kategori</div>
+      <div class="card-lbl" style="margin-bottom:12px">Utgifter per kategori <span style="text-transform:none;letter-spacing:0;color:var(--sub2)">— tryck för att filtrera</span></div>
       <div style="display:flex;align-items:center;gap:16px">
         <div class="donut" style="width:120px;height:120px">
-          <svg viewBox="0 0 140 140" width="120" height="120">${makeDonut(slices,expense)}</svg>
+          <svg viewBox="0 0 140 140" width="120" height="120">${makeDonut(slices,donutTotal)}</svg>
           <div class="donut-c"><div class="donut-v">${fmt(expense)}</div><div class="donut-l">utgifter</div></div>
         </div>
-        <div style="flex:1;display:flex;flex-direction:column;gap:7px">
-          ${slices.map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px">
+        <div style="flex:1;display:flex;flex-direction:column;gap:7px;min-width:0">
+          ${slices.map(s=>`<div ${s.rest?'':`onclick="setBgtCat(${jsArg(s.cat)})"`} style="display:flex;align-items:center;gap:8px;font-size:12px;${s.rest?'':'cursor:pointer;'}${_bgt.cat&&_bgt.cat!==s.cat?'opacity:.45':''}">
             <span style="width:8px;height:8px;border-radius:2px;background:${s.color};flex-shrink:0;display:inline-block"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${s.cat}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(s.cat)}</span>
             <span style="font-family:var(--mono);color:var(--text)">${fmt(s.val)}</span>
           </div>`).join('')}
         </div>
@@ -1524,44 +1685,45 @@ function renderBudget(){
     </div></div>`;
   }
 
-  // tx list
   if(txs.length===0){
-    html+=`<div class="empty"><div class="empty-i">📭</div><div class="empty-t">Inga transaktioner ännu.<br>Tryck + för att lägga till.</div></div>`;
-  } else {
-    html+=`<div class="sec"><span class="sec-t">Transaktioner</span><span class="sec-sub">${txs.length} st</span></div><div class="txl">`;
-    [...txs].sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id).forEach(tx=>{
-      const col=tx.type==='income'?'var(--green)':tx.type==='savings'?'var(--blue)':'var(--sub)';
-      const bg=tx.type==='income'?'var(--green2)':tx.type==='savings'?'var(--blue2)':'var(--red2)';
-      const sign=tx.type==='income'?'+':'−';
-      const amexTag=tx.pay==='amex'?` <span style="font-size:9px;color:var(--amber);background:var(--amber2);padding:1px 5px;border-radius:8px;font-family:var(--mono)">AMEX</span>`:'';
-      html+=`<div class="txi" onclick="openEdit(${tx.id})">
-        <div class="txav" style="background:${bg}">${ICONS[tx.cat]||'○'}</div>
-        <div class="txi-info">
-          <div class="txi-name">${esc(tx.desc||tx.cat)}${amexTag}</div>
-          <div class="txi-meta">${esc(tx.cat)} · ${tx.date.slice(5)}</div>
-        </div>
-        <div class="txi-amt" style="color:${col}">${sign}${fmt(tx.amount)}</div>
-      </div>`;
-    });
-    html+=`</div>`;
+    html+=`<div class="empty"><div class="empty-i">📭</div><div class="empty-t">Inga transaktioner denna period.<br>Importera ett kontoutdrag eller tryck +.</div></div>`;
+    document.getElementById('bgt-content').innerHTML=html;
+    return;
   }
 
+  const nTrf=txs.filter(t=>t.type==='transfer').length;
+  html+=`<div class="sec"><span class="sec-t">Transaktioner</span><span class="sec-sub" id="bgt-count"></span></div>
+    <div class="bgt-tools">
+      <input class="bgt-search" id="bgt-q" type="search" placeholder="Sök butik, kategori, belopp…" value="${esc(_bgt.q)}" oninput="_bgt.q=this.value;_bgt.showAll=false;renderBgtList()">
+      ${nTrf?`<span class="chip${_bgt.showTrf?' on':''}" onclick="_bgt.showTrf=!_bgt.showTrf;renderBudget()">⇄ ${nTrf}</span>`:''}
+    </div>
+    ${_bgt.cat?`<div style="padding:0 16px 10px"><span class="chip on" onclick="setBgtCat(null)">${esc(_bgt.cat)} ✕</span></div>`:''}
+    <div id="bgt-list"></div>`;
   document.getElementById('bgt-content').innerHTML=html;
+  renderBgtList();
 }
 
-// Bokför AMEX-betalning — drar summan från lönekontot utan att dubbelräkna utgifter
-function payAmex(month, amount){
-  if(!confirm(`Bokför AMEX-betalning på ${fmt(amount)} kr? Detta drar summan från lönekontot. Utgifterna är redan registrerade per kategori, så detta påverkar bara "kvar på lönekonto".`))return;
-  const txs=getTxs();
-  // (datum behövs ej — vi flaggar bara om transaktionerna)
-  // En "betalning" som markerar att AMEX-utgifterna nu lämnat lönekontot.
-  // Vi flaggar AMEX-transaktionerna som betalda istället för att skapa en ny utgift.
-  txs.forEach(t=>{
-    if(t.month===month&&t.pay==='amex')t.pay='lonekonto';
-  });
-  svTxs(txs);
-  toast('AMEX-betalning bokförd ✓');
-  render();
+function setBgtCat(c){_bgt.cat=_bgt.cat===c?null:c;_bgt.showAll=false;renderBudget()}
+
+function renderBgtList(){
+  const el=document.getElementById('bgt-list');if(!el)return;
+  let txs=getTxs().filter(t=>t.month===state.month);
+  if(!_bgt.showTrf)txs=txs.filter(t=>t.type!=='transfer');
+  if(_bgt.cat){
+    const grp=getGroups().find(g=>g.name===_bgt.cat);
+    const cats=new Set(grp?grp.cats:[_bgt.cat]);
+    txs=txs.filter(t=>t.type==='expense'&&cats.has(t.cat));
+  }
+  const q=_bgt.q.trim().toLowerCase();
+  if(q)txs=txs.filter(t=>(t.desc||'').toLowerCase().includes(q)||(t.cat||'').toLowerCase().includes(q)||String(Math.round(Math.abs(t.amount))).includes(q.replace(/\s/g,'')));
+  txs.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  const cnt=document.getElementById('bgt-count');
+  if(cnt)cnt.textContent=`${txs.length} st`+(_bgt.cat||q?` · ${fmt(txs.reduce((s,t)=>s+(t.type==='income'?0:t.amount),0))} kr`:'');
+  if(!txs.length){el.innerHTML=`<div class="empty" style="padding:30px 24px"><div class="empty-t">Inga träffar.</div></div>`;return}
+  const LIMIT=60;
+  const shown=_bgt.showAll?txs:txs.slice(0,LIMIT);
+  el.innerHTML=`<div class="txl">${shown.map(t=>txRowHtml(t)).join('')}</div>`+
+    (txs.length>shown.length?`<div style="padding:0 16px 12px"><button class="btn-s" style="margin-top:0" onclick="_bgt.showAll=true;renderBgtList()">Visa alla ${txs.length}</button></div>`:'');
 }
 
 function changeMonth(dir){
@@ -2040,7 +2202,7 @@ function openMonthDetail(m){
 
   if(sortedCats.length){
     // Donut
-    const slices=sortedCats.slice(0,6).map(([c,v],i)=>({val:v,color:COLORS[i],label:c}));
+    const slices=sortedCats.filter(([,v])=>v>0).slice(0,6).map(([c,v],i)=>({val:v,color:COLORS[i],label:c}));
     html+=`<div class="card"><div class="card-inner">
       <div class="card-lbl" style="margin-bottom:12px">Utgifter per kategori</div>
       <div style="display:flex;align-items:center;gap:16px">
@@ -2096,19 +2258,7 @@ function openMonthDetail(m){
   // Alla transaktioner
   const sorted=[...txs].sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
   html+=`<div class="sec"><span class="sec-t">Transaktioner</span><span class="sec-sub">${txs.length} st</span></div><div class="txl">`;
-  sorted.forEach(tx=>{
-    const col=tx.type==='income'?'var(--green)':tx.type==='savings'?'var(--blue)':'var(--sub)';
-    const bg=tx.type==='income'?'var(--green2)':tx.type==='savings'?'var(--blue2)':'var(--red2)';
-    const sign=tx.type==='income'?'+':'−';
-    html+=`<div class="txi" style="cursor:default">
-      <div class="txav" style="background:${bg}">${ICONS[tx.cat]||'○'}</div>
-      <div class="txi-info">
-        <div class="txi-name">${esc(tx.desc||tx.cat)}</div>
-        <div class="txi-meta">${esc(tx.cat)} · ${tx.date.slice(5)}</div>
-      </div>
-      <div class="txi-amt" style="color:${col}">${sign}${fmt(tx.amount)} kr</div>
-    </div>`;
-  });
+  sorted.forEach(tx=>{html+=txRowHtml(tx,false)});
   html+=`</div>`;
 
   if(!txs.length){
@@ -2320,7 +2470,7 @@ function openCatDetail(cat,year){
         <div class="txi-name">${esc(tx.desc||tx.cat)}</div>
         <div class="txi-meta">${mLabel(tx.month)} · ${tx.date.slice(5)}</div>
       </div>
-      <div class="txi-amt" style="color:var(--sub)">−${fmt(tx.amount)} kr</div>
+      <div class="txi-amt" style="color:${tx.amount<0?'var(--green)':'var(--sub)'}">${tx.amount<0?'+':'−'}${fmt(Math.abs(tx.amount))} kr</div>
     </div>`;
   });
   html+=`</div>`;
@@ -2361,6 +2511,8 @@ function renderSettings(){
   renderCatList('exp-cats',getExpCats(),'expense');
   renderCatList('inc-cats',getIncCats(),'income');
   renderCatList('sav-cats',getSavCats(),'savings');
+  renderCatList('trf-cats',getTrfCats(),'transfer');
+  renderAccountSettings();
   renderNWCatList();
   renderGroupList();
   renderSyncSettings();
@@ -2594,15 +2746,20 @@ function renderCatList(id,cats,type){
   document.getElementById(id).innerHTML=cats.map((c,i)=>
     `<div class="tag-item"><span>${esc(c)}</span><button class="tag-rm" onclick="removeCat('${type}',${i})">×</button></div>`).join('');
 }
+const CAT_CFG={
+  expense:{key:'cats_exp',def:DEF_EXP,iid:'new-exp-cat'},
+  income:{key:'cats_inc',def:DEF_INC,iid:'new-inc-cat'},
+  savings:{key:'cats_sav',def:DEF_SAV,iid:'new-sav-cat'},
+  transfer:{key:'cats_trf',def:DEF_TRF,iid:'new-trf-cat'},
+};
 function removeCat(type,idx){
-  const key=type==='expense'?'cats_exp':type==='income'?'cats_inc':'cats_sav';
-  const def=type==='expense'?DEF_EXP:type==='income'?DEF_INC:DEF_SAV;
-  sv(key,ld(key,def).filter((_,i)=>i!==idx));renderSettings();
+  const{key,def}=CAT_CFG[type];
+  const cats=ld(key,def);
+  if(cats.length<=1){toast('Minst en kategori behövs','warn');return}
+  sv(key,cats.filter((_,i)=>i!==idx));renderSettings();
 }
 function addCat(type){
-  const iid=type==='expense'?'new-exp-cat':type==='income'?'new-inc-cat':'new-sav-cat';
-  const key=type==='expense'?'cats_exp':type==='income'?'cats_inc':'cats_sav';
-  const def=type==='expense'?DEF_EXP:type==='income'?DEF_INC:DEF_SAV;
+  const{key,def,iid}=CAT_CFG[type];
   const inp=document.getElementById(iid);const val=inp.value.trim();if(!val)return;
   const cats=ld(key,def);if(!cats.includes(val)){cats.push(val);sv(key,cats);}
   inp.value='';renderSettings();
@@ -2613,7 +2770,8 @@ function buildBackup(){
   return{version:2,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
     ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
     settings:{goal:ld('goal',700000),salary:ld('salary',0),theme:ld('theme','dark'),font:localStorage.getItem('font_theme')||'dm',
-      cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods()}};
+      cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
+      accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{})}};
 }
 function exportData(){
   const data=buildBackup();
@@ -2655,6 +2813,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
+    ['cats_trf','accounts','merchant_rules','imports','import_maps'].forEach(k=>{if(d.settings[k])sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -2673,7 +2832,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_nw','cat_groups','pay_periods','ai_memory']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -2767,6 +2926,693 @@ function renderSyncSettings(){
 // ═══════════════════════════════════════════
 // AI
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// IMPORT AV KONTOUTDRAG
+// Flöde: filer → tolkning (CSV/Excel lokalt, PDF/bild via AI) → dubblettkontroll
+//        → inlärda regler → AI-kategorisering per butik → granskning → spara
+// Internt: amount < 0 = pengar ut från kontot / köp på kortet.
+// ═══════════════════════════════════════════
+const getImports=()=>ld('imports',[]);
+const svImports=v=>sv('imports',v);
+const getRules=()=>ld('merchant_rules',{});
+function setRule(mkey,type,cat){
+  if(!mkey)return;
+  const r=getRules();r[mkey]={type,cat,t:Date.now()};sv('merchant_rules',r);
+}
+
+// Butiksnyckel: normaliserad beskrivning + riktning (in/ut), så att "ICA NARA 1234 SOLNA 25-09-12" och
+// "ICA NARA 5678 SOLNA" blir samma butik.
+function merchantBase(desc){
+  return String(desc||'').toLowerCase()
+    .replace(/\d{2,4}[-./]\d{1,2}([-./]\d{1,4})?/g,' ')
+    .replace(/\b(kortköp|kortk[oö]p|reservation|reserverat|prel|preliminär)\b/g,' ')
+    .replace(/\d+/g,' ')
+    .replace(/[^a-zåäöéüæø&]+/g,' ')
+    .trim().replace(/\s+/g,' ').slice(0,40)||'okänd';
+}
+function mkeyFor(desc,amount){return merchantBase(desc)+'|'+(amount<0?'ut':'in')}
+
+// ── Tolkning av värden ─────────────────────
+function ymd(y,m,d){
+  if(!(y>=1990&&y<=2100&&m>=1&&m<=12&&d>=1&&d<=31))return null;
+  const dt=new Date(y,m-1,d);if(dt.getMonth()!==m-1)return null;
+  return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+}
+const SV_MONTHS=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+const EN_MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function parseDateStr(v,order){
+  if(v instanceof Date&&!isNaN(v)){const d=new Date(v.getTime()+12*3600e3);return ymd(d.getFullYear(),d.getMonth()+1,d.getDate())}
+  const s=String(v??'').trim();if(!s)return null;
+  let m=s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);if(m)return ymd(+m[1],+m[2],+m[3]);
+  m=s.match(/^(\d{4})(\d{2})(\d{2})$/);if(m)return ymd(+m[1],+m[2],+m[3]);
+  m=s.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})\b/);
+  if(m){let a=+m[1],b=+m[2],y=+m[3];if(y<100)y+=2000;
+    return order==='mdy'?(ymd(y,a,b)||ymd(y,b,a)):(ymd(y,b,a)||ymd(y,a,b))}
+  m=s.toLowerCase().match(/^(\d{1,2})\.?\s+([a-zåä]{3})[a-zåä.]*\s+(\d{4})/);
+  if(m){let mi=SV_MONTHS.indexOf(m[2]);if(mi<0)mi=EN_MONTHS.indexOf(m[2]);if(mi>=0)return ymd(+m[3],mi+1,+m[1])}
+  return null;
+}
+function parseAmount(v){
+  if(typeof v==='number')return isFinite(v)?v:null;
+  let s=String(v??'').trim().replace(/[−–]/g,'-').replace(/[\s ]/g,'').replace(/(kr|sek)$/i,'');
+  if(!s)return null;
+  let neg=false;
+  if(/^\(.*\)$/.test(s)){neg=true;s=s.slice(1,-1)}
+  if(/-$/.test(s)){neg=true;s=s.slice(0,-1)}
+  if(!/^[-+]?[\d.,]*\d[\d.,]*$/.test(s))return null;
+  const lc=s.lastIndexOf(','),lp=s.lastIndexOf('.');
+  if(lc>lp)s=s.replace(/\./g,'').replace(',','.');
+  else if(lp>lc){if(lc>=0)s=s.replace(/,/g,'');else if((s.match(/\./g)||[]).length>1)s=s.replace(/\./g,'')}
+  const n=parseFloat(s);if(isNaN(n))return null;
+  return neg?-Math.abs(n):n;
+}
+
+// ── CSV ────────────────────────────────────
+function decodeText(buf){
+  let t=new TextDecoder('utf-8').decode(buf);
+  if(t.includes('�'))t=new TextDecoder('windows-1252').decode(buf);
+  return t.replace(/^﻿/,'');
+}
+function parseDelimited(text,d){
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"'&&f==='')q=true;
+    else if(c===d){row.push(f);f=''}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}
+    else f+=c;
+  }
+  if(f!==''||row.length){row.push(f);rows.push(row)}
+  return rows;
+}
+function parseCSV(text){
+  const sample=text.split(/\r?\n/).slice(0,40).join('\n');
+  let best=';',bestScore=-1;
+  for(const d of [';','\t',',','|']){
+    const counts=parseDelimited(sample,d).map(r=>r.length).filter(n=>n>1);
+    if(!counts.length)continue;
+    const freq={};counts.forEach(n=>freq[n]=(freq[n]||0)+1);
+    const [mode,cnt]=Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+    const score=cnt*Math.min(+mode,8);
+    if(score>bestScore){bestScore=score;best=d}
+  }
+  return parseDelimited(text,best);
+}
+
+// ── Excel (SheetJS laddas bara när det behövs) ─
+let _xlsxP=null;
+function loadXLSX(){
+  if(window.XLSX)return Promise.resolve(window.XLSX);
+  if(!_xlsxP)_xlsxP=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>res(window.XLSX);
+    s.onerror=()=>{_xlsxP=null;rej(new Error('Kunde inte ladda Excel-läsaren — kontrollera nätet'))};
+    document.head.appendChild(s);
+  });
+  return _xlsxP;
+}
+async function parseXLSX(buf){
+  const XLSX=await loadXLSX();
+  const wb=XLSX.read(buf,{type:'array',cellDates:true});
+  // Välj bladet med flest rader som innehåller datum
+  let best=null,bestN=-1;
+  wb.SheetNames.forEach(n=>{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});
+    const k=rows.filter(r=>r.some(c=>parseDateStr(c))).length;
+    if(k>bestN){bestN=k;best=rows}
+  });
+  return best||[];
+}
+
+// ── Kolumnigenkänning ──────────────────────
+const COLS={
+  date:[/transaktionsdag|transaktionsdatum|köpdatum|kopdatum/,/^datum$|^date$|^dag$/,/datum|date/,/bokf/],
+  desc:[/beskrivning|description/,/^text$|text\/mottagare|transaktionstext/,/mottagare|namn|butik|merchant|payee/,/rubrik|specifikation|meddelande|händelse|typ/,/referens|reference/],
+  amount:[/^belopp$|^amount$/,/belopp|amount|summa/],
+  out:[/uttag|debet|belastning|^ut$/],
+  in:[/insättning|kredit|^in$/],
+  balance:[/saldo|balance/],
+};
+function colScore(h,list){h=h.toLowerCase().trim();for(let i=0;i<list.length;i++)if(list[i].test(h))return list.length-i;return 0}
+function detectTable(rawRows){
+  const rows=rawRows.map(r=>r.map(c=>c instanceof Date?c:String(c??'').trim())).filter(r=>r.some(c=>c!==''&&c!==null));
+  let hdr=-1;
+  for(let i=0;i<Math.min(rows.length,30);i++){
+    const nonEmpty=rows[i].filter(c=>c!=='').length;
+    if(nonEmpty>=2&&!rows[i].some(c=>parseDateStr(c))&&rows.slice(i+1,i+4).some(r=>r.some(c=>parseDateStr(c)))){hdr=i;break}
+  }
+  const header=hdr>=0?rows[hdr].map(c=>String(c)):[];
+  const data=rows.slice(hdr+1).filter(r=>r.some(c=>parseDateStr(c)));
+  const ncol=Math.max(header.length,...data.slice(0,80).map(r=>r.length),0);
+  const sample=data.slice(0,60);
+  const frac=f=>i=>sample.length?sample.filter(r=>f(r[i])).length/sample.length:0;
+  const isDate=frac(c=>parseDateStr(c)),isNum=frac(c=>c!==''&&parseAmount(c)!==null);
+  const cols=[...Array(ncol).keys()];
+  const H=i=>header[i]||'';
+  const pick=(cands,key)=>cands.map(i=>({i,s:colScore(H(i),COLS[key])})).sort((a,b)=>b.s-a.s||a.i-b.i)[0];
+  const dateCols=cols.filter(i=>isDate(i)>=0.8);
+  const map={};
+  const dc=pick(dateCols,'date');map.date=dc?dc.i:-1;
+  const numCols=cols.filter(i=>i!==map.date&&!dateCols.includes(i)&&isNum(i)>=0.5);
+  const bal=numCols.find(i=>colScore(H(i),COLS.balance));map.balance=bal??-1;
+  const outC=numCols.find(i=>colScore(H(i),COLS.out)),inC=numCols.find(i=>colScore(H(i),COLS.in));
+  const amtC=pick(numCols.filter(i=>i!==map.balance&&i!==outC&&i!==inC),'amount');
+  if(amtC&&(amtC.s>0||outC===undefined)){map.amount=amtC.i;map.out=-1;map.in=-1}
+  else{map.amount=-1;map.out=outC??-1;map.in=inC??-1}
+  // Beskrivning: bäst matchande rubrik, annars textkolumnen med längst innehåll
+  const textCols=cols.filter(i=>!dateCols.includes(i)&&!numCols.includes(i));
+  const byHdr=pick(textCols,'desc');
+  if(byHdr&&byHdr.s>0)map.desc=byHdr.i;
+  else{
+    const avgLen=i=>sample.reduce((s,r)=>s+String(r[i]??'').length,0)/(sample.length||1);
+    map.desc=textCols.sort((a,b)=>avgLen(b)-avgLen(a))[0]??-1;
+  }
+  // Datumordning (dd/mm eller mm/dd) utifrån värdena
+  let order='dmy';
+  if(map.date>=0){
+    for(const r of data){const m=String(r[map.date]).match(/^(\d{1,2})[-./](\d{1,2})[-./]\d{2,4}/);
+      if(m){if(+m[1]>12){order='dmy';break}if(+m[2]>12){order='mdy';break}}}
+  }
+  map.order=order;
+  const pre=hdr>0?rows.slice(0,hdr).map(r=>r.join(' ')).join(' '):'';
+  return{header,pre,data,map,ncol,ok:map.date>=0&&map.desc>=0&&(map.amount>=0||map.out>=0||map.in>=0)};
+}
+function tableToRows(t,map,invert){
+  const out=[];
+  t.data.forEach(r=>{
+    const date=parseDateStr(r[map.date],map.order);if(!date)return;
+    let amt;
+    if(map.amount>=0)amt=parseAmount(r[map.amount]);
+    else{const o=map.out>=0?parseAmount(r[map.out]):null,i=map.in>=0?parseAmount(r[map.in]):null;
+      if(o===null&&i===null)return;amt=(i?Math.abs(i):0)-(o?Math.abs(o):0)}
+    if(amt===null||amt===0)return;
+    if(invert)amt=-amt;
+    const desc=String(r[map.desc]??'').replace(/\s+/g,' ').trim();
+    const bal=map.balance>=0?parseAmount(r[map.balance]):null;
+    out.push({date,desc,amount:Math.round(amt*100)/100,balance:bal});
+  });
+  return out;
+}
+
+// ── Importstatus ───────────────────────────
+let _imp=null;
+function newImpState(){return{step:'files',files:[],groups:[],busy:null,replaceManual:{}}}
+function openImport(){
+  if(!_imp||_imp.step==='done')_imp=newImpState();
+  document.getElementById('import-screen').classList.add('open');
+  renderImport();
+}
+function closeImport(){
+  if(_imp&&_imp.busy){toast('Vänta tills AI:n är klar','warn');document.getElementById('import-screen').classList.add('open');return}
+  if(_imp&&_imp.step==='review'&&_imp.groups.length&&!confirm('Avbryta importen? Inget har sparats ännu.')){document.getElementById('import-screen').classList.add('open');return}
+  document.getElementById('import-screen').classList.remove('open');
+  _imp=null;render();
+}
+
+// text = filnamn + rubrikrader (inte transaktionerna — bankens utdrag innehåller ofta "American Express" som mottagare)
+function guessAccount(name,text){
+  const accs=getAccounts();
+  const hay=(name+' '+text).toLowerCase();
+  if(/amex|american express|kortmedlem|card ?member/.test(hay)){const c=accs.find(a=>a.kind==='card'&&/amex|american/i.test(a.name))||accs.find(a=>a.kind==='card');if(c)return c.id}
+  for(const a of accs)if(a.name.length>2&&hay.includes(a.name.toLowerCase()))return a.id;
+  return(accs.find(a=>a.kind==='bank')||accs[0]).id;
+}
+function autoInvert(f){
+  const acc=getAccounts().find(a=>a.id===f.account);
+  if(!acc||acc.kind!=='card'||!f.table)return false;
+  const rows=tableToRows(f.table,f.map,false);
+  const pos=rows.filter(r=>r.amount>0).length;
+  return pos>rows.length/2; // kreditkortsexporter visar oftast köp som positiva belopp
+}
+const IMG_TYPES=['image/jpeg','image/png','image/gif','image/webp'];
+
+async function addImportFiles(fileList){
+  const files=[...fileList];if(!files.length)return;
+  for(const file of files){
+    const f={id:Math.random().toString(36).slice(2),name:file.name,size:file.size,status:'reading'};
+    _imp.files.push(f);renderImport();
+    try{
+      const lower=file.name.toLowerCase();
+      const buf=await file.arrayBuffer();
+      if(lower.endsWith('.pdf')||file.type==='application/pdf'||IMG_TYPES.includes(file.type)||/\.(jpe?g|png|webp|gif)$/.test(lower)){
+        if(file.size>20*1024*1024)throw new Error('Filen är för stor (max 20 MB)');
+        f.kind='doc';
+        f.media=file.type==='application/pdf'||lower.endsWith('.pdf')?'application/pdf':(IMG_TYPES.includes(file.type)?file.type:'image/jpeg');
+        f.b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=()=>rej(new Error('Kunde inte läsa filen'));r.readAsDataURL(file)});
+        f.account=guessAccount(file.name,'');
+        f.status='ready';
+      }else{
+        let raw;
+        if(/\.(xlsx|xls|xlsm|ods)$/.test(lower))raw=await parseXLSX(buf);
+        else raw=parseCSV(decodeText(buf));
+        const t=detectTable(raw);
+        f.kind='table';f.table=t;
+        const saved=ld('import_maps',{})[t.header.join('|')];
+        f.map=saved?{...t.map,...saved.map}:{...t.map};
+        f.account=saved&&getAccounts().some(a=>a.id===saved.account)?saved.account:guessAccount(file.name,t.pre+' '+t.header.join(' '));
+        f.invert=saved?!!saved.invert:autoInvert(f);
+        f.showMap=!t.ok;
+        f.status=t.data.length?'ready':'error';
+        if(!t.data.length)f.error='Hittade inga rader med datum. Är det rätt fil?';
+      }
+    }catch(e){f.status='error';f.error=e.message}
+    renderImport();
+  }
+}
+function removeImportFile(id){_imp.files=_imp.files.filter(f=>f.id!==id);renderImport()}
+function setImpFile(id,key,val){
+  const f=_imp.files.find(x=>x.id===id);if(!f)return;
+  if(key==='account'){f.account=val;if(f.kind==='table')f.invert=autoInvert(f)}
+  else if(key==='invert')f.invert=val;
+  else f.map[key]=+val;
+  renderImport();
+}
+function fileSummary(f){
+  if(f.kind==='doc')return`${f.media==='application/pdf'?'PDF':'Bild'} · ${Math.round(f.size/1024)} kB · läses av AI`;
+  const rows=tableToRows(f.table,f.map,f.invert);
+  if(!rows.length)return'Inga transaktioner hittades med nuvarande kolumnval';
+  const dates=rows.map(r=>r.date).sort();
+  const out=rows.filter(r=>r.amount<0).reduce((s,r)=>s+r.amount,0);
+  const inn=rows.filter(r=>r.amount>0).reduce((s,r)=>s+r.amount,0);
+  const H=i=>i>=0?(f.table.header[i]||`kolumn ${i+1}`):'—';
+  return`${rows.length} rader · ${dates[0]} – ${dates[dates.length-1]}<br>ut ${fmt(-out)} kr · in ${fmt(inn)} kr<br>`+
+    `<span style="color:var(--sub2)">${esc(H(f.map.date))} · ${esc(H(f.map.desc))} · ${esc(f.map.amount>=0?H(f.map.amount):H(f.map.out)+'/'+H(f.map.in))}</span>`;
+}
+
+// ── Rendering ──────────────────────────────
+function renderImport(){
+  const body=document.getElementById('imp-body'),bar=document.getElementById('imp-bar'),sub=document.getElementById('imp-sub');
+  if(!body||!_imp)return;
+  if(_imp.busy){
+    sub.textContent='';
+    body.innerHTML=`<div class="imp-progress"><div class="imp-spin"></div><div style="font-size:15px;font-weight:500">${esc(_imp.busy)}</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:6px" id="imp-busy-sub">${esc(_imp.busySub||'')}</div></div>`;
+    bar.innerHTML='';return;
+  }
+  if(_imp.step==='files')renderImpFiles(body,bar,sub);
+  else if(_imp.step==='review')renderImpReview(body,bar,sub);
+}
+function renderImpFiles(body,bar,sub){
+  sub.textContent='Steg 1 av 2 · välj filer';
+  const accs=getAccounts();
+  const accOpts=v=>accs.map(a=>`<option value="${esc(a.id)}"${a.id===v?' selected':''}>${esc(a.name)}</option>`).join('');
+  let html=`<label class="imp-drop" id="imp-drop">
+      <div class="imp-drop-ic">⇪</div>
+      <div style="font-size:15px;font-weight:600">Välj kontoutdrag</div>
+      <div style="font-size:12px;color:var(--sub);line-height:1.5">CSV eller Excel från internetbanken, AMEX-export,<br>PDF-utdrag eller skärmdump. Flera filer går bra.</div>
+      <input type="file" multiple accept=".csv,.txt,.tsv,.xlsx,.xls,.ods,.pdf,image/*" style="display:none" onchange="addImportFiles(this.files);this.value=''">
+    </label>`;
+  if(_imp.files.length){
+    html+=`<div class="txl">`;
+    _imp.files.forEach(f=>{
+      const H=i=>esc(f.table?.header[i]||`Kolumn ${i+1}`);
+      const colOpts=(v,allowNone)=>(allowNone?`<option value="-1"${v<0?' selected':''}>—</option>`:'')+[...Array(f.table?.ncol||0).keys()].map(i=>`<option value="${i}"${i===v?' selected':''}>${H(i)}</option>`).join('');
+      html+=`<div class="imp-file">
+        <div class="imp-file-hd">
+          <span style="font-size:18px">${f.kind==='doc'?'📄':'📊'}</span>
+          <div class="imp-file-name">${esc(f.name)}</div>
+          <button class="tag-rm" onclick="removeImportFile('${f.id}')">×</button>
+        </div>`;
+      if(f.status==='reading')html+=`<div class="imp-meta">Läser…</div>`;
+      else if(f.status==='error'&&!f.table)html+=`<div class="imp-meta" style="color:var(--red)">${esc(f.error)}</div>`;
+      else{
+        html+=`<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <span style="font-size:11px;color:var(--sub2)">Konto</span>
+            <select class="imp-sel" onchange="setImpFile('${f.id}','account',this.value)">${accOpts(f.account)}</select>
+          </div>
+          <div class="imp-meta">${f.status==='error'?`<span style="color:var(--red)">${esc(f.error)}</span>`:fileSummary(f)}</div>`;
+        if(f.kind==='table'){
+          html+=`<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--sub);margin-top:8px;cursor:pointer">
+              <input type="checkbox" ${f.invert?'checked':''} onchange="setImpFile('${f.id}','invert',this.checked)"> Köp visas som positiva belopp (vanligt för kreditkort)
+            </label>
+            <button class="imp-link" onclick="_imp.files.find(x=>x.id==='${f.id}').showMap=!_imp.files.find(x=>x.id==='${f.id}').showMap;renderImport()">${f.showMap?'Dölj kolumner':'Ändra kolumner'}</button>`;
+          if(f.showMap)html+=`<div class="imp-map">
+              <div><label>Datum</label><select class="imp-sel" onchange="setImpFile('${f.id}','date',this.value)">${colOpts(f.map.date)}</select></div>
+              <div><label>Beskrivning</label><select class="imp-sel" onchange="setImpFile('${f.id}','desc',this.value)">${colOpts(f.map.desc)}</select></div>
+              <div><label>Belopp</label><select class="imp-sel" onchange="setImpFile('${f.id}','amount',this.value)">${colOpts(f.map.amount,true)}</select></div>
+              <div><label>Saldo</label><select class="imp-sel" onchange="setImpFile('${f.id}','balance',this.value)">${colOpts(f.map.balance,true)}</select></div>
+              ${f.map.amount<0?`<div><label>Uttag</label><select class="imp-sel" onchange="setImpFile('${f.id}','out',this.value)">${colOpts(f.map.out,true)}</select></div>
+              <div><label>Insättning</label><select class="imp-sel" onchange="setImpFile('${f.id}','in',this.value)">${colOpts(f.map.in,true)}</select></div>`:''}
+            </div>`;
+        }
+      }
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+  }
+  const key=getApiKey();
+  html+=`<div style="margin:6px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">
+      ${key?`Nya butiker kategoriseras av Claude ${esc(getAiModel().name)}. Butiker du redan kategoriserat känns igen direkt.`:'⚠️ Utan API-nyckel kategoriseras bara butiker appen redan lärt sig — resten hamnar i Övrigt. PDF och bilder kräver API-nyckel.'}
+      Transaktioner som redan importerats hoppas över automatiskt.</div>`;
+  body.innerHTML=html;
+  // Dra-och-släpp
+  const drop=document.getElementById('imp-drop');
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over')});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');addImportFiles(e.dataTransfer.files)});
+  const ready=_imp.files.filter(f=>f.status==='ready');
+  bar.innerHTML=ready.length?`<button class="btn-p" onclick="processImport()">Fortsätt med ${ready.length} fil${ready.length>1?'er':''} →</button>`:'';
+}
+
+// ── AI-anrop (strömmat, så långa svar inte slår i tidsgränser) ─
+async function callClaude({system,messages,effort='low',max_tokens=16000,schema,onText}){
+  const key=getApiKey();
+  if(!key)throw new Error('Ingen API-nyckel — ange den i inställningar');
+  const model=getAiModel();
+  const body={model:model.id,max_tokens,stream:true,output_config:{effort},messages};
+  if(system)body.system=system;
+  if(schema)body.output_config.format={type:'json_schema',schema};
+  const headers={'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+  if(model.fallbacks){body.fallbacks='default';headers['anthropic-beta']='server-side-fallback-2026-07-01'}
+  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body:JSON.stringify(body)});
+  if(!res.ok){let m='HTTP '+res.status;try{const e=await res.json();m=e.error?.message||m}catch{}throw new Error(m)}
+  const reader=res.body.getReader(),dec=new TextDecoder();
+  let buf='',text='',served=model.id,stop=null;const usage={input_tokens:0,output_tokens:0};
+  const handle=ev=>{
+    if(ev.type==='message_start'){served=ev.message?.model||served;usage.input_tokens=ev.message?.usage?.input_tokens||0}
+    else if(ev.type==='content_block_delta'&&ev.delta?.type==='text_delta'){text+=ev.delta.text;onText&&onText(text)}
+    else if(ev.type==='message_delta'){if(ev.delta?.stop_reason)stop=ev.delta.stop_reason;if(ev.usage){usage.output_tokens=ev.usage.output_tokens||usage.output_tokens;if(ev.usage.input_tokens)usage.input_tokens=ev.usage.input_tokens}}
+    else if(ev.type==='error')throw new Error(ev.error?.message||'Fel under strömning');
+  };
+  for(;;){
+    const{done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    let i;
+    while((i=buf.indexOf('\n\n'))>=0){
+      const chunk=buf.slice(0,i);buf=buf.slice(i+2);
+      const data=chunk.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trim()).join('');
+      if(!data)continue;let ev;try{ev=JSON.parse(data)}catch{continue}
+      handle(ev);
+    }
+  }
+  const cost=calcCost(usage.input_tokens,usage.output_tokens,served);
+  addAiCost(cost);updateAiStatus();
+  if(stop==='refusal')throw new Error(modelNameForId(served)+' avböjde förfrågan');
+  if(stop==='max_tokens')throw new Error('Svaret blev för långt — dela upp filen i mindre delar');
+  return{text,served,cost,usage};
+}
+function setBusy(t,s){if(!_imp)return;_imp.busy=t;_imp.busySub=s||'';renderImport()}
+function setBusySub(s){if(_imp)_imp.busySub=s;const el=document.getElementById('imp-busy-sub');if(el)el.textContent=s}
+
+// PDF/bild → transaktioner
+async function extractDocWithAI(f){
+  const acc=getAccounts().find(a=>a.id===f.account);
+  const block=f.media==='application/pdf'
+    ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:f.b64}}
+    :{type:'image',source:{type:'base64',media_type:f.media,data:f.b64}};
+  const schema={type:'object',additionalProperties:false,required:['transactions'],properties:{transactions:{type:'array',items:{
+    type:'object',additionalProperties:false,required:['date','description','amount'],
+    properties:{date:{type:'string',description:'YYYY-MM-DD'},description:{type:'string'},amount:{type:'number'}}}}}};
+  const prompt=`Detta är ett kontoutdrag/transaktionslista från ${acc?.kind==='card'?'ett kreditkort':'ett bankkonto'} (${acc?.name||''}). Extrahera VARJE enskild transaktion.
+- date: transaktions-/köpdatum som YYYY-MM-DD (saknas år: anta ${new Date().getFullYear()}, eller föregående år om datumet då hamnar i framtiden).
+- description: butik/mottagare/text precis som den står.
+- amount: NEGATIVT för pengar ut från kontot eller köp på kortet, POSITIVT för insättningar, lön, inbetalningar till kortet och returer.
+Hoppa över rubriker, ingående/utgående saldo, delsummor och totalsummor.`;
+  const r=await callClaude({messages:[{role:'user',content:[block,{type:'text',text:prompt}]}],effort:'medium',max_tokens:32000,schema,
+    onText:t=>setBusySub(`${(t.match(/"date"/g)||[]).length} transaktioner lästa…`)});
+  const out=JSON.parse(r.text).transactions||[];
+  return out.map(x=>({date:parseDateStr(x.date),desc:String(x.description||'').trim(),amount:Math.round(Number(x.amount)*100)/100,balance:null}))
+    .filter(x=>x.date&&x.amount);
+}
+
+// Kategorisera okända butiker med AI (en rad per butik, inte per transaktion)
+async function categorizeWithAI(groups){
+  const types=['expense','income','savings','transfer'];
+  const rules=getRules();
+  const examples=Object.entries(rules).sort((a,b)=>b[1].t-a[1].t).slice(0,40).map(([k,v])=>`${k.split('|')[0]} → ${TYPE_LABEL[v.type]}: ${v.cat}`).join('\n');
+  const mem=getAiMemory();
+  const system=`Du kategoriserar bank- och korttransaktioner för en svensk privatperson. Varje rad är en butik/mottagare (kan förekomma flera gånger).
+Välj type och cat. cat MÅSTE vara exakt en av kategorierna för vald type:
+- expense (utgift): ${getExpCats().join(' | ')}
+- income (inkomst): ${getIncCats().join(' | ')}
+- savings (sparande — pengar till egna spar-/investeringskonton): ${getSavCats().join(' | ')}
+- transfer (räknas inte alls — ${getTrfCats().join(' | ')}): betalning av kreditkortsfakturan från bankkontot (t.ex. "American Express", "AMEX"), "Betalning mottagen/Inbetalning" på kortet, flyttar mellan egna konton.
+Riktlinjer:
+- "ut" = pengar ut/köp, "in" = pengar in.
+- Returer/återbetalningar från butiker ("in" från en butik) → expense med samma kategori som ett köp där.
+- Lön från arbetsgivare → income "Lön". Swish in från privatpersoner → income "Övrigt" (conf low) om oklart.
+- Överföring till Avanza/Nordnet/ISK/fonder/sparkonto → savings (välj närmaste sparkategori).
+- conf "low" när du är osäker, annars "high".${mem.length?`\nVad du vet om användaren:\n${mem.slice(-20).join('\n')}`:''}${examples?`\nAnvändarens tidigare val (följ samma stil):\n${examples}`:''}`;
+  const schema={type:'object',additionalProperties:false,required:['items'],properties:{items:{type:'array',items:{
+    type:'object',additionalProperties:false,required:['k','type','cat','conf'],
+    properties:{k:{type:'integer'},type:{type:'string',enum:types},cat:{type:'string'},conf:{type:'string',enum:['high','low']}}}}}};
+  const BATCH=120;
+  for(let s=0;s<groups.length;s+=BATCH){
+    const part=groups.slice(s,s+BATCH);
+    setBusySub(`Butik ${s+1}–${s+part.length} av ${groups.length}`);
+    const lines=part.map((g,j)=>`${s+j}|${g.dir}|${g.accKind==='card'?'kort':'bank'}|${g.rows.length}st|${fmt(Math.abs(g.total))} kr|${g.rows[0].desc}`).join('\n');
+    const r=await callClaude({system,messages:[{role:'user',content:`k|riktning|konto|antal|summa|beskrivning\n${lines}`}],effort:'low',max_tokens:16000,schema});
+    const items=JSON.parse(r.text).items||[];
+    items.forEach(it=>{
+      const g=groups[it.k];if(!g||!part.includes(g))return;
+      if(types.includes(it.type)&&catsForType(it.type).includes(it.cat)){g.type=it.type;g.cat=it.cat;g.conf=it.conf;g.src='ai'}
+    });
+  }
+}
+
+function fallbackCat(g){
+  // Utan AI: rimlig gissning så att inget blir fel typ
+  if(/american express|amex|kortbetalning|betalning mottagen|inbetalning/i.test(g.rows[0].desc)){g.type='transfer';g.cat=getTrfCats()[0]}
+  else if(g.dir==='in'){g.type='income';g.cat=getIncCats().includes('Övrigt')?'Övrigt':getIncCats()[0]}
+  else{g.type='expense';g.cat=getExpCats().includes('Övrigt')?'Övrigt':getExpCats()[0]}
+  g.conf='low';g.src='guess';
+}
+
+async function processImport(){
+  const files=_imp.files.filter(f=>f.status==='ready');
+  if(!files.length)return;
+  try{
+    // 1. Läs rader
+    const all=[];
+    for(const f of files){
+      let rows;
+      if(f.kind==='doc'){setBusy('Läser '+f.name+' med AI…');rows=await extractDocWithAI(f)}
+      else{
+        rows=tableToRows(f.table,f.map,f.invert);
+        // Kom ihåg kolumnval för samma bankformat
+        const maps=ld('import_maps',{});maps[f.table.header.join('|')]={map:f.map,invert:f.invert,account:f.account};sv('import_maps',maps);
+      }
+      rows.forEach(r=>all.push({...r,account:f.account,file:f.name}));
+    }
+    // 2. Dubbletter (mot tidigare importer och inom filerna)
+    setBusy('Letar dubbletter…');
+    const existing=new Set(getTxs().filter(t=>t.hash).map(t=>t.hash));
+    const seen={};let dups=0;const fresh=[];
+    all.forEach(r=>{
+      const base=`${r.account}|${r.date}|${r.amount.toFixed(2)}|${merchantBase(r.desc)}`;
+      seen[base]=(seen[base]||0)+1;
+      r.hash=base+'#'+seen[base];
+      if(existing.has(r.hash))dups++;else fresh.push(r);
+    });
+    // 3. Gruppera per butik och applicera inlärda regler
+    const rules=getRules();const gmap={};
+    fresh.forEach(r=>{
+      const k=r.account+'¦'+mkeyFor(r.desc,r.amount);
+      if(!gmap[k]){const acc=getAccounts().find(a=>a.id===r.account);gmap[k]={key:k,mkey:mkeyFor(r.desc,r.amount),dir:r.amount<0?'ut':'in',accKind:acc?.kind||'bank',rows:[],total:0,on:true}}
+      gmap[k].rows.push(r);gmap[k].total+=r.amount;
+    });
+    const groups=Object.values(gmap);
+    groups.forEach(g=>{const ru=rules[g.mkey];if(ru&&catsForType(ru.type).includes(ru.cat)){g.type=ru.type;g.cat=ru.cat;g.conf='high';g.src='rule'}});
+    const unknown=groups.filter(g=>!g.src);
+    // 4. AI för okända butiker
+    let aiErr=null;
+    if(unknown.length&&getApiKey()){
+      setBusy(`AI kategoriserar ${unknown.length} butik${unknown.length>1?'er':''}…`);
+      try{await categorizeWithAI(unknown)}catch(e){aiErr=e.message}
+    }
+    groups.filter(g=>!g.src).forEach(fallbackCat);
+    // 5. Manuella transaktioner i samma period (risk för dubbelräkning)
+    const overlap={};
+    const byAcc={};fresh.forEach(r=>{(byAcc[r.account]=byAcc[r.account]||[]).push(r.date)});
+    Object.entries(byAcc).forEach(([acc,dates])=>{
+      dates.sort();const from=dates[0],to=dates[dates.length-1];
+      const manual=getTxs().filter(t=>t.account===acc&&t.source!=='import'&&t.date>=from&&t.date<=to);
+      if(manual.length)overlap[acc]={from,to,ids:manual.map(t=>t.id)};
+    });
+    _imp.groups=groups.sort((a,b)=>(a.conf==='low'?0:1)-(b.conf==='low'?0:1)||Math.abs(b.total)-Math.abs(a.total));
+    _imp.dups=dups;_imp.total=all.length;_imp.overlap=overlap;_imp.aiErr=aiErr;
+    _imp.balances=files.filter(f=>f.kind==='table').map(f=>{
+      const rows=tableToRows(f.table,f.map,f.invert).filter(r=>r.balance!==null).sort((a,b)=>a.date.localeCompare(b.date));
+      return rows.length?{account:f.account,value:rows[rows.length-1].balance,date:rows[rows.length-1].date}:null;
+    }).filter(Boolean);
+    _imp.step='review';_imp.busy=null;
+    renderImport();
+    if(aiErr)toast('AI-kategorisering misslyckades: '+aiErr,'err');
+  }catch(e){
+    _imp.busy=null;renderImport();
+    toast('Importen misslyckades: '+e.message,'err');
+  }
+}
+
+function catSelectHtml(g,idx){
+  const opt=(t,c)=>`<option value="${t}|${esc(c)}"${g.type===t&&g.cat===c?' selected':''}>${esc(c)}</option>`;
+  return`<select class="imp-sel" onchange="setImpGroup(${idx},this.value)">`+
+    ['expense','income','savings','transfer'].map(t=>`<optgroup label="${TYPE_LABEL[t]}">${catsForType(t).map(c=>opt(t,c)).join('')}</optgroup>`).join('')+
+    `</select>`;
+}
+function setImpGroup(idx,val){
+  const g=_imp.groups[idx];if(!g)return;
+  const i=val.indexOf('|');g.type=val.slice(0,i);g.cat=val.slice(i+1);g.conf='high';g.edited=true;
+  renderImport();
+}
+function toggleImpGroup(idx){const g=_imp.groups[idx];g.on=!g.on;renderImport()}
+function toggleImpRows(idx){const g=_imp.groups[idx];g.open=!g.open;renderImport()}
+
+function renderImpReview(body,bar,sub){
+  const G=_imp.groups;
+  const on=G.filter(g=>g.on);
+  const nTx=on.reduce((s,g)=>s+g.rows.length,0);
+  sub.textContent='Steg 2 av 2 · granska';
+  const sumType=t=>on.filter(g=>g.type===t).reduce((s,g)=>s+g.total,0);
+  const exp=-sumType('expense'),inc=sumType('income'),sav=-sumType('savings');
+  const low=G.filter(g=>g.conf==='low');
+  const bySrc=s=>G.filter(g=>g.src===s).length;
+  let html=`<div class="sgrid sg3" style="margin:0 0 12px">
+      <div class="scard"><div class="scard-lbl">Nya</div><div class="scard-val">${nTx} st</div></div>
+      <div class="scard"><div class="scard-lbl">Utgifter</div><div class="scard-val" style="color:var(--red)">${fmt(exp)}</div></div>
+      <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green)">${fmt(inc)}</div></div>
+    </div>
+    <div style="margin:0 20px 12px;font-size:12px;color:var(--sub);line-height:1.6">
+      ${G.length} butiker · ${bySrc('rule')} kända sedan tidigare · ${bySrc('ai')} kategoriserade av AI${bySrc('guess')?` · ${bySrc('guess')} gissade`:''}
+      ${_imp.dups?`<br>${_imp.dups} transaktioner fanns redan och hoppas över.`:''}
+      ${sav?`<br>Sparande: ${fmt(sav)} kr`:''}
+      ${_imp.aiErr?`<br><span style="color:var(--red)">AI-fel: ${esc(_imp.aiErr)}</span>`:''}
+    </div>`;
+  // Varning för manuella transaktioner i samma period
+  Object.entries(_imp.overlap||{}).forEach(([acc,o])=>{
+    const chk=!!_imp.replaceManual[acc];
+    html+=`<div class="card" style="border-color:rgba(255,214,10,.35)"><div class="card-inner" style="padding:14px 17px">
+      <div style="font-size:13px;font-weight:600;color:var(--amber);margin-bottom:4px">⚠︎ ${o.ids.length} manuell${o.ids.length>1?'a transaktioner':' transaktion'} på ${esc(accountName(acc))}</div>
+      <div style="font-size:12px;color:var(--sub);line-height:1.5">Mellan ${o.from} och ${o.to} finns transaktioner du skrivit in för hand. Behåller du dem räknas samma köp två gånger.</div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:10px;cursor:pointer">
+        <input type="checkbox" ${chk?'checked':''} onchange="_imp.replaceManual['${esc(acc)}']=this.checked"> Ta bort dem och använd importen
+      </label></div></div>`;
+  });
+  if(!G.length){
+    html+=`<div class="empty"><div class="empty-i">✓</div><div class="empty-t">Inga nya transaktioner — allt i filerna är redan importerat.</div></div>`;
+    body.innerHTML=html;
+    bar.innerHTML=`<button class="btn-s" onclick="_imp.step='done';closeImport()">Stäng</button>`;
+    return;
+  }
+  const section=(title,list)=>{
+    if(!list.length)return'';
+    let h=`<div class="sec"><span class="sec-t">${title}</span><span class="sec-sub">${list.length}</span></div><div class="txl">`;
+    list.forEach(g=>{
+      const idx=G.indexOf(g);
+      const dot=g.conf==='low'?'var(--amber)':g.src==='rule'?'var(--blue)':'var(--green)';
+      h+=`<div class="imp-grp${g.on?'':' off'}">
+        <span class="imp-dot" style="background:${dot}" title="${g.src==='rule'?'Känd butik':g.conf==='low'?'Osäker':'AI'}"></span>
+        <div class="imp-grp-info" onclick="toggleImpRows(${idx})" style="cursor:pointer">
+          <div class="imp-grp-name">${esc(g.rows[0].desc||'(ingen text)')}</div>
+          <div class="txi-meta">${g.rows.length>1?g.rows.length+' st · ':''}${esc(accountName(g.rows[0].account))} · <span style="color:${g.total<0?'var(--text)':'var(--green)'}">${g.total<0?'−':'+'}${fmt(Math.abs(g.total))} kr</span></div>
+        </div>
+        ${catSelectHtml(g,idx)}
+        <button class="tag-rm" onclick="toggleImpGroup(${idx})" title="${g.on?'Hoppa över':'Ta med'}">${g.on?'×':'↺'}</button>
+      </div>`;
+      if(g.open)h+=`<div class="imp-rows">${g.rows.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`${r.date} · ${r.amount<0?'−':'+'}${fmt(Math.abs(r.amount))} kr${g.rows.some(x=>x.desc!==r.desc)?' · '+esc(r.desc):''}`).join('<br>')}</div>`;
+    });
+    return h+`</div>`;
+  };
+  html+=section('Behöver granskas',G.filter(g=>g.conf==='low'));
+  html+=section('Kategoriserade',G.filter(g=>g.conf!=='low'));
+  html+=`<div style="margin:4px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">● blå = känd butik · grön = AI · gul = osäker. Tryck på en butik för att se raderna. Dina val sparas och används automatiskt nästa gång.</div>`;
+  body.innerHTML=html;
+  bar.innerHTML=`<button class="btn-p" onclick="saveImport()">Spara ${nTx} transaktioner</button>`;
+}
+
+function saveImport(){
+  const on=_imp.groups.filter(g=>g.on);
+  const impId='imp'+Date.now();
+  let txs=getTxs();
+  // Ta bort manuella transaktioner som ersätts
+  let removed=0;
+  Object.entries(_imp.overlap||{}).forEach(([acc,o])=>{
+    if(!_imp.replaceManual[acc])return;
+    const ids=new Set(o.ids);const before=txs.length;txs=txs.filter(t=>!ids.has(t.id));removed+=before-txs.length;
+  });
+  let n=0;const base=Date.now();
+  on.forEach(g=>{
+    g.rows.forEach(r=>{
+      // Utgifter/sparande lagras som positiva belopp; retur = negativ utgift
+      const amount=g.type==='income'?r.amount:g.type==='transfer'?r.amount:-r.amount;
+      txs.push({id:base+(n++),type:g.type,amount,desc:r.desc,cat:g.cat,date:r.date,month:periodForDate(r.date),
+        account:r.account,source:'import',importId:impId,hash:r.hash,mkey:g.mkey});
+    });
+    setRule(g.mkey,g.type,g.cat);
+  });
+  svTxs(txs);
+  // Senaste saldo per konto (hjälp vid förmögenhetssnapshot)
+  if(_imp.balances?.length){
+    const accs=getAccounts();
+    _imp.balances.forEach(b=>{const a=accs.find(x=>x.id===b.account);if(a&&(!a.balance||a.balance.date<=b.date))a.balance={value:b.value,date:b.date}});
+    svAccounts(accs);
+  }
+  const imps=getImports();
+  imps.push({id:impId,date:new Date().toISOString(),count:n,files:_imp.files.filter(f=>f.status==='ready').map(f=>f.name),removed});
+  svImports(imps.slice(-50));
+  _imp.step='done';
+  document.getElementById('import-screen').classList.remove('open');
+  _imp=null;
+  // Visa perioden med flest nya transaktioner
+  const perMonth={};txs.filter(t=>t.importId===impId).forEach(t=>perMonth[t.month]=(perMonth[t.month]||0)+1);
+  const latest=Object.entries(perMonth).sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0]))[0]?.[0];
+  if(latest){state.month=latest;if(state.screen!=='budget')showScreen('budget');else render()}
+  toast(`${n} transaktioner importerade ✓${removed?` · ${removed} manuella ersatta`:''}`);
+}
+
+function undoImport(id){
+  const imp=getImports().find(i=>i.id===id);if(!imp)return;
+  const n=getTxs().filter(t=>t.importId===id).length;
+  if(!confirm(`Ångra importen från ${imp.date.slice(0,10)}? ${n} transaktioner tas bort.`))return;
+  svTxs(getTxs().filter(t=>t.importId!==id));
+  svImports(getImports().filter(i=>i.id!==id));
+  renderSettings();render();toast('Importen ångrad');
+}
+
+// ── Inställningar: konton, importer, regler ─
+function renderAccountSettings(){
+  const accs=getAccounts();
+  const txs=getTxs();
+  document.getElementById('acc-list').innerHTML=accs.map((a,i)=>{
+    const n=txs.filter(t=>t.account===a.id).length;
+    return`<div class="s-row">
+      <div style="min-width:0"><div class="s-row-lbl">${esc(a.name)} <span class="acc-tag">${a.kind==='card'?'kort':'bank'}</span></div>
+        <div class="s-row-sub">${n} transaktioner${a.balance?` · saldo ${fmt(a.balance.value)} kr (${a.balance.date})`:''}</div></div>
+      <button class="tag-rm" onclick="removeAccount(${i})">×</button>
+    </div>`}).join('');
+  const imps=getImports().slice().reverse();
+  document.getElementById('imp-hist').innerHTML=imps.length?imps.slice(0,15).map(i=>`<div class="s-row">
+      <div style="min-width:0"><div class="s-row-lbl">${i.date.slice(0,10)} · ${i.count} st</div>
+        <div class="s-row-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((i.files||[]).join(', '))}</div></div>
+      <button onclick="undoImport('${i.id}')" style="background:var(--red2);border:1px solid rgba(255,105,97,.3);color:var(--red);border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">Ångra</button>
+    </div>`).join(''):`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga importer ännu.</div>`;
+  const rules=Object.entries(getRules()).sort((a,b)=>b[1].t-a[1].t);
+  document.getElementById('rule-list').innerHTML=rules.length?
+    `<div style="max-height:320px;overflow-y:auto">${rules.map(([k,v])=>`<div class="s-row" style="padding:10px 16px">
+      <div style="min-width:0"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(k.split('|')[0])} <span style="color:var(--sub2);font-size:11px">${k.endsWith('|in')?'in':'ut'}</span></div>
+        <div class="s-row-sub">${TYPE_LABEL[v.type]||''} · ${esc(v.cat)}</div></div>
+      <button class="tag-rm" onclick="removeRule(${jsArg(k)})">×</button></div>`).join('')}</div>
+     <div class="s-row"><div class="s-row-sub">${rules.length} butiker</div><button onclick="clearRules()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer">Rensa alla</button></div>`
+    :`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Fylls på automatiskt när du importerar.</div>`;
+}
+function addAccount(){
+  const inp=document.getElementById('new-acc-name');const name=inp.value.trim();if(!name)return;
+  const accs=getAccounts();
+  if(accs.some(a=>a.name.toLowerCase()===name.toLowerCase())){toast('Kontot finns redan','warn');return}
+  accs.push({id:'acc_'+Date.now().toString(36),name,kind:document.getElementById('new-acc-kind').value});
+  svAccounts(accs);inp.value='';renderAccountSettings();
+}
+function removeAccount(i){
+  const accs=getAccounts();if(accs.length<=1){toast('Minst ett konto behövs','warn');return}
+  const a=accs[i];const n=getTxs().filter(t=>t.account===a.id).length;
+  if(!confirm(`Ta bort kontot ${a.name}?${n?` Dess ${n} transaktioner behålls.`:''}`))return;
+  accs.splice(i,1);svAccounts(accs);renderAccountSettings();
+}
+function removeRule(k){const r=getRules();delete r[k];sv('merchant_rules',r);renderAccountSettings()}
+function clearRules(){if(!confirm('Glöm all inlärd kategorisering?'))return;sv('merchant_rules',{});renderAccountSettings()}
+
 let aiHistory=ld('ai_history',[]);
 function persistAiHistory(){sv('ai_history',aiHistory.slice(-80))}
 
@@ -2908,16 +3754,20 @@ function buildCtx(){
   const memSection=mem.length?`\nVAD JAG VET OM ANVÄNDAREN:\n${mem.map((m,i)=>`${i+1}. ${m}`).join('\n')}`:'';
 
   // Beskrivningar från "Övrigt"-kategorin — så AI kan svara på "när köpte jag X senast"
-  const describedTxs=txs
-    .filter(t=>t.cat==='Övrigt'&&t.desc&&t.desc.trim())
-    .sort((a,b)=>b.date.localeCompare(a.date))
-    .map(t=>{
-      const payLbl=t.pay==='amex'?' (AMEX)':'';
-      return `${t.date}: "${t.desc}" — ${Math.round(t.amount)} kr${payLbl}`;
-    });
-  const describedSection=describedTxs.length
-    ? `\n\nÖVRIGT-TRANSAKTIONER MED BESKRIVNING (nyast först — använd för frågor som "när köpte jag X senast", "hur ofta", "vad kostade Y"):\n${describedTxs.slice(0,200).join('\n')}`
-    : '';
+  // Största butikerna senaste 12 månaderna + senaste transaktionerna (för "när köpte jag X senast" m.m.)
+  const yearAgo=new Date();yearAgo.setFullYear(yearAgo.getFullYear()-1);
+  const ya=yearAgo.toISOString().slice(0,10);
+  const byMerchant={};
+  txs.filter(t=>t.type==='expense'&&t.date>=ya).forEach(t=>{
+    const k=t.mkey?t.mkey.split('|')[0]:merchantBase(t.desc||t.cat);
+    const m=byMerchant[k]||(byMerchant[k]={name:t.desc||t.cat,cat:t.cat,sum:0,n:0});m.sum+=t.amount;m.n++;
+  });
+  const topMerchants=Object.values(byMerchant).sort((a,b)=>b.sum-a.sum).slice(0,40)
+    .map(m=>`${m.name} (${m.cat}): ${Math.round(m.sum)} kr, ${m.n} st`);
+  const recent=[...txs].filter(t=>t.type!=='transfer').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,150)
+    .map(t=>`${t.date} ${TYPE_LABEL[t.type]||''} ${t.cat}: "${t.desc||''}" ${Math.round(t.amount)} kr [${accountName(t.account)}]`);
+  const describedSection=(topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'')+
+    (recent.length?`\n\nSENASTE TRANSAKTIONER (nyast först, överföringar exkluderade):\n${recent.join('\n')}`:'');
 
   return`Du är en personlig ekonomicoach. Du körs via Anthropics API; användaren kan byta modell (Opus, Sonnet, Fable) mellan meddelanden. Om användaren frågar vilken modell du är, svara Claude ${getAiModel().name}. Svara alltid på svenska. Var konkret och visuell.
 
@@ -3206,12 +4056,13 @@ function initSwipeToClose(el,closeFn){
   },{passive:true});
 }
 setTimeout(()=>{
-  ['settings-screen','month-detail','asset-detail'].forEach(id=>{
+  ['settings-screen','month-detail','asset-detail','import-screen'].forEach(id=>{
     const el=document.getElementById(id);
     const fns={
       'settings-screen':closeSettings,
       'month-detail':closeMonthDetail,
-      'asset-detail':closeAssetDetail
+      'asset-detail':closeAssetDetail,
+      'import-screen':closeImport
     };
     if(el&&fns[id])initSwipeToClose(el,fns[id]);
   });
