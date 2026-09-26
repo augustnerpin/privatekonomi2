@@ -1149,7 +1149,10 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
 // ═══════════════════════════════════════════
 // DATA LAYER
 // ═══════════════════════════════════════════
-const DEF_EXP=['Boende (Lån)','Boende (Avgift)','Boende (Resterande)','Mat (Butik)','Mat (Ute)','Lunch (Restaurang)','Transport/Parkering','Gym','Fest','Kläder','Resa','Bjuda andra/presenter','Övrigt','Skuld föregående'];
+const DEF_EXP=['Boende (Lån)','Boende (Avgift)','Boende (Resterande)','Mat (Butik)','Mat (Ute)','Lunch (Restaurang)','Transport/Parkering','Gym','Fest','Kläder','Resa','Bjuda andra/presenter','Prenumerationer','Swish (privat)','Övrigt','Skuld föregående'];
+// Swish till/från privatpersoner (bara ett mobilnummer i texten) bokförs netto här:
+// betalar du 300 kr och får tillbaka 200 kr för en delad nota blir kostnaden 100 kr.
+const SWISH_CAT='Swish (privat)';
 const DEF_SAV=['Avanza','SEB','Annat'];
 const DEF_INC=['Lön','Spelvinst/förlust','Övrigt'];
 
@@ -1200,7 +1203,8 @@ function getAccounts(){const a=ld('accounts',null);return Array.isArray(a)&&a.le
 function svAccounts(v){sv('accounts',v)}
 function accountName(id){return getAccounts().find(a=>a.id===id)?.name||id||'—'}
 // Överföringar (kortfaktura, egna konton) räknas varken som utgift eller inkomst
-const DEF_TRF=['Kreditkortsbetalning','Egen överföring'];
+const DEF_TRF=['Kreditkortsbetalning','Egen överföring','Bostad, lån & tillgångar'];
+const ASSET_TRF='Bostad, lån & tillgångar'; // bostadsköp, lånebelopp, handpenning — påverkar förmögenheten, inte konsumtionen
 const getTrfCats=()=>ld('cats_trf',DEF_TRF);
 function catsForType(t){return t==='expense'?getExpCats():t==='income'?getIncCats():t==='savings'?getSavCats():getTrfCats()}
 const TYPE_LABEL={expense:'Utgift',income:'Inkomst',savings:'Sparande',transfer:'Överföring'};
@@ -1209,6 +1213,11 @@ const TYPE_LABEL={expense:'Utgift',income:'Inkomst',savings:'Sparande',transfer:
   const txs=getTxs();let ch=false;
   txs.forEach(t=>{if(!t.account){t.account=t.pay==='amex'?'amex':'lonekonto';delete t.pay;ch=true}});
   if(ch)localStorage.setItem('txs',JSON.stringify(txs));
+  // Importen behöver Swish-kategorin även om utgiftskategorierna redan anpassats
+  const ec=ld('cats_exp',null);
+  if(Array.isArray(ec)&&!ec.includes(SWISH_CAT)){ec.splice(Math.max(ec.indexOf('Övrigt'),0),0,SWISH_CAT);localStorage.setItem('cats_exp',JSON.stringify(ec))}
+  const tc=ld('cats_trf',null);
+  if(Array.isArray(tc)&&!tc.includes(ASSET_TRF)){tc.push(ASSET_TRF);localStorage.setItem('cats_trf',JSON.stringify(tc))}
 })();
 
 // Merge grouped categories into group name for display purposes only
@@ -2942,8 +2951,20 @@ function setRule(mkey,type,cat){
 
 // Butiksnyckel: normaliserad beskrivning + riktning (in/ut), så att "ICA NARA 1234 SOLNA 25-09-12" och
 // "ICA NARA 5678 SOLNA" blir samma butik.
+// Texter som bara är ett nummer (vanligt i SEB-utdrag): mobilnummer = Swish till/från privatperson,
+// 123-nummer = Swish till företag, övriga långa nummer = bank-/kontonummer (ofta egna konton).
+function descNumber(desc){const s=String(desc||'').trim();return/^\+?\d[\d\s-]{5,}$/.test(s)?s.replace(/\D/g,''):null}
+function numberKind(n){
+  if(!n)return null;
+  if(/^467\d{8}$/.test(n)||/^07\d{8}$/.test(n))return'mobil';
+  if(/^123\d{7}$/.test(n))return'swishforetag';
+  return'konto';
+}
 function merchantBase(desc){
+  const num=descNumber(desc);
+  if(num)return'#'+num; // behåll numret — annars blir alla Swish-mottagare och konton "samma butik"
   return String(desc||'').toLowerCase()
+    .replace(/^k\*/,'') // SEB: "K*BUTIK" = kortköp
     .replace(/\d{2,4}[-./]\d{1,2}([-./]\d{1,4})?/g,' ')
     .replace(/\b(kortköp|kortk[oö]p|reservation|reserverat|prel|preliminär)\b/g,' ')
     .replace(/\d+/g,' ')
@@ -3089,8 +3110,11 @@ function detectTable(rawRows){
     const avgLen=i=>sample.reduce((s,r)=>s+String(r[i]??'').length,0)/(sample.length||1);
     map.desc=textCols.sort((a,b)=>avgLen(b)-avgLen(a))[0]??-1;
   }
-  // Datumordning (dd/mm eller mm/dd) utifrån värdena
-  let order='dmy';
+  // Extra beskrivning (AMEX "Utökade specifikationer": flygsträcka, valuta m.m.) — hjälper AI:n
+  const ex=cols.find(i=>/utökade specifikationer|extended details/i.test(H(i)));map.extra=ex??-1;
+  // Datumordning (dd/mm eller mm/dd) utifrån värdena. AMEX svenska export använder mm/dd/åååå.
+  const amexLike=/visas på ditt kontoutdrag|utökade specifikationer|kortmedlem/i.test(header.join(' '));
+  let order=amexLike?'mdy':'dmy';
   if(map.date>=0){
     for(const r of data){const m=String(r[map.date]).match(/^(\d{1,2})[-./](\d{1,2})[-./]\d{2,4}/);
       if(m){if(+m[1]>12){order='dmy';break}if(+m[2]>12){order='mdy';break}}}
@@ -3109,16 +3133,24 @@ function tableToRows(t,map,invert){
       if(o===null&&i===null)return;amt=(i?Math.abs(i):0)-(o?Math.abs(o):0)}
     if(amt===null||amt===0)return;
     if(invert)amt=-amt;
-    const desc=String(r[map.desc]??'').replace(/\s+/g,' ').trim();
+    let desc=String(r[map.desc]??'').replace(/\s+/g,' ').trim();
+    let txDate=date;
+    // SEB-kortköp: "ICA KVANTUM /24-09-24" — datumet i texten är köpdagen (bokföringen kommer senare)
+    const m=desc.match(/^(.*?)\s*\/(\d{2})-(\d{2})-(\d{2})$/);
+    if(m){
+      const d=ymd(2000+ +m[2],+m[3],+m[4]);
+      if(d&&Math.abs(new Date(d)-new Date(date))<45*864e5){txDate=d;desc=m[1].trim()}
+    }
     const bal=map.balance>=0?parseAmount(r[map.balance]):null;
-    out.push({date,desc,amount:Math.round(amt*100)/100,balance:bal});
+    const extra=map.extra>=0?String(r[map.extra]??'').replace(/\s+/g,' ').trim().slice(0,120):'';
+    out.push({date:txDate,desc,amount:Math.round(amt*100)/100,balance:bal,bookDate:date,...(extra?{extra}:{})});
   });
   return out;
 }
 
 // ── Importstatus ───────────────────────────
 let _imp=null;
-function newImpState(){return{step:'files',files:[],groups:[],busy:null,replaceManual:{}}}
+function newImpState(){return{step:'files',files:[],groups:[],busy:null,replaceManual:{},from:ld('import_from','')}}
 function openImport(){
   if(!_imp||_imp.step==='done')_imp=newImpState();
   document.getElementById('import-screen').classList.add('open');
@@ -3135,7 +3167,7 @@ function closeImport(){
 function guessAccount(name,text){
   const accs=getAccounts();
   const hay=(name+' '+text).toLowerCase();
-  if(/amex|american express|kortmedlem|card ?member/.test(hay)){const c=accs.find(a=>a.kind==='card'&&/amex|american/i.test(a.name))||accs.find(a=>a.kind==='card');if(c)return c.id}
+  if(/amex|american express|kortmedlem|card ?member|visas på ditt kontoutdrag|utökade specifikationer/.test(hay)){const c=accs.find(a=>a.kind==='card'&&/amex|american/i.test(a.name))||accs.find(a=>a.kind==='card');if(c)return c.id}
   for(const a of accs)if(a.name.length>2&&hay.includes(a.name.toLowerCase()))return a.id;
   return(accs.find(a=>a.kind==='bank')||accs[0]).id;
 }
@@ -3262,6 +3294,20 @@ function renderImpFiles(body,bar,sub){
     });
     html+=`</div>`;
   }
+  if(_imp.files.some(f=>f.status==='ready')){
+    // Tidigaste datum i filerna, för att visa vad "alla" betyder
+    const allDates=_imp.files.filter(f=>f.kind==='table'&&f.status==='ready').flatMap(f=>tableToRows(f.table,f.map,f.invert).map(r=>r.date)).sort();
+    const lastImp=getTxs().filter(t=>t.source==='import').map(t=>t.date).sort().pop();
+    html+=`<div class="card"><div class="card-inner" style="padding:14px 16px">
+      <div class="field" style="margin-bottom:10px"><label>Importera från datum</label>
+        <input type="date" value="${esc(_imp.from||'')}" onchange="_imp.from=this.value;sv('import_from',this.value);renderImport()"></div>
+      <div style="font-size:11px;color:var(--sub2);line-height:1.5;margin:-4px 0 12px">
+        ${allDates.length?`Filerna går från ${allDates[0]}. `:''}${_imp.from?`Äldre rader hoppas över.`:'Tomt = allt i filerna.'}${lastImp?` Senast importerade: ${lastImp}.`:''}</div>
+      <div class="field" style="margin-bottom:0"><label>Ditt namn som det står på utdragen</label>
+        <input type="text" value="${esc(ld('owner_name',''))}" placeholder="t.ex. AUGUST NERPIN" autocapitalize="characters" onchange="sv('owner_name',this.value.trim())"></div>
+      <div style="font-size:11px;color:var(--sub2);line-height:1.5;margin-top:6px">Överföringar till och från ditt eget namn räknas som flytt mellan egna konton — inte som inkomst eller utgift.</div>
+    </div></div>`;
+  }
   const key=getApiKey();
   html+=`<div style="margin:6px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">
       ${key?`Nya butiker kategoriseras av Claude ${esc(getAiModel().name)}. Butiker du redan kategoriserat känns igen direkt.`:'⚠️ Utan API-nyckel kategoriseras bara butiker appen redan lärt sig — resten hamnar i Övrigt. PDF och bilder kräver API-nyckel.'}
@@ -3343,38 +3389,89 @@ async function categorizeWithAI(groups){
   const rules=getRules();
   const examples=Object.entries(rules).sort((a,b)=>b[1].t-a[1].t).slice(0,40).map(([k,v])=>`${k.split('|')[0]} → ${TYPE_LABEL[v.type]}: ${v.cat}`).join('\n');
   const mem=getAiMemory();
-  const system=`Du kategoriserar bank- och korttransaktioner för en svensk privatperson. Varje rad är en butik/mottagare (kan förekomma flera gånger).
+  const owner=ld('owner_name','');
+  const system=`Du kategoriserar bank- och korttransaktioner för en svensk privatperson. Varje rad är en butik/mottagare (kan förekomma flera gånger). Målet är en korrekt bild av vad personen faktiskt KONSUMERAR, vad som SPARAS och vad som bara är pengar som flyttas.
 Välj type och cat. cat MÅSTE vara exakt en av kategorierna för vald type:
-- expense (utgift): ${getExpCats().join(' | ')}
+- expense (utgift = konsumtion): ${getExpCats().join(' | ')}
 - income (inkomst): ${getIncCats().join(' | ')}
-- savings (sparande — pengar till egna spar-/investeringskonton): ${getSavCats().join(' | ')}
-- transfer (räknas inte alls — ${getTrfCats().join(' | ')}): betalning av kreditkortsfakturan från bankkontot (t.ex. "American Express", "AMEX"), "Betalning mottagen/Inbetalning" på kortet, flyttar mellan egna konton.
-Riktlinjer:
-- "ut" = pengar ut/köp, "in" = pengar in.
-- Returer/återbetalningar från butiker ("in" från en butik) → expense med samma kategori som ett köp där.
-- Lön från arbetsgivare → income "Lön". Swish in från privatpersoner → income "Övrigt" (conf low) om oklart.
-- Överföring till Avanza/Nordnet/ISK/fonder/sparkonto → savings (välj närmaste sparkategori).
-- conf "low" när du är osäker, annars "high".${mem.length?`\nVad du vet om användaren:\n${mem.slice(-20).join('\n')}`:''}${examples?`\nAnvändarens tidigare val (följ samma stil):\n${examples}`:''}`;
+- savings (sparande — pengar till/från egna spar- och investeringskonton): ${getSavCats().join(' | ')}
+- transfer (räknas inte alls — ${getTrfCats().join(' | ')}): pengar som bara flyttas.
+
+Kolumner: riktning "ut" = pengar lämnar kontot / köp på kort, "in" = pengar in. "typ" beskriver texten: mobil = Swish-mobilnummer, swishföretag = 123-nummer, kontonummer = bank-/kontonummer.
+
+TRANSFER (inte kostnad):
+- Betalning av kreditkortsfakturan från bankkontot ("AMERICAN EXPRESS", "AMEX", "EUROCARD" m.fl.) → "Kreditkortsbetalning". På kortkontot: "BETALNING MOTTAGEN"/inbetalning → "Kreditkortsbetalning". Köpen syns redan på kortet — att räkna fakturan vore dubbelräkning.
+- Överföringar till/från användarens eget namn${owner?` ("${owner}" — ofta avkortat, t.ex. de första 12 tecknen)`:''} → "Egen överföring".
+- Kontonummer utan annan text (typ kontonummer): oftast egna konton. Välj "Egen överföring" med conf low — användaren avgör om det är sparande.
+- Stora engångsbelopp kring köp/försäljning av bostad, bil eller andra tillgångar och lån som betalas ut/löses (SLUTLIKVID, HANDPENNING, lånenummer/"K"+siffror med mycket stora belopp, mäklare, Lantmäteriet) → "${ASSET_TRF}" (påverkar förmögenheten, inte konsumtionen), conf low.
+SAVINGS (sparande, inte kostnad):
+- Till Avanza, Nordnet, ISK, fonder, aktier, pension, sparkonto → sparande (närmaste sparkategori, t.ex. "Avanza"). Pengar IN från Avanza m.fl. är också savings (uttag ur sparandet).
+INCOME:
+- Lön → "Lön". CSN-utbetalning, skatteåterbäring, ränta, utdelning → "Övrigt" (eller bättre match).
+- Spel/betting/casino (t.ex. casino-, betting-, poker-, trav-sajter och deras betalombud) → "Spelvinst/förlust" i BÅDA riktningar om kategorin finns (netto = vinst/förlust).
+EXPENSE:
+- Returer/återbetalningar ("in" från en butik, "REFUND", Klarna-retur) → expense i samma kategori som köpet (minskar kostnaden).
+- Hyra/avgift till bostadsrättsförening (BRF, HSB, Riksbyggen) → "Boende (Avgift)"; bolån/"LÅN" → "Boende (Lån)"; el, bredband, hemförsäkring → "Boende (Resterande)".
+- Mataffärer (ICA, Willys, Coop, Hemköp, Lidl, WH/Wh-butiker) → "Mat (Butik)"; restauranger/snabbmat/caféer → "Mat (Ute)" (lunchställen vardagar → "Lunch (Restaurang)" om kategorin finns); barer/nattklubbar/Systembolaget → "Fest".
+- Streaming, appar, mjukvaruprenumerationer (Spotify, Netflix, Apple.com/bill, Claude/Anthropic, Patreon) → "Prenumerationer" om kategorin finns.
+- Resor, flyg, hotell, utlandsköp på semester → "Resa". Taxi/Uber/Bolt/SL/parkering/drivmedel → "Transport/Parkering".
+- Kontantuttag (Bankomat) → expense "Övrigt" med conf low.
+- Swish till företag (swishföretag) utan känt namn → "Övrigt" conf low.
+conf "low" när du är osäker, annars "high". Hitta aldrig på kategorier.${mem.length?`\nVad du vet om användaren:\n${mem.slice(-20).join('\n')}`:''}${examples?`\nAnvändarens tidigare val (följ samma stil):\n${examples}`:''}`;
   const schema={type:'object',additionalProperties:false,required:['items'],properties:{items:{type:'array',items:{
     type:'object',additionalProperties:false,required:['k','type','cat','conf'],
     properties:{k:{type:'integer'},type:{type:'string',enum:types},cat:{type:'string'},conf:{type:'string',enum:['high','low']}}}}}};
-  const BATCH=120;
-  for(let s=0;s<groups.length;s+=BATCH){
+  const BATCH=100,PARALLEL=3;
+  const kindLbl={mobil:'mobil',swishforetag:'swishföretag',konto:'kontonummer'};
+  const batches=[];
+  for(let s=0;s<groups.length;s+=BATCH)batches.push(s);
+  let done=0;
+  const runBatch=async s=>{
     const part=groups.slice(s,s+BATCH);
-    setBusySub(`Butik ${s+1}–${s+part.length} av ${groups.length}`);
-    const lines=part.map((g,j)=>`${s+j}|${g.dir}|${g.accKind==='card'?'kort':'bank'}|${g.rows.length}st|${fmt(Math.abs(g.total))} kr|${g.rows[0].desc}`).join('\n');
-    const r=await callClaude({system,messages:[{role:'user',content:`k|riktning|konto|antal|summa|beskrivning\n${lines}`}],effort:'low',max_tokens:16000,schema});
+    const lines=part.map((g,j)=>{
+      const r0=g.rows[0];
+      const kind=kindLbl[numberKind(descNumber(r0.desc))]||'text';
+      const amts=g.rows.map(r=>Math.abs(r.amount)).sort((a,b)=>a-b);
+      const typical=g.rows.length>1?` (median ${fmt(amts[Math.floor(amts.length/2)])} kr)`:'';
+      const extra=g.rows.find(r=>r.extra)?.extra;
+      return`${s+j}|${g.dir}|${g.accKind==='card'?'kort':'bank'}|${kind}|${g.rows.length}st|${fmt(Math.abs(g.total))} kr${typical}|${r0.desc}${extra?` [${extra}]`:''}`;
+    }).join('\n');
+    const r=await callClaude({system,messages:[{role:'user',content:`k|riktning|konto|typ|antal|summa|beskrivning\n${lines}`}],effort:'low',max_tokens:16000,schema});
     const items=JSON.parse(r.text).items||[];
     items.forEach(it=>{
       const g=groups[it.k];if(!g||!part.includes(g))return;
       if(types.includes(it.type)&&catsForType(it.type).includes(it.cat)){g.type=it.type;g.cat=it.cat;g.conf=it.conf;g.src='ai'}
     });
-  }
+    done+=part.length;
+    setBusySub(`${done} av ${groups.length} butiker klara`);
+  };
+  // Några batcher parallellt så att stora importer (flera års historik) går snabbare
+  setBusySub(`0 av ${groups.length} butiker klara`);
+  for(let i=0;i<batches.length;i+=PARALLEL)await Promise.all(batches.slice(i,i+PARALLEL).map(runBatch));
+}
+
+// Säkra regler som inte behöver AI (körs efter inlärda regler, före AI)
+function autoCat(g){
+  const desc=g.rows[0].desc||'';
+  const num=descNumber(desc),kind=numberKind(num);
+  const set=(type,cat)=>{if(catsForType(type).includes(cat)){g.type=type;g.cat=cat;g.conf='high';g.src='auto';return true}return false};
+  const owner=ld('owner_name','').toUpperCase().replace(/\s+/g,' ').trim();
+  const D=desc.toUpperCase().replace(/\s+/g,' ');
+  // Eget namn (banker kortar ofta namnet till ~12 tecken)
+  if(owner.length>=5&&(D.startsWith(owner.slice(0,Math.min(owner.length,12)))||owner.startsWith(D)&&D.length>=8))return set('transfer','Egen överföring')||set('transfer',getTrfCats()[0]);
+  // Kreditkortsfakturan
+  if(g.accKind==='bank'&&g.dir==='ut'&&/AMERICAN EXPRESS|\bAMEX\b|EUROCARD|MASTERCARD FAKTURA/.test(D))return set('transfer','Kreditkortsbetalning');
+  if(g.accKind==='card'&&g.dir==='in'&&/BETALNING MOTTAGEN|PAYMENT RECEIVED|INBETALNING|TACK/.test(D))return set('transfer','Kreditkortsbetalning');
+  // Swish till/från privatperson (bara mobilnummer) → nettas i Swish-kategorin
+  if(kind==='mobil')return set('expense',SWISH_CAT);
+  return false;
 }
 
 function fallbackCat(g){
   // Utan AI: rimlig gissning så att inget blir fel typ
   if(/american express|amex|kortbetalning|betalning mottagen|inbetalning/i.test(g.rows[0].desc)){g.type='transfer';g.cat=getTrfCats()[0]}
+  else if(numberKind(descNumber(g.rows[0].desc))==='konto'){g.type='transfer';g.cat=getTrfCats().includes('Egen överföring')?'Egen överföring':getTrfCats()[0]}
+  else if(/avanza|nordnet/i.test(g.rows[0].desc)&&getSavCats().length){g.type='savings';g.cat=getSavCats().find(c=>/avanza/i.test(c))||getSavCats()[0]}
   else if(g.dir==='in'){g.type='income';g.cat=getIncCats().includes('Övrigt')?'Övrigt':getIncCats()[0]}
   else{g.type='expense';g.cat=getExpCats().includes('Övrigt')?'Övrigt':getExpCats()[0]}
   g.conf='low';g.src='guess';
@@ -3394,7 +3491,7 @@ async function processImport(){
         // Kom ihåg kolumnval för samma bankformat
         const maps=ld('import_maps',{});maps[f.table.header.join('|')]={map:f.map,invert:f.invert,account:f.account};sv('import_maps',maps);
       }
-      rows.forEach(r=>all.push({...r,account:f.account,file:f.name}));
+      rows.forEach(r=>{if(!_imp.from||r.date>=_imp.from)all.push({...r,account:f.account,file:f.name})});
     }
     // 2. Dubbletter (mot tidigare importer och inom filerna)
     setBusy('Letar dubbletter…');
@@ -3415,6 +3512,7 @@ async function processImport(){
     });
     const groups=Object.values(gmap);
     groups.forEach(g=>{const ru=rules[g.mkey];if(ru&&catsForType(ru.type).includes(ru.cat)){g.type=ru.type;g.cat=ru.cat;g.conf='high';g.src='rule'}});
+    groups.filter(g=>!g.src).forEach(autoCat);
     const unknown=groups.filter(g=>!g.src);
     // 4. AI för okända butiker
     let aiErr=null;
@@ -3433,9 +3531,14 @@ async function processImport(){
     });
     _imp.groups=groups.sort((a,b)=>(a.conf==='low'?0:1)-(b.conf==='low'?0:1)||Math.abs(b.total)-Math.abs(a.total));
     _imp.dups=dups;_imp.total=all.length;_imp.overlap=overlap;_imp.aiErr=aiErr;
+    // Slutsaldo: filen kan vara sorterad nyast först (SEB) eller äldst först — flera rader samma dag
+    // gör att datumsortering inte räcker, så använd filens egen ordning.
     _imp.balances=files.filter(f=>f.kind==='table').map(f=>{
-      const rows=tableToRows(f.table,f.map,f.invert).filter(r=>r.balance!==null).sort((a,b)=>a.date.localeCompare(b.date));
-      return rows.length?{account:f.account,value:rows[rows.length-1].balance,date:rows[rows.length-1].date}:null;
+      const rows=tableToRows(f.table,f.map,f.invert).filter(r=>r.balance!==null);
+      if(!rows.length)return null;
+      const newestFirst=rows[0].bookDate>=rows[rows.length-1].bookDate;
+      const r=newestFirst?rows[0]:rows[rows.length-1];
+      return{account:f.account,value:r.balance,date:r.bookDate};
     }).filter(Boolean);
     _imp.step='review';_imp.busy=null;
     renderImport();
@@ -3475,7 +3578,7 @@ function renderImpReview(body,bar,sub){
       <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green)">${fmt(inc)}</div></div>
     </div>
     <div style="margin:0 20px 12px;font-size:12px;color:var(--sub);line-height:1.6">
-      ${G.length} butiker · ${bySrc('rule')} kända sedan tidigare · ${bySrc('ai')} kategoriserade av AI${bySrc('guess')?` · ${bySrc('guess')} gissade`:''}
+      ${G.length} butiker · ${bySrc('rule')} kända sedan tidigare · ${bySrc('auto')} via säkra regler (Swish, egna överföringar, kortfaktura) ·${bySrc('ai')} kategoriserade av AI${bySrc('guess')?` · ${bySrc('guess')} gissade`:''}
       ${_imp.dups?`<br>${_imp.dups} transaktioner fanns redan och hoppas över.`:''}
       ${sav?`<br>Sparande: ${fmt(sav)} kr`:''}
       ${_imp.aiErr?`<br><span style="color:var(--red)">AI-fel: ${esc(_imp.aiErr)}</span>`:''}
@@ -3496,16 +3599,21 @@ function renderImpReview(body,bar,sub){
     bar.innerHTML=`<button class="btn-s" onclick="_imp.step='done';closeImport()">Stäng</button>`;
     return;
   }
-  const section=(title,list)=>{
+  const LIMIT=120;
+  const section=(title,list,key)=>{
     if(!list.length)return'';
+    const showAll=_imp.showAll?.[key];
+    const shown=showAll?list:list.slice(0,LIMIT);
     let h=`<div class="sec"><span class="sec-t">${title}</span><span class="sec-sub">${list.length}</span></div><div class="txl">`;
-    list.forEach(g=>{
+    shown.forEach(g=>{
       const idx=G.indexOf(g);
-      const dot=g.conf==='low'?'var(--amber)':g.src==='rule'?'var(--blue)':'var(--green)';
+      const dot=g.conf==='low'?'var(--amber)':(g.src==='rule'||g.src==='auto')?'var(--blue)':'var(--green)';
+      const kind=numberKind(descNumber(g.rows[0].desc));
+      const hint=kind==='konto'?'<div class="txi-meta" style="color:var(--amber)">Kontonummer — eget konto (överföring) eller sparande?</div>':kind==='mobil'?'<div class="txi-meta">Swish privatperson</div>':kind==='swishforetag'?'<div class="txi-meta">Swish företag</div>':'';
       h+=`<div class="imp-grp${g.on?'':' off'}">
-        <span class="imp-dot" style="background:${dot}" title="${g.src==='rule'?'Känd butik':g.conf==='low'?'Osäker':'AI'}"></span>
+        <span class="imp-dot" style="background:${dot}" title="${g.src==='rule'?'Känd butik':g.src==='auto'?'Regel':g.conf==='low'?'Osäker':'AI'}"></span>
         <div class="imp-grp-info" onclick="toggleImpRows(${idx})" style="cursor:pointer">
-          <div class="imp-grp-name">${esc(g.rows[0].desc||'(ingen text)')}</div>
+          <div class="imp-grp-name">${esc(g.rows[0].desc||'(ingen text)')}</div>${hint}
           <div class="txi-meta">${g.rows.length>1?g.rows.length+' st · ':''}${esc(accountName(g.rows[0].account))} · <span style="color:${g.total<0?'var(--text)':'var(--green)'}">${g.total<0?'−':'+'}${fmt(Math.abs(g.total))} kr</span></div>
         </div>
         ${catSelectHtml(g,idx)}
@@ -3513,11 +3621,13 @@ function renderImpReview(body,bar,sub){
       </div>`;
       if(g.open)h+=`<div class="imp-rows">${g.rows.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`${r.date} · ${r.amount<0?'−':'+'}${fmt(Math.abs(r.amount))} kr${g.rows.some(x=>x.desc!==r.desc)?' · '+esc(r.desc):''}`).join('<br>')}</div>`;
     });
-    return h+`</div>`;
+    h+=`</div>`;
+    if(list.length>shown.length)h+=`<div style="padding:0 16px 12px"><button class="btn-s" style="margin-top:0" onclick="_imp.showAll=_imp.showAll||{};_imp.showAll['${key}']=true;renderImport()">Visa alla ${list.length}</button></div>`;
+    return h;
   };
-  html+=section('Behöver granskas',G.filter(g=>g.conf==='low'));
-  html+=section('Kategoriserade',G.filter(g=>g.conf!=='low'));
-  html+=`<div style="margin:4px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">● blå = känd butik · grön = AI · gul = osäker. Tryck på en butik för att se raderna. Dina val sparas och används automatiskt nästa gång.</div>`;
+  html+=section('Behöver granskas',G.filter(g=>g.conf==='low'),'low');
+  html+=section('Kategoriserade',G.filter(g=>g.conf!=='low'),'high');
+  html+=`<div style="margin:4px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">● blå = känd butik eller säker regel · grön = AI · gul = osäker. Tryck på en butik för att se raderna. Dina val sparas och används automatiskt nästa gång.</div>`;
   body.innerHTML=html;
   bar.innerHTML=`<button class="btn-p" onclick="saveImport()">Spara ${nTx} transaktioner</button>`;
 }
