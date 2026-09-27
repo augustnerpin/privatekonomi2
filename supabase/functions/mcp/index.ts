@@ -21,7 +21,7 @@ type Obj = Record<string, any>;
 type Ctx = { db: Db; uid: string; scope: 'read' | 'write' };
 
 export const SERVER_NAME = 'privatekonomi';
-export const SERVER_VERSION = '1.0.0';
+export const SERVER_VERSION = '2.0.0';
 // Appens ikon (icons/icon-512.png, 96 px) — visas av AI-appar som stödjer serverikoner
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
 const ICONS = [
@@ -180,7 +180,8 @@ async function queryTxs(c: Ctx, f: Obj, s: Obj) {
 }
 function txView(r: Obj, s: Obj) {
   const t: Obj = { id: Number(r.id), date: r.tx_date, month: r.month, type: r.type, amount: Number(r.amount), category: r.category, description: r.description };
-  const n = digits(r.description); if (n && s.contact_names?.[n]) t.contact = s.contact_names[n];
+  const n = digits(r.description);
+  if (n) { t.number = n; if (s.contact_names?.[n]) t.contact = s.contact_names[n]; }
   if (r.account) t.account = accountName(s, r.account);
   if (r.source) t.source = r.source;
   const x = r.extra || {};
@@ -305,7 +306,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'list_transactions',
     title: 'Lista transaktioner',
-    description: 'Söker transaktioner med filter (löneperiod, datum, typ, kategori, konto, fritext, belopp). Returnerar antal, summa och raderna (nyast först som standard).',
+    description: 'Söker transaktioner med filter (löneperiod, datum, typ, kategori, konto, fritext, belopp). Returnerar antal, summa och raderna (nyast först som standard). Belopp: utgift/sparande positivt = pengar ut, inkomst positivt = in, överföring negativt = ut. Är beskrivningen ett Swish-/kontonummer finns numret i number och namnet (om det är satt med set_contact) i contact; fritextsökning träffar båda. Överföringar har from_account/to_account (och pair_id om de är länkade), uppdelade rader parent_id och split.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -353,7 +354,7 @@ export const TOOLS: Tool[] = [
       const g = new Map<string, Obj>();
       for (const t of txs) {
         const k = key(t); const o = g.get(k) || { key: k, sum: 0, count: 0 };
-        if (by === 'merchant' && !o.example) o.example = t.contact || t.description;
+        if (by === 'merchant' && !o.example) { o.example = t.contact || t.description; if (t.number) o.number = t.number; }
         o.sum += t.amount; o.count++; g.set(k, o);
       }
       const total = txs.reduce((x, t) => x + t.amount, 0);
@@ -1046,6 +1047,55 @@ export const TOOLS: Tool[] = [
     },
   },
 
+  // ── Namn på Swish-/kontonummer ─────────────────────────────────────
+  {
+    name: 'list_contacts',
+    title: 'Namn på Swish-mottagare',
+    description: 'Listar namn som satts på telefon-/kontonummer (Swish och överföringar där banken bara visar numret) med antal transaktioner och summa pengar ut/in. unnamed = de vanligaste numren som saknar namn — bra att fråga användaren om och sätta med set_contact.',
+    inputSchema: { type: 'object', properties: { include_unnamed: { type: 'boolean', default: true }, limit: { type: 'integer', minimum: 1, maximum: 200, default: 30, description: 'Max antal namnlösa nummer' } } },
+    annotations: RO,
+    async run(c, a) {
+      const s = await loadState(c, ['contact_names']);
+      const use = await numberUsage(c);
+      const stat = (n: string) => { const u = use[n] || { transactions: 0, out: 0, in: 0 }; return { transactions: u.transactions, total_out: round(u.out), total_in: round(u.in) }; };
+      const contacts = Object.entries(s.contact_names as Obj).map(([number, name]) => ({ number, name, kind: numberKind(number), ...stat(number) }))
+        .sort((x, y) => y.transactions - x.transactions || x.name.localeCompare(y.name, 'sv'));
+      const res: Obj = { count: contacts.length, contacts };
+      if (a.include_unnamed !== false) {
+        res.unnamed = Object.keys(use).filter((n) => !s.contact_names[n] && !numberVariants(n).some((v) => s.contact_names[v]))
+          .map((number) => ({ number, kind: numberKind(number), ...stat(number) }))
+          .sort((x, y) => y.transactions - x.transactions || y.total_out - x.total_out).slice(0, a.limit || 30);
+      }
+      return res;
+    },
+  },
+  {
+    name: 'set_contact',
+    title: 'Sätt namn på nummer',
+    description: 'Sätter ett namn på ett telefon- eller kontonummer, t.ex. phone: "070-123 45 67", name: "Anna". Namnet visas sedan i appen och i list_transactions/summarize_transactions (contact), och sökning på namnet träffar raderna. Mobilnummer matchas både som 07… och 467…. Tomt name tar bort namnet.',
+    write: true,
+    inputSchema: { type: 'object', required: ['phone', 'name'], properties: { phone: { type: 'string', description: 'Telefon- eller kontonummer, mellanslag och bindestreck går bra' }, name: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const n = String(a.phone).replace(/[\s()+-]/g, '');
+      if (!/^\d{6,}$/.test(n)) throw new UserError(`"${a.phone}" ser inte ut som ett telefon- eller kontonummer (minst 6 siffror)`);
+      const name = String(a.name).trim();
+      if (name.length > 60) throw new UserError('Namnet får vara högst 60 tecken');
+      const s = await loadState(c, ['contact_names']);
+      const use = await numberUsage(c);
+      const variants = numberVariants(n);
+      // Spara under det format som finns i transaktionerna (appen jämför exakt), annars som angivet
+      const keys = variants.filter((v) => use[v]);
+      if (!keys.length) keys.push(n);
+      const C = { ...s.contact_names };
+      for (const v of variants) delete C[v];
+      if (name) for (const k of keys) C[k] = name;
+      await saveState(c, 'contact_names', C);
+      const tx = keys.reduce((x, k) => x + (use[k]?.transactions || 0), 0);
+      return name ? { number: keys.join(', '), name, kind: numberKind(keys[0]), matched_transactions: tx } : { removed: variants.filter((v) => s.contact_names[v]), number: n };
+    },
+  },
+
   // ── Dela upp ────────────────────────────────────────────────────────
   {
     name: 'split_transaction',
@@ -1113,6 +1163,25 @@ export const TOOLS: Tool[] = [
 ];
 
 class UserError extends Error {}
+// Svenska mobilnummer förekommer både som 07… och 467…; Swish företag 123…; övrigt räknas som kontonummer
+const numberKind = (n: string) => (/^(467\d{8}|07\d{8})$/.test(n) ? 'mobil' : /^123\d{7}$/.test(n) ? 'swish_foretag' : 'konto');
+function numberVariants(n: string) {
+  const v = new Set([n]);
+  if (/^467\d{8}$/.test(n)) v.add('0' + n.slice(2));
+  if (/^07\d{8}$/.test(n)) v.add('46' + n.slice(1));
+  return [...v];
+}
+// Nummer i transaktionernas beskrivningar med antal och summor (pengar ut/in)
+async function numberUsage(c: Ctx) {
+  const rows = await fetchAll(() => uq(c, 'transactions', 'type,amount,description').eq('deleted', false).order('id', { ascending: true }));
+  const by: Obj = {};
+  for (const r of rows) {
+    const n = digits(r.description); if (!n) continue;
+    const o = (by[n] ||= { transactions: 0, out: 0, in: 0 }); const f = flow(r.type, Number(r.amount));
+    o.transactions++; if (f < 0) o.out -= f; else o.in += f;
+  }
+  return by;
+}
 // Antal transaktioner per typ och kategori
 async function categoryUsage(c: Ctx) {
   const rows = await fetchAll(() => uq(c, 'transactions', 'type,category').eq('deleted', false).order('id', { ascending: true }));
@@ -1261,7 +1330,10 @@ const INSTRUCTIONS = `Privatekonomi: användarens egna transaktioner, budget och
 - "month" är en löneperiod (lön runt den 25:e startar nästa månads period), inte kalendermånad.
 - Utgift/sparande: positivt belopp = pengar ut. Inkomst: positivt = in. Överföring (transfer) räknas inte som utgift; negativt = flyttat till eget konto.
 - Använd summarize_transactions och get_month_summary för analys i stället för att hämta alla rader.
-- Fråga användaren innan du ändrar eller tar bort något.`;
+- Förmögenhet: get_net_worth visar tillgångar, skulder (lån) och netto. Lån med netted_in_assets är redan avdragna i en tillgång.
+- Städning: get_settings visar orphan_categories; slå ihop med merge_categories. Namnlösa Swish-nummer finns i list_contacts. Överföringar mellan egna konton paras med match_transfers.
+- Förhandsgranska innan du ändrar: bulk_update_transactions (dry_run är standard), update_transaction/split_transaction/update_rule/merge_categories/rename_category med dry_run: true, match_transfers utan confirm. Visa resultatet och fråga användaren innan du sparar.
+- Ändringar av regler går att ångra: update_transaction och delete_rule returnerar undo.`;
 
 const rpcErr = (id: any, code: number, message: string) => ({ jsonrpc: '2.0', id, error: { code, message } });
 

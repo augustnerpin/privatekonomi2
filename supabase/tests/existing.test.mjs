@@ -62,3 +62,16 @@ test('skrivverktyg och isolering mellan användare', async () => {
   assert.equal((await w.call('set_net_worth', { period: '2026-08', values: { 'Aktier/fonder': 50000 } })).total, 150000);
   assert.match((await w.call('set_net_worth', { period: '2026-09', values: { bil: 1 } })).err, /Okänd/);
 });
+
+test('verktygslistan: läsnyckel ser bara läsverktyg, alla skrivverktyg nekas', async () => {
+  const w = await world();
+  const all = (await w.rpc(W, 'tools/list')).body.result.tools;
+  const read = (await w.rpc(R, 'tools/list')).body.result.tools.map((t) => t.name);
+  assert.equal(all.length, 27);
+  assert.deepEqual(read.sort(), ['get_account_balances', 'get_loans', 'get_month_summary', 'get_net_worth', 'get_settings', 'list_contacts', 'list_rules', 'list_transactions', 'summarize_transactions']);
+  for (const t of all) {
+    assert.ok(t.description.length > 60 && /[åäö]/.test(t.description), `${t.name} har en svensk beskrivning`);
+    assert.equal(t.inputSchema.type, 'object');
+    if (!read.includes(t.name)) assert.match((await w.call(t.name, {}, R)).err, /bara läsa/, t.name);
+  }
+});
