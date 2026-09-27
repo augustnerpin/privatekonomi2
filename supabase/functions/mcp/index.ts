@@ -920,6 +920,78 @@ export const TOOLS: Tool[] = [
     },
   },
 
+  // ── Inlärda regler ──────────────────────────────────────────────────
+  {
+    name: 'list_rules',
+    title: 'Inlärda regler',
+    description: 'Listar reglerna appen lärt sig för butiker/mottagare: vid import får rader med samma butiksnyckel automatiskt regelns typ och kategori. id = butiksnyckeln "mönster|riktning" (ut = pengar ut, in = pengar in), t.ex. "#51960273264|ut" för ett kontonummer eller "ica nara|ut". hits = antal transaktioner med den nyckeln. active: false betyder att kategorin inte längre finns för typen, så regeln används inte vid import.',
+    inputSchema: { type: 'object', properties: { search: { type: 'string', description: 'Del av mönstret eller kategorin' }, type: S.type, category: { type: 'string' } } },
+    annotations: RO,
+    async run(c, a) {
+      const s = await loadState(c, ['merchant_rules', 'contact_names', ...Object.values(CAT_KEY)]);
+      const hits = await mkeyHits(c);
+      const q = a.search ? String(a.search).toLowerCase() : null;
+      let rules = Object.entries(s.merchant_rules as Obj).map(([id, v]) => {
+        const o: Obj = { ...ruleView(id, v), hits: hits[id] || 0, active: !!s[CAT_KEY[v.type]]?.includes(v.cat) };
+        const n = digits(o.pattern.replace(/^#/, '')); if (n && s.contact_names[n]) o.contact = s.contact_names[n];
+        return o;
+      });
+      if (a.type) rules = rules.filter((r) => r.type === a.type);
+      if (a.category) rules = rules.filter((r) => r.category === a.category);
+      if (q) rules = rules.filter((r) => [r.pattern, r.category, r.contact].join(' ').toLowerCase().includes(q));
+      rules.sort((x, y) => y.hits - x.hits || x.id.localeCompare(y.id));
+      return { count: rules.length, inactive: rules.filter((r) => !r.active).length, rules };
+    },
+  },
+  {
+    name: 'update_rule',
+    title: 'Ändra regel',
+    description: 'Ändrar typ och/eller kategori för en inlärd regel (id från list_rules eller rule_id från update_transaction). Finns regeln inte skapas den (type och category krävs) — så kan en borttagen regel återställas. apply_to_existing: true ändrar även befintliga transaktioner med samma butiksnyckel. dry_run: true visar ändringen utan att spara.',
+    write: true,
+    inputSchema: {
+      type: 'object', required: ['id'],
+      properties: { id: { type: 'string' }, type: S.type, category: { type: 'string' }, apply_to_existing: { type: 'boolean', default: false }, dry_run: { type: 'boolean', default: false } },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['merchant_rules', ...Object.values(CAT_KEY)]);
+      const id = findRule(s.merchant_rules, a.id, false) ?? a.id;
+      const old = s.merchant_rules[id] ?? null;
+      if (!old && (!a.type || !a.category)) throw new UserError(`Hittar ingen regel "${a.id}". Ange type och category för att skapa den, eller se list_rules.`);
+      if (!old && !/\|(ut|in)$/.test(id)) throw new UserError('En ny regel behöver ett id på formen mönster|ut eller mönster|in');
+      if (!a.type && !a.category) throw new UserError('Ange type och/eller category');
+      const type = a.type ?? old.type, cat = a.category ?? old.cat;
+      if (a.type && !a.category && a.type !== old?.type && !s[CAT_KEY[type]].includes(cat)) throw new UserError('Ange även category när du byter typ');
+      if (!s[CAT_KEY[type]].includes(cat)) throw new UserError(`Kategorin "${cat}" finns inte för ${TYPE_LABEL[type].toLowerCase()}. Finns: ${s[CAT_KEY[type]].join(', ')}`);
+      const rows = a.apply_to_existing ? (await must<Obj[]>(uq(c, 'transactions', TX_COLS).eq('mkey', id).eq('deleted', false))).filter((r) => r.type !== type || r.category !== cat) : [];
+      const res: Obj = { rule_id: id, before: old ? ruleView(id, old) : null, after: ruleView(id, { ...old, type, cat }), created: !old };
+      if (a.apply_to_existing) res.transactions = rows.map((r) => ({ id: Number(r.id), date: r.tx_date, description: r.description, amount: Number(r.amount), before: { type: r.type, category: r.category }, after: { type, category: cat } }));
+      if (a.dry_run) return { dry_run: true, ...res, note: 'Inget sparat.' };
+      s.merchant_rules[id] = { ...(old || { created: Date.now() }), type, cat, t: Date.now() };
+      await saveState(c, 'merchant_rules', s.merchant_rules);
+      if (rows.length) await must(c.db.from('transactions').update({ type, category: cat }).eq('user_id', c.uid).eq('mkey', id).eq('deleted', false).in('id', rows.map((r) => r.id)));
+      res.after = ruleView(id, s.merchant_rules[id]);
+      if (rows.length) res.updated_transactions = rows.length;
+      return res;
+    },
+  },
+  {
+    name: 'delete_rule',
+    title: 'Ta bort regel',
+    description: 'Tar bort en inlärd regel (id från list_rules). Befintliga transaktioner ändras inte; nya importer från butiken kategoriseras på nytt. Svaret innehåller undo för att återställa regeln med update_rule.',
+    write: true,
+    inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['merchant_rules']);
+      const id = findRule(s.merchant_rules, a.id) as string;
+      const old = s.merchant_rules[id];
+      delete s.merchant_rules[id];
+      await saveState(c, 'merchant_rules', s.merchant_rules);
+      return { deleted: ruleView(id, old), undo: { tool: 'update_rule', arguments: { id, type: old.type, category: old.cat } } };
+    },
+  },
+
   // ── Dela upp ────────────────────────────────────────────────────────
   {
     name: 'split_transaction',
@@ -987,6 +1059,20 @@ export const TOOLS: Tool[] = [
 ];
 
 class UserError extends Error {}
+// Regel-id = butiksnyckeln "mönster|riktning". Utan riktning godtas mönstret om det bara finns en regel för det.
+function findRule(rules: Obj, id: string, mustExist = true) {
+  if (rules[id]) return id;
+  const cand = Object.keys(rules).filter((k) => k.split('|')[0] === id);
+  if (cand.length === 1) return cand[0];
+  if (cand.length > 1) throw new UserError(`"${id}" matchar flera regler: ${cand.join(', ')}. Ange hela id:t.`);
+  if (mustExist) throw new UserError(`Hittar ingen regel "${id}". Regel-id har formen mönster|ut eller mönster|in, t.ex. "#51960273264|ut" — se list_rules.`);
+  return null;
+}
+async function mkeyHits(c: Ctx) {
+  const rows = await fetchAll(() => uq(c, 'transactions', 'mkey').eq('deleted', false).order('id', { ascending: true }));
+  const n: Obj = {}; for (const r of rows) if (r.mkey) n[r.mkey] = (n[r.mkey] || 0) + 1;
+  return n;
+}
 // Före/efter för de fält som ändras (databaskolumner med appens namn)
 const FIELD: Obj = { tx_date: 'date' };
 function rowDiff(r: Obj, patch: Obj) {
