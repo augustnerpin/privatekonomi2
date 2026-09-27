@@ -186,6 +186,13 @@ function txView(r: Obj, s: Obj) {
   const x = r.extra || {};
   if (x.note) t.note = x.note;
   if (x.parent_id) { t.parent_id = Number(x.parent_id); t.split = `${x.split_index}/${x.split_of}`; }
+  if (r.type === 'transfer') {
+    // Negativt belopp = pengar ut från radens konto. Motkontot sparas i extra när det är känt.
+    const own = r.account ? accountName(s, r.account) : null, amt = Number(r.amount);
+    t.from_account = x.from_account ? accountName(s, x.from_account) : amt < 0 ? own : null;
+    t.to_account = x.to_account ? accountName(s, x.to_account) : amt > 0 ? own : null;
+    if (x.transfer_pair_id) t.pair_id = Number(x.transfer_pair_id);
+  }
   t._mkey = r.mkey || null; t._acc = r.account || null; t._extra = x;
   return t;
 }
@@ -213,7 +220,8 @@ function accountView(a: Obj, hist: Obj[] = []) {
 function accountName(s: Obj, id: string) { return s.accounts.find((a: Obj) => a.id === id)?.name || id; }
 function accountId(s: Obj, v: string) {
   const l = String(v).toLowerCase();
-  return s.accounts.find((a: Obj) => a.id.toLowerCase() === l || String(a.name).toLowerCase() === l)?.id ?? null;
+  const n = String(v).replace(/[\s-]/g, '');
+  return s.accounts.find((a: Obj) => a.id.toLowerCase() === l || String(a.name).toLowerCase() === l || (a.number && String(a.number).replace(/[\s-]/g, '') === n))?.id ?? null;
 }
 
 // ── Verktyg ───────────────────────────────────────────────────────────
@@ -237,6 +245,10 @@ const FILTERS: Obj = {
   max_amount: { type: 'number' },
 };
 
+const TRF_SIDE = {
+  from: { type: 'string', description: 'Bara överföringar: kontot pengarna kommer från (konto i appen eller fritext, t.ex. ett kontonummer). Tom sträng tar bort.' },
+  to: { type: 'string', description: 'Bara överföringar: kontot pengarna går till. Tom sträng tar bort.' },
+};
 type Tool = { name: string; title: string; description: string; inputSchema: Obj; write?: boolean; annotations?: Obj; run: (c: Ctx, a: Obj) => Promise<any> };
 const RO = { readOnlyHint: true, openWorldHint: false };
 
@@ -395,7 +407,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'add_transaction',
     title: 'Lägg till transaktion',
-    description: 'Lägger till en transaktion. Löneperioden räknas ut från datumet. Kategorin måste finnas för typen (se get_settings). Belopp: utgift/sparande positivt = pengar ut; inkomst positivt = in; överföring negativt = flyttat ut.',
+    description: 'Lägger till en transaktion. Löneperioden räknas ut från datumet. Kategorin måste finnas för typen (se get_settings). Belopp: utgift/sparande positivt = pengar ut; inkomst positivt = in; överföring negativt = flyttat ut från account. För överföringar kan from_account/to_account anges (konto i appen eller fritext som ett kontonummer).',
     write: true,
     inputSchema: {
       type: 'object',
@@ -407,11 +419,12 @@ export const TOOLS: Tool[] = [
         description: { type: 'string', description: 'T.ex. butik eller mottagare' },
         date: { ...S.date, description: 'Datum, standard idag' },
         account: { type: 'string', description: 'Kontots id eller namn, standard första kontot' },
+        from_account: TRF_SIDE.from, to_account: TRF_SIDE.to,
       },
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     async run(c, a) {
-      const s = await loadState(c, ['accounts', 'pay_periods', ...Object.values(CAT_KEY)]);
+      const s = await loadState(c, ['accounts', 'pay_periods', 'contact_names', ...Object.values(CAT_KEY)]);
       const date = a.date || today();
       checkTx(s, { ...a, date });
       const acc = a.account ? accountId(s, a.account) : s.accounts[0].id;
@@ -419,10 +432,10 @@ export const TOOLS: Tool[] = [
       const [id] = await newIds(c, 1);
       const row = {
         user_id: c.uid, id, type: a.type, amount: a.amount, description: String(a.description || '').trim(), category: a.category,
-        tx_date: date, month: periodForDate(date, s.pay_periods), account: acc, source: 'manual', extra: { via: 'mcp' }, deleted: false,
+        tx_date: date, month: periodForDate(date, s.pay_periods), account: acc, source: 'manual', extra: trfSides(s, a, { via: 'mcp' }), deleted: false,
       };
       await must(c.db.from('transactions').insert(row));
-      return { created: { id, date, month: row.month, type: row.type, amount: row.amount, category: row.category, description: row.description, account: accountName(s, acc) }, note: 'Syns i appen vid nästa synk.' };
+      return { created: pub(txView(row, s)), note: 'Syns i appen vid nästa synk.' };
     },
   },
   {
@@ -437,6 +450,7 @@ export const TOOLS: Tool[] = [
         id: { type: 'integer' },
         type: S.type, category: { type: 'string' }, amount: { type: 'number' },
         description: { type: 'string' }, date: S.date, account: { type: 'string' },
+        from_account: TRF_SIDE.from, to_account: TRF_SIDE.to,
         apply_to_same_merchant: { type: 'boolean', default: false },
       },
     },
@@ -452,7 +466,17 @@ export const TOOLS: Tool[] = [
       if (a.date) patch.month = periodForDate(a.date, s.pay_periods);
       if (a.description != null) patch.description = String(a.description).trim();
       if (a.account) { const acc = accountId(s, a.account); if (!acc) throw new UserError(`Okänt konto "${a.account}"`); patch.account = acc; }
+      let unpair: number | null = null;
+      if (a.from_account != null || a.to_account != null) {
+        if (next.type !== 'transfer') throw new UserError('from_account/to_account gäller bara överföringar (type: transfer)');
+        patch.extra = trfSides(s, a, { ...(r.extra || {}) });
+      } else if (next.type !== 'transfer' && r.type === 'transfer') {
+        const { from_account, to_account, transfer_pair_id, ...rest } = r.extra || {};
+        if (from_account || to_account || transfer_pair_id) patch.extra = rest;
+        if (transfer_pair_id) unpair = Number(transfer_pair_id);
+      }
       await must(c.db.from('transactions').update(patch).eq('user_id', c.uid).eq('id', a.id));
+      if (unpair) await unlinkPair(c, unpair);
       const out: Obj = { updated: { id: a.id, ...patch } };
       const changedCat = next.category !== r.category || next.type !== r.type;
       if (r.mkey && changedCat) {
@@ -601,6 +625,78 @@ export const TOOLS: Tool[] = [
     },
   },
 
+  // ── Överföringar ────────────────────────────────────────────────────
+  {
+    name: 'match_transfers',
+    title: 'Para ihop överföringar',
+    description: 'Hittar överföringar mellan två av dina konton i appen där båda sidor finns som egna rader: samma belopp med motsatt tecken (−5 000 på det ena kontot, +5 000 på det andra), olika konton och högst 3 dagar mellan datumen. Utan confirm föreslås bara paren (inget sparas); med confirm: true länkas de (pair_id, from_account, to_account på båda raderna). Tvetydiga fall (flera lika bra kandidater) länkas aldrig automatiskt — välj själv och skicka dem i link tillsammans med confirm: true. Länkningen ändrar inga belopp eller summeringar.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        month: { ...S.month, description: 'Löneperiod att leta i (motparten får ligga upp till 3 dagar utanför). Standard: alla.' },
+        confirm: { type: 'boolean', default: false, description: 'true = länka de föreslagna paren' },
+        link: { type: 'array', maxItems: 200, items: { type: 'object', required: ['out_id', 'in_id'], properties: { out_id: { type: 'integer' }, in_id: { type: 'integer' } } }, description: 'Bara dessa par (t.ex. valda bland tvetydiga). Kräver confirm: true.' },
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['accounts', 'pay_periods', 'contact_names']);
+      if (a.link && !a.confirm) throw new UserError('link kräver confirm: true');
+      const f: Obj = { type: 'transfer' };
+      let inScope = (_r: Obj) => true;
+      if (a.month) { const pr = periodRange(a.month, s.pay_periods); f.date_from = addDays(pr.start, -3); f.date_to = addDays(pr.end, 3); inScope = (r) => r.month === a.month; }
+      const rows = await fetchAll(() => txQuery(c, f));
+      const byId = new Map(rows.map((r) => [Number(r.id), r]));
+      const free = rows.filter((r) => !r.extra?.transfer_pair_id && r.account);
+      const ok = (o: Obj, i: Obj) => Number(o.amount) < 0 && ore(Number(o.amount)) === -ore(Number(i.amount)) && o.account !== i.account && dayDiff(o.tx_date, i.tx_date) <= 3;
+      const view = (r: Obj) => ({ id: Number(r.id), date: r.tx_date, account: accountName(s, r.account), amount: Number(r.amount), category: r.category, description: r.description });
+      let pairs: Obj[] = [];
+      const ambiguous: Obj[] = [];
+      if (a.link) {
+        for (const l of a.link) {
+          const o = byId.get(l.out_id), i = byId.get(l.in_id);
+          if (!o || !i) throw new UserError(`Hittar ingen olänkad överföring med id ${!o ? l.out_id : l.in_id}${a.month ? ' i perioden' : ''}`);
+          if (o.extra?.transfer_pair_id || i.extra?.transfer_pair_id) throw new UserError(`${o.extra?.transfer_pair_id ? l.out_id : l.in_id} är redan länkad`);
+          if (!ok(o, i)) throw new UserError(`${l.out_id} och ${l.in_id} passar inte ihop: out_id ska vara negativ, in_id samma belopp positivt, olika konton, högst 3 dagar isär`);
+          pairs.push({ o, i, d: dayDiff(o.tx_date, i.tx_date) });
+        }
+      } else {
+        const edges: Obj[] = [];
+        for (const o of free) for (const i of free) if (ok(o, i) && (inScope(o) || inScope(i))) edges.push({ o, i, d: dayDiff(o.tx_date, i.tx_date) });
+        edges.sort((x, y) => x.d - y.d || x.o.tx_date.localeCompare(y.o.tx_date));
+        const used = new Set<number>();
+        for (const e of edges) {
+          const oid = Number(e.o.id), iid = Number(e.i.id);
+          if (used.has(oid) || used.has(iid)) continue;
+          // Tvetydigt: en annan lika nära kandidat för någon av sidorna
+          const rivals = edges.filter((x) => x !== e && x.d === e.d && (x.o === e.o || x.i === e.i) && !used.has(Number(x.o.id)) && !used.has(Number(x.i.id)));
+          if (rivals.length) {
+            ambiguous.push({ out: view(e.o), candidates: [e, ...rivals].map((x) => ({ ...view(x.o === e.o ? x.i : x.o), days_apart: x.d })) });
+            for (const x of [e, ...rivals]) { used.add(Number(x.o.id)); used.add(Number(x.i.id)); }
+            continue;
+          }
+          pairs.push(e); used.add(oid); used.add(iid);
+        }
+      }
+      const inPairs = new Set(pairs.flatMap((p) => [Number(p.o.id), Number(p.i.id)]));
+      const inAmb = new Set(ambiguous.flatMap((x) => [x.out.id, ...x.candidates.map((y: Obj) => y.id)]));
+      const unmatched = free.filter((r) => inScope(r) && !inPairs.has(Number(r.id)) && !inAmb.has(Number(r.id)));
+      const res: Obj = {
+        pairs: pairs.map((p) => ({ from: view(p.o), to: view(p.i), days_apart: p.d })),
+        ambiguous, already_linked_rows: rows.filter((r) => r.extra?.transfer_pair_id && inScope(r)).length,
+        unmatched: { count: unmatched.length, note: 'Motparten saknas i appen (t.ex. ett konto som inte importeras) eller beloppen skiljer sig.', examples: unmatched.slice(0, 20).map(view) },
+      };
+      if (!a.confirm) return { dry_run: true, ...res, next: pairs.length ? 'Kör igen med confirm: true för att länka paren.' : undefined };
+      for (const p of pairs) {
+        const sides = { from_account: p.o.account, to_account: p.i.account };
+        await must(c.db.from('transactions').update({ extra: { ...(p.o.extra || {}), ...sides, transfer_pair_id: Number(p.i.id) } }).eq('user_id', c.uid).eq('id', p.o.id));
+        await must(c.db.from('transactions').update({ extra: { ...(p.i.extra || {}), ...sides, transfer_pair_id: Number(p.o.id) } }).eq('user_id', c.uid).eq('id', p.i.id));
+      }
+      return { linked: pairs.length, ...res };
+    },
+  },
+
   // ── Dela upp ────────────────────────────────────────────────────────
   {
     name: 'split_transaction',
@@ -668,6 +764,18 @@ export const TOOLS: Tool[] = [
 ];
 
 class UserError extends Error {}
+// from_account/to_account: konto i appen sparas som dess id, annat (t.ex. ett kontonummer) som fritext
+function trfSides(s: Obj, a: Obj, extra: Obj) {
+  if ((a.from_account != null || a.to_account != null) && a.type && a.type !== 'transfer') throw new UserError('from_account/to_account gäller bara överföringar (type: transfer)');
+  for (const k of ['from_account', 'to_account']) {
+    if (a[k] == null) continue;
+    const v = String(a[k]).trim();
+    if (v) extra[k] = accountId(s, v) ?? v; else delete extra[k];
+  }
+  return extra;
+}
+const dayDiff = (a: string, b: string) => Math.abs(Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / 864e5;
+const addDays = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 const unknownAccount = (s: Obj, v: string) => `Okänt konto "${v}". Finns: ${s.accounts.map((x: Obj) => x.name).join(', ')}`;
 async function unlinkPair(c: Ctx, id: number) {
   const rows = await must<Obj[]>(uq(c, 'transactions', 'id,extra').eq('id', id));
