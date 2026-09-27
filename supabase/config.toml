@@ -1,0 +1,6 @@
+# Bara inställningar som skiljer sig från Supabase standard.
+project_id = "privatekonomi2"
+
+# MCP-funktionen har egen nyckelkontroll (mcp_tokens), så Supabase ska inte kräva en JWT.
+[functions.mcp]
+verify_jwt = false

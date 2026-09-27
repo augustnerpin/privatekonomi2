@@ -106,3 +106,25 @@ grant select on public.v_transactions to authenticated;
 --   select month, sum(amount) from v_transactions where type='expense' group by month order by month;
 --   select description, sum(amount) from v_transactions where type='expense' and tx_date >= '2026-01-01'
 --     group by description order by 2 desc limit 20;
+
+-- ── Nycklar för AI-kopplingen (MCP) ───────────────────────────────
+-- Skapas under Inställningar → AI-koppling (MCP). Bara SHA-256-hashen sparas; själva nyckeln
+-- visas en gång i appen. Edge-funktionen supabase/functions/mcp slår upp hashen och läser/skriver
+-- sedan bara den användarens rader. scope: 'read' = bara läsa, 'write' = läsa och ändra.
+create table if not exists public.mcp_tokens (
+  id           uuid        primary key default gen_random_uuid(),
+  user_id      uuid        not null default auth.uid() references auth.users(id) on delete cascade,
+  name         text        not null default 'MCP',
+  token_hash   text        not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  scope        text        not null default 'read' check (scope in ('read','write')),
+  created_at   timestamptz not null default now(),
+  last_used_at timestamptz
+);
+create index if not exists mcp_tokens_user_idx on public.mcp_tokens (user_id);
+alter table public.mcp_tokens enable row level security;
+drop policy if exists "own rows" on public.mcp_tokens;
+create policy "own rows" on public.mcp_tokens for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+revoke all on public.mcp_tokens from anon;
+grant select, insert, delete on public.mcp_tokens to authenticated;
