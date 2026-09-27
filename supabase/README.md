@@ -28,7 +28,7 @@ Den publika nyckeln (`sb_publishable_…`) får därför ligga i appen. Den heml
 5. **På nästa enhet:** logga in med samma konto. All data hämtas ner, och molnets
    inställningar vinner vid första synken.
 
-Tips: När du har skapat ditt konto kan du stänga av nya registreringar under
+**Viktigt:** När du har skapat ditt konto, stäng av nya registreringar under
 *Authentication* → *Sign In / Providers* → *Allow new users to sign up*.
 
 ## Bra att veta
@@ -41,13 +41,14 @@ Tips: När du har skapat ditt konto kan du stänga av nya registreringar under
 ## AI på servern
 
 [`functions/ai`](functions/ai) skickar appens AI-anrop vidare till Anthropic. Nyckeln ligger bara i
-Supabase och aldrig på telefonen. Funktionen kräver att du är inloggad i appen. Den släpper bara igenom
+Supabase och aldrig på telefonen. Funktionen kräver att du är inloggad i appen och att ditt konto finns i `AI_ALLOWED_USERS` (utan listan är AI:n avstängd, så att ingen annan som skapar ett konto kan använda nyckeln). Den släpper bara igenom
 appens modeller och cachar den långa kontexten, så att följdfrågor blir billigare. Utan inloggning kan
 appen fortfarande använda en egen nyckel under Inställningar → AI-assistent.
 
 Installera (en gång):
 ```sh
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-… --project-ref qchasvatuhndtswxlucr
+npx supabase secrets set AI_ALLOWED_USERS=<ditt user-id> --project-ref qchasvatuhndtswxlucr
 npx supabase functions deploy ai --project-ref qchasvatuhndtswxlucr --no-verify-jwt
 ```
 

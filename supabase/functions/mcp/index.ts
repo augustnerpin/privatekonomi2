@@ -560,7 +560,10 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: 'object', required: ['ids'], properties: { ids: { type: 'array', items: { type: 'integer' }, minItems: 1, maxItems: 200 } } },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     async run(c, a) {
+      const before = await must<Obj[]>(uq(c, 'transactions', 'id,extra').eq('deleted', false).in('id', a.ids));
       const done = await must<Obj[]>(c.db.from('transactions').update({ deleted: true }).eq('user_id', c.uid).eq('deleted', false).in('id', a.ids).select('id'));
+      // Länkade överföringar: motparten ska inte peka på en borttagen rad (då går den aldrig att länka om)
+      for (const r of before) { const p = Number(r.extra?.transfer_pair_id); if (p && !a.ids.includes(p)) await unlinkPair(c, p); }
       return { deleted: done.map((r) => Number(r.id)), not_found: a.ids.filter((id: number) => !done.some((r) => Number(r.id) === id)) };
     },
   },
@@ -883,7 +886,8 @@ export const TOOLS: Tool[] = [
         notFound = a.ids.filter((id: number) => !txs.some((t) => t.id === id));
       } else txs = await queryTxs(c, a.filter, s);
       if (txs.length > 2000) throw new UserError(`Urvalet träffar ${txs.length} rader — högst 2 000 per anrop. Smalna av filtret (t.ex. med month_from/month_to).`);
-      const bad = txs.filter((t) => !s[CAT_KEY[ch.type ?? t.type]].includes(ch.category ?? t.category));
+      // Kategorin kontrolleras bara när typ eller kategori ändras (rader i borttagna kategorier går att ändra i övrigt)
+      const bad = ch.type != null || ch.category != null ? txs.filter((t) => !s[CAT_KEY[ch.type ?? t.type]].includes(ch.category ?? t.category)) : [];
       if (bad.length) {
         const ex = bad.slice(0, 5).map((t) => `${t.id} (${TYPE_LABEL[ch.type ?? t.type].toLowerCase()} "${ch.category ?? t.category}")`).join(', ');
         throw new UserError(`${bad.length} rader skulle få en kategori som inte finns för sin typ: ${ex}. Ange en category som finns för typen (se get_settings).`);

@@ -1,39 +1,18 @@
 // AI-proxy: appen anropar Claude härifrån i stället för direkt, så att Anthropic-nyckeln bara finns på servern.
-// Kräver inloggning (Supabase-sessionens JWT). Svaret skickas vidare oförändrat, även strömmat (SSE).
-// Nyckeln sätts en gång: npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-… --project-ref <ref>
+// Kräver inloggning (Supabase-sessionens JWT) OCH att kontot finns i AI_ALLOWED_USERS. Svaret skickas vidare
+// oförändrat, även strömmat (SSE).
+// Secrets: ANTHROPIC_API_KEY=sk-ant-…, AI_ALLOWED_USERS=<ditt user-id> (flera separeras med komma)
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { BETAS, buildRequest, allowedUser } from './request.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-anthropic-beta',
 };
-// Bara modeller och fält som appen använder släpps igenom
-const MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001']);
-const BETAS = new Set(['server-side-fallback-2026-07-01']);
-const FIELDS = ['model', 'max_tokens', 'messages', 'system', 'tools', 'tool_choice', 'stream', 'output_config', 'fallbacks', 'metadata'];
-const MAX_TOKENS = 64000;
-
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'content-type': 'application/json' } });
 const fail = (status: number, message: string) => json({ type: 'error', error: { type: 'proxy_error', message } }, status);
-
-// Lång systemprompt (appens kontext) cachas: samma prefix i verktygsloopen och i följdfrågor blir billigare
-function withCache(system: unknown) {
-  if (typeof system === 'string' && system.length > 4000) return [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
-  return system;
-}
-
-export function buildRequest(input: Record<string, unknown>) {
-  if (!input || typeof input !== 'object') throw new Error('Ogiltig förfrågan');
-  if (!MODELS.has(input.model as string)) throw new Error(`Modellen ${input.model} är inte tillåten`);
-  if (!Array.isArray(input.messages) || !input.messages.length) throw new Error('messages saknas');
-  const body: Record<string, unknown> = {};
-  for (const k of FIELDS) if (input[k] !== undefined) body[k] = input[k];
-  body.max_tokens = Math.min(Math.max(1, Number(input.max_tokens) || 16000), MAX_TOKENS);
-  if (body.system !== undefined) body.system = withCache(body.system);
-  return body;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -47,6 +26,7 @@ Deno.serve(async (req) => {
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { auth: { persistSession: false } });
   const { data: user, error: authErr } = await sb.auth.getUser(jwt);
   if (authErr || !user?.user) return fail(401, 'Inloggningen har gått ut — logga in igen');
+  if (!allowedUser(user.user.id, Deno.env.get('AI_ALLOWED_USERS'))) return fail(403, 'AI på servern är inte aktiverad för det här kontot');
 
   let body: Record<string, unknown>;
   try { body = buildRequest(await req.json()); } catch (e) { return fail(400, (e as Error).message); }

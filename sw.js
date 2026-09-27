@@ -29,7 +29,8 @@ self.addEventListener('fetch', e => {
   if (req.mode === 'navigate' || (url.origin === location.origin && /\/(index\.html)?$/.test(url.pathname))) {
     e.respondWith(
       fetch(req)
-        .then(res => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put('./index.html', copy)); } return res; })
+        // Bara riktiga sidor sparas som appens offlinekopia (inte t.ex. en ikon som öppnats direkt)
+        .then(res => { if (res.ok && (res.headers.get('content-type') || '').includes('text/html')) { const copy = res.clone(); caches.open(VERSION).then(c => c.put('./index.html', copy)); } return res; })
         .catch(() => caches.match('./index.html'))
     );
     return;

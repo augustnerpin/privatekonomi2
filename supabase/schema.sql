@@ -263,3 +263,27 @@ drop policy if exists "own rows read" on public.notifications;
 create policy "own rows read" on public.notifications for select to authenticated using ((select auth.uid()) = user_id);
 revoke all on public.notifications from anon, authenticated;
 grant select on public.notifications to authenticated;
+
+-- Spärr så att två bankhämtningar för samma användare inte körs samtidigt (nattjobb + "Hämta nu").
+-- bank_try_lock tar spärren om den är ledig eller har gått ut; bank_unlock släpper den. Bara servern.
+create table if not exists public.bank_sync_locks (
+  user_id uuid        primary key references auth.users(id) on delete cascade,
+  until   timestamptz not null
+);
+alter table public.bank_sync_locks enable row level security;
+revoke all on public.bank_sync_locks from anon, authenticated;
+create or replace function public.bank_try_lock(p_user uuid, p_secs int) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare ok boolean;
+begin
+  insert into bank_sync_locks (user_id, until) values (p_user, now() + make_interval(secs => p_secs))
+  on conflict (user_id) do update set until = excluded.until where bank_sync_locks.until < now()
+  returning true into ok;
+  return coalesce(ok, false);
+end $$;
+create or replace function public.bank_unlock(p_user uuid) returns void
+language sql security definer set search_path = public as $$ delete from bank_sync_locks where user_id = p_user $$;
+revoke all on function public.bank_try_lock(uuid, int) from public, anon, authenticated;
+revoke all on function public.bank_unlock(uuid) from public, anon, authenticated;
+grant execute on function public.bank_try_lock(uuid, int) to service_role;
+grant execute on function public.bank_unlock(uuid) to service_role;

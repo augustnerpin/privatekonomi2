@@ -43,8 +43,11 @@ async function ebJwt() {
   return data + '.' + b64url(new Uint8Array(sig));
 }
 class EbError extends Error { constructor(public status: number, msg: string) { super(msg); } }
-async function eb(method: string, path: string, body?: Obj) {
-  const r = await fetch(EB + path, { method, headers: { Authorization: 'Bearer ' + await ebJwt(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+async function eb(method: string, path: string, body?: Obj, psu?: { ip?: string; ua?: string }) {
+  const headers: Obj = { Authorization: 'Bearer ' + await ebJwt(), 'Content-Type': 'application/json' };
+  if (psu?.ip) headers['Psu-Ip-Address'] = psu.ip;
+  if (psu?.ua) headers['Psu-User-Agent'] = psu.ua;
+  const r = await fetch(EB + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const t = await r.text(); let j: any; try { j = JSON.parse(t); } catch { j = { raw: t }; }
   if (!r.ok) throw new EbError(r.status, `Enable Banking ${r.status}: ${j.message || j.detail || j.error || t.slice(0, 200)}`);
   return j;
@@ -94,37 +97,56 @@ Riktlinjer: kreditkortsfakturan (AMEX, Eurocard) → transfer "Kreditkortsbetaln
 }
 
 // ── Hämtning för en användare ──────────────────────────────────────────
-async function fetchAllTx(uid: string, from: string) {
+// psu = användarens IP och webbläsare när hen själv startar hämtningen ("Hämta nu", BankID-retur).
+// Då räknas anropen inte mot bankens gräns på ungefär 4 hämtningar per dygn utan användaren.
+type Psu = { ip?: string; ua?: string } | undefined;
+export const psuFrom = (req: Request): Psu => ({ ip: (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || undefined, ua: req.headers.get('user-agent') || undefined });
+async function fetchAllTx(uid: string, from: string, psu: Psu) {
   const out: Obj[] = []; let ck: string | undefined;
   for (let page = 0; page < 50; page++) {
     const q = new URLSearchParams({ date_from: from, transaction_status: 'BOOK' }); if (ck) q.set('continuation_key', ck);
-    const j = await eb('GET', `/accounts/${uid}/transactions?${q}`);
+    const j = await eb('GET', `/accounts/${uid}/transactions?${q}`, undefined, psu);
     out.push(...(j.transactions || [])); ck = j.continuation_key; if (!ck) break;
   }
   return out;
 }
-// Befintliga rader på kontot, med 5 dagars marginal före from (dubblettkontrollen tillåter ±4 dagar).
-// Även borttagna, så att bankrader du tagit bort inte läggs in igen.
-async function existingRows(uid: string, account: string, fromDate: string) {
-  const from = addDays(fromDate, -5); const out: Obj[] = [];
-  for (let i = 0; ; i += 1000) {
-    const rows = await must<Obj[]>(db.from('transactions').select('id,type,amount,tx_date,extra,deleted').eq('user_id', uid).eq('account', account).gte('tx_date', from).order('id').range(i, i + 999));
-    out.push(...rows); if (rows.length < 1000) break;
-  }
+async function pages(make: () => any) {
+  const out: Obj[] = [];
+  for (let i = 0; ; i += 1000) { const rows = await must<Obj[]>(make().range(i, i + 999)); out.push(...rows); if (rows.length < 1000) break; }
   return out;
 }
+// Befintliga rader att jämföra med: allt på kontot från 15 dagar före from (köpdatum kan ligga upp till
+// 10 dagar före bokföringen, dubblettkontrollen tillåter ±4) och kontots alla bankreferenser oavsett datum,
+// även borttagna, så att bankrader du tagit bort inte läggs in igen.
+async function existingRows(uid: string, account: string, fromDate: string) {
+  const near = await pages(() => db.from('transactions').select('id,type,amount,tx_date,extra,deleted').eq('user_id', uid).eq('account', account).gte('tx_date', addDays(fromDate, -15)).order('id'));
+  const refs = await pages(() => db.from('transactions').select('id,extra,deleted').eq('user_id', uid).eq('account', account).like('hash', 'eb:%').order('id'));
+  return [...near, ...refs];
+}
+async function loadKey(uid: string, key: string) {
+  const r = await must<Obj[]>(db.from('user_state').select('value').eq('user_id', uid).eq('key', key).eq('deleted', false));
+  return r[0]?.value ?? null;
+}
+// En hämtning i taget per användare (nattjobb och "Hämta nu" kan annars lägga in samma rader två gånger)
+const lock = async (uid: string) => (await db.rpc('bank_try_lock', { p_user: uid, p_secs: 300 })).data === true;
+const unlock = (uid: string) => db.rpc('bank_unlock', { p_user: uid });
 
-export async function syncUser(uid: string) {
+export async function syncUser(uid: string, psu?: Psu) {
+  if (!(await lock(uid))) return { busy: true, added: 0, review: 0, accounts: [], rows: [], state: null };
+  try { return await syncLocked(uid, psu); } finally { await unlock(uid); }
+}
+async function syncLocked(uid: string, psu: Psu) {
   const conns = await must<Obj[]>(db.from('bank_connections').select('*').eq('user_id', uid).eq('status', 'active'));
   const s = await loadState(uid);
-  let accountsChanged = false; const summary: Obj[] = []; const newRows: Obj[] = [];
+  const summary: Obj[] = []; const newRows: Obj[] = []; const connUpdates: Obj[] = [];
+  const newAccounts: Obj[] = []; const balances: Obj = {};
   for (const c of conns) {
-    if (Date.parse(c.valid_until) < Date.now()) { await must(db.from('bank_connections').update({ status: 'expired' }).eq('id', c.id)); summary.push({ bank: c.aspsp, expired: true }); continue; }
+    if (Date.parse(c.valid_until) < Date.now()) { connUpdates.push({ id: c.id, patch: { status: 'expired' } }); summary.push({ bank: c.aspsp, expired: true }); continue; }
     try {
       for (const a of c.accounts as Obj[]) {
         // Aldrig före kopplingens startdatum: äldre transaktioner i appen (manuella och importerade) rörs inte
         const from = a.last_date ? fetchFrom(a.last_date) : (c.start_date || fetchFrom());
-        const fetched = ((await fetchAllTx(a.uid, from)).map(mapTx).filter(Boolean) as Obj[]).filter((t) => !c.start_date || t.date >= c.start_date);
+        const fetched = ((await fetchAllTx(a.uid, from, psu)).map(mapTx).filter(Boolean) as Obj[]).filter((t) => !c.start_date || t.date >= c.start_date);
         // Första gången: vilket konto i appen hör bankkontot till? Det med flest redan importerade rader.
         if (!a.app_account) {
           let best: Obj | null = null;
@@ -133,31 +155,28 @@ export async function syncUser(uid: string) {
             if (n >= 3 && (!best || n > best.n)) best = { id: acc.id, n };
           }
           if (best) a.app_account = best.id;
-          else { const na = newAppAccount({ ...a, aspsp: c.aspsp }, s.accounts); s.accounts.push(na); a.app_account = na.id; accountsChanged = true; }
+          else { const na = newAppAccount({ ...a, aspsp: c.aspsp }, s.accounts); s.accounts.push(na); newAccounts.push(na); a.app_account = na.id; }
         }
         const acc = s.accounts.find((x: Obj) => x.id === a.app_account);
         const { fresh, dups } = dedupe(fetched, await existingRows(uid, a.app_account, from));
         fresh.forEach((t) => (t.account = a.app_account));
         newRows.push(...fresh);
-        // Saldo
-        const bal = pickBalance((await eb('GET', `/accounts/${a.uid}/balances`)).balances);
-        if (bal) {
-          await must(db.from('account_balances').upsert({ user_id: uid, account: a.app_account, bal_date: bal.date, value: bal.value, source: 'bank', deleted: false }, { onConflict: 'user_id,account,bal_date' }));
-          if (acc && (!acc.balance || acc.balance.date <= bal.date)) { acc.balance = { value: bal.value, date: bal.date }; accountsChanged = true; }
-        }
+        const bal = pickBalance((await eb('GET', `/accounts/${a.uid}/balances`, undefined, psu)).balances);
+        if (bal) balances[a.app_account] = bal;
         const dates = fetched.map((t) => t.bookingDate).sort();
         if (dates.length) a.last_date = dates[dates.length - 1];
         summary.push({ bank: c.aspsp, account: acc?.name || a.app_account, fetched: fetched.length, new: fresh.length, duplicates: dups, balance: bal?.value ?? null });
       }
-      await must(db.from('bank_connections').update({ accounts: c.accounts, last_sync: new Date().toISOString(), last_error: null }).eq('id', c.id));
+      connUpdates.push({ id: c.id, patch: { accounts: c.accounts, last_sync: new Date().toISOString(), last_error: null } });
     } catch (e) {
       const expired = e instanceof EbError && (e.status === 401 || e.status === 403);
-      await must(db.from('bank_connections').update({ last_error: String((e as Error).message).slice(0, 500), ...(expired ? { status: 'expired' } : {}) }).eq('id', c.id));
+      // Kontona som hann hämtas sparas ändå (deras rader läggs in nedan); övriga försöker igen nästa gång
+      connUpdates.push({ id: c.id, patch: { accounts: c.accounts, last_error: String((e as Error).message).slice(0, 500), ...(expired ? { status: 'expired' } : {}) } });
       summary.push({ bank: c.aspsp, error: (e as Error).message, expired });
     }
   }
-  // Kategorisera och spara nya rader
-  let added = 0, review = 0, saved: Obj[] = [];
+  // 1. Nya rader. Går något fel här sparas inget av nedanstående, så nästa hämtning tar samma rader igen.
+  let added = 0, review = 0, saved: Obj[] = [], learned: Obj | null = null;
   if (newRows.length) {
     const accOf = (id: string) => s.accounts.find((x: Obj) => x.id === id);
     const groups = await categorize(s, newRows, accOf, (g) => aiCategorize(s, g));
@@ -166,9 +185,28 @@ export async function syncUser(uid: string) {
     markSavingsWithdrawals(s, rows, accOf);
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
     added = rows.length; review = rows.filter((r) => r.extra.review).length; saved = rows;
-    const rules = learnRules(s, groups); if (rules) await saveState(uid, 'merchant_rules', rules);
+    learned = learnRules(s, groups);
   }
-  if (accountsChanged) await saveState(uid, 'accounts', s.accounts);
+  // 2. Kontolista och regler: läses om och slås ihop, så att ändringar gjorda i appen under tiden inte skrivs över
+  if (newAccounts.length || Object.keys(balances).length) {
+    const fresh: Obj[] = Array.isArray(await loadKey(uid, 'accounts')) ? await loadKey(uid, 'accounts') : structuredClone(s.accounts);
+    for (const na of newAccounts) if (!fresh.some((x) => x.id === na.id)) fresh.push(na);
+    let changed = newAccounts.length > 0;
+    for (const [id, bal] of Object.entries(balances) as [string, Obj][]) {
+      await must(db.from('account_balances').upsert({ user_id: uid, account: id, bal_date: bal.date, value: bal.value, source: 'bank', deleted: false }, { onConflict: 'user_id,account,bal_date' }));
+      const f = fresh.find((x) => x.id === id);
+      if (f && (!f.balance || f.balance.date < bal.date || (f.balance.date === bal.date && f.balance.value !== bal.value))) { f.balance = { value: bal.value, date: bal.date }; changed = true; }
+    }
+    if (changed) await saveState(uid, 'accounts', fresh);
+    s.accounts = fresh;
+  }
+  if (learned) {
+    const fresh = (await loadKey(uid, 'merchant_rules')) || {};
+    let n = 0; for (const [k, v] of Object.entries(learned)) if (!fresh[k]) { fresh[k] = v; n++; }
+    if (n) await saveState(uid, 'merchant_rules', fresh);
+  }
+  // 3. Sist: var hämtningen kom (last_date). Sparas först när raderna ovan är sparade.
+  for (const u of connUpdates) await must(db.from('bank_connections').update(u.patch).eq('id', u.id));
   return { added, review, accounts: summary, rows: saved, state: s };
 }
 const pub = (r: Obj) => ({ added: r.added, review: r.review, accounts: r.accounts });
@@ -204,8 +242,11 @@ async function notify(uid: string, r: Obj) {
   }
   const spent: Obj = {}; for (const x of exp) spent[x.category] = (spent[x.category] || 0) + Number(x.amount);
   const conns = await must<Obj[]>(db.from('bank_connections').select('id,aspsp,valid_until,status').eq('user_id', uid).in('status', ['active', 'expired']));
-  const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).gte('sent_at', addDays(day, -200)))).map((x) => x.key));
-  const d = buildDigest({ newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, sent });
+  // Vilka av nattens händelser har redan skickats? (bara de aktuella nycklarna, så att listan aldrig kapas)
+  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns };
+  const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
+  const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
+  const d = buildDigest({ ...input, sent });
   if (!d) return { sent: 0 };
   const out = await pushTo(uid, { title: d.title, body: d.body, url: APP_URL, tag: 'digest-' + day });
   if (out.sent) await must(db.from('notifications').upsert(d.keys.map((key) => ({ user_id: uid, key, title: d.title, body: d.body })), { onConflict: 'user_id,key' }));
@@ -237,7 +278,7 @@ Deno.serve(async (req) => {
       // Hämta från den 1:a i innevarande månad (eller från samma dag som en tidigare koppling)
       const start_date = prev.map((p) => p.start_date).filter(Boolean).sort()[0] || today().slice(0, 8) + '01';
       await must(db.from('bank_connections').insert({ user_id: st.user_id, aspsp: st.aspsp, session_id: ses.session_id, start_date, valid_until: ses.access?.valid_until || new Date(Date.now() + 90 * 864e5).toISOString(), accounts }));
-      const r = await syncUser(st.user_id);
+      const r = await syncUser(st.user_id, psuFrom(req));
       return back(st.return_to, { bank: 'ok', added: r.added });
     }
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -247,7 +288,10 @@ Deno.serve(async (req) => {
       const users = [...new Set((await must<Obj[]>(db.from('bank_connections').select('user_id').eq('status', 'active'))).map((r) => r.user_id))];
       const out: Obj = {};
       for (const u of users) {
-        try { const r = await syncUser(u); out[u] = { ...pub(r), push: await notify(u, r).catch((e) => ({ error: (e as Error).message })) }; }
+        try {
+          const r = await syncUser(u);
+          out[u] = r.busy ? { busy: true } : { ...pub(r), push: await notify(u, r).catch((e) => ({ error: (e as Error).message })) };
+        }
         catch (e) { out[u] = { error: (e as Error).message }; }
       }
       return json({ users: users.length, results: out });
@@ -266,7 +310,10 @@ Deno.serve(async (req) => {
       const r = await eb('POST', '/auth', { access: { valid_until: new Date(Date.now() + secs * 1000 - 60e3).toISOString() }, aspsp: { name: bank.name, country: 'SE' }, state, redirect_url: Deno.env.get('SUPABASE_URL') + '/functions/v1/bank/callback', psu_type: 'personal' });
       return json({ url: r.url });
     }
-    if (route === 'sync') return json(pub(await syncUser(uid)));
+    if (route === 'sync') {
+      const r = await syncUser(uid, psuFrom(req));
+      return r.busy ? json({ error: 'En hämtning pågår redan – försök igen om en stund' }, 409) : json(pub(r));
+    }
     if (route === 'push-test') return json(await pushTo(uid, { title: 'Notiser är på ✓', body: 'Här hör appen av sig när lönen kommit, vid stora köp och när budgeten börjar ta slut.', url: APP_URL, tag: 'test' }));
     return json({ error: 'Okänd väg' }, 404);
   } catch (e) {

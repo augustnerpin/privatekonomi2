@@ -4149,6 +4149,8 @@ async function pushStatus(){
     bt.innerHTML='';return;
   }
   const sub=await pushSub(),perm=Notification.permission;
+  // Se till att servern har den här enheten (om ett tidigare sparande misslyckades)
+  if(sub&&_sbUser){const j=sub.toJSON();(await sbClient())?.from('push_subscriptions').upsert({endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,device:navigator.userAgent.slice(0,120)},{onConflict:'endpoint'}).then(()=>{},()=>{})}
   st.textContent=sub?'På för den här enheten.':perm==='denied'?'Blockerade. Slå på dem i telefonens inställningar → Notiser → Ekonomi.':'Av på den här enheten.';
   bt.innerHTML=sub?`<button class="sb-btn sb-btn2" style="flex:1" onclick="pushTest()">Skicka testnotis</button><button class="sb-btn sb-btn2" onclick="pushDisable()">Stäng av</button>`
     :perm==='denied'?'':`<button class="sb-btn" style="flex:1" onclick="pushEnable()">Slå på notiser</button>`;
@@ -4164,7 +4166,8 @@ async function pushEnable(){
     const j=sub.toJSON();
     const sb=await sbClient();
     const{error}=await sb.from('push_subscriptions').upsert({endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,device:navigator.userAgent.slice(0,120)},{onConflict:'endpoint'});
-    if(error)throw error;
+    // Kunde servern inte spara enheten: avregistrera, annars ser notiserna ut att vara på utan att komma fram
+    if(error){await sub.unsubscribe().catch(()=>{});throw error}
     toast('Notiser på ✓');await pushTest();
   }catch(e){toast('Kunde inte slå på notiser: '+(e.message||e),'err')}
   pushStatus();
@@ -4301,6 +4304,8 @@ async function sbSignUp(){
 }
 async function sbSignOut(){
   if(!confirm('Logga ut från Supabase? Datan finns kvar på enheten.'))return;
+  // Sluta skicka notiser till den här enheten (annars fortsätter sammanfattningarna efter utloggning)
+  try{const s=await pushSub();if(s){await (await sbClient())?.from('push_subscriptions').delete().eq('endpoint',s.endpoint);await s.unsubscribe()}}catch{}
   try{await (await sbClient())?.auth.signOut()}catch{}
   _sbUser=null;localStorage.removeItem('sb_shadow');sbStatus('Utloggad');renderSbSettings();
 }
@@ -4355,31 +4360,35 @@ async function sbPush(sb,T,sh,uid){
   }
   return{up:up.length,del:del.length,bad};
 }
+// Returnerar hur många rader som faktiskt ändrades (överlappet i sbPull hämtar samma rader igen)
 function sbApply(T,rows,sh){
+  let changed=0;
   if(T.applyState){
     rows.forEach(r=>{
-      if(r.deleted){localStorage.removeItem(r.key);delete sh.st[r.key]}
-      else{
-        // Ändrad lokalt sedan förra synken (t.ex. under pågående synk): behåll, nästa push vinner
-        if(r.key in sh.st&&localStorage.getItem(r.key)!==null&&sbFp({key:r.key,value:ld(r.key,null)})!==sh.st[r.key])return;
-        localStorage.setItem(r.key,JSON.stringify(r.value));sh.st[r.key]=sbFp(T.fromRow(r));
-      }
+      if(r.deleted){if(localStorage.getItem(r.key)!==null)changed++;localStorage.removeItem(r.key);delete sh.st[r.key];if(r.key==='ai_history')reloadAiHistory();return}
+      const fp=sbFp(T.fromRow(r));if(sh.st[r.key]===fp)return;
+      // Ändrad lokalt sedan förra synken (t.ex. under pågående synk): behåll, nästa push vinner
+      if(r.key in sh.st&&localStorage.getItem(r.key)!==null&&sbFp({key:r.key,value:ld(r.key,null)})!==sh.st[r.key])return;
+      localStorage.setItem(r.key,JSON.stringify(r.value));sh.st[r.key]=fp;changed++;
+      if(r.key==='ai_history')reloadAiHistory();
     });
-    return;
+    return changed;
   }
   const arr=T.list();const idx=new Map(arr.map((o,i)=>[T.key(o),i]));const gone=new Set();
   rows.forEach(r=>{
     const k=T.rowKey(r);
-    if(r.deleted){if(idx.has(k))gone.add(k);delete sh[T.sk][k];return}
-    const o=T.fromRow(r);gone.delete(k);
+    if(r.deleted){if(idx.has(k)){gone.add(k);changed++}delete sh[T.sk][k];return}
+    const o=T.fromRow(r),fp=sbFp(o);gone.delete(k);
     if(idx.has(k)){
+      if(sh[T.sk][k]===fp&&sbFp(arr[idx.get(k)])===fp)return; // redan samma
       // Ändrad lokalt sedan förra synken: behåll, nästa push vinner
       if(k in sh[T.sk]&&sbFp(arr[idx.get(k)])!==sh[T.sk][k])return;
       arr[idx.get(k)]=o;
     }else{arr.push(o);idx.set(k,arr.length-1)}
-    sh[T.sk][k]=sbFp(o);
+    sh[T.sk][k]=fp;changed++;
   });
-  T.save(gone.size?arr.filter(o=>!gone.has(T.key(o))):arr);
+  if(changed)T.save(gone.size?arr.filter(o=>!gone.has(T.key(o))):arr);
+  return changed;
 }
 async function sbPull(sb,T,sh){
   const PAGE=1000;let n=0;
@@ -4391,7 +4400,7 @@ async function sbPull(sb,T,sh){
     if(cur)q=q.gt('updated_at',cur);
     const{data,error}=await q;if(error)throw error;
     if(!data.length)break;
-    sbApply(T,data,sh);n+=data.length;
+    n+=sbApply(T,data,sh);
     cur=sh.cursor[T.sk]=data[data.length-1].updated_at;
     if(data.length<PAGE)break;
   }
@@ -4568,10 +4577,9 @@ function parseDateStr(v,order){
   const s=String(v??'').trim();if(!s)return null;
   let m=s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);if(m)return ymd(+m[1],+m[2],+m[3]);
   m=s.match(/^(\d{4})(\d{2})(\d{2})$/);if(m)return ymd(+m[1],+m[2],+m[3]);
-  // ÅÅ-MM-DD (svensk kortform) mot DD-MM-ÅÅ: välj tolkningen vars år ligger närmast i tid
+  // ÅÅ-MM-DD (svensk kortform). Avgörs för hela kolumnen i detectTable (order 'ymd'), inte per värde.
   m=s.match(/^(\d{2})-(\d{2})-(\d{2})\b/);
-  if(m){const now=new Date().getFullYear(),ya=2000+ +m[1],yc=2000+ +m[3];
-    if(Math.abs(ya-now)<Math.abs(yc-now)){const r=ymd(ya,+m[2],+m[3]);if(r)return r}}
+  if(m&&order==='ymd'){const r=ymd(2000+ +m[1],+m[2],+m[3]);if(r)return r}
   m=s.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})\b/);
   if(m){let a=+m[1],b=+m[2],y=+m[3];if(y<100)y+=2000;
     return order==='mdy'?(ymd(y,a,b)||ymd(y,b,a)):(ymd(y,b,a)||ymd(y,a,b))}
@@ -4704,6 +4712,14 @@ function detectTable(rawRows){
   if(map.date>=0){
     for(const r of data){const m=String(r[map.date]).match(/^(\d{1,2})[-./](\d{1,2})[-./]\d{2,4}/);
       if(m){if(+m[1]>12){order='dmy';break}if(+m[2]>12){order='mdy';break}}}
+    // ÅÅ-MM-DD eller DD-MM-ÅÅ? Den tolkning där fler datum hamnar inom tre år från idag vinner (lika = DD-MM-ÅÅ)
+    const sv=data.slice(0,80).map(r=>String(r[map.date])).filter(v=>/^\d{2}-\d{2}-\d{2}\b/.test(v));
+    if(sv.length){
+      const now=new Date().getFullYear(),near=y=>Math.abs(2000+y-now)<=3;
+      const asYmd=sv.filter(v=>near(+v.slice(0,2))&&ymd(2000+ +v.slice(0,2),+v.slice(3,5),+v.slice(6,8))).length;
+      const asDmy=sv.filter(v=>near(+v.slice(6,8))&&ymd(2000+ +v.slice(6,8),+v.slice(3,5),+v.slice(0,2))).length;
+      if(asYmd>asDmy)order='ymd';
+    }
   }
   map.order=order;
   const pre=hdr>0?rows.slice(0,hdr).map(r=>r.join(' ')).join(' '):'';
@@ -4953,7 +4969,8 @@ function defaultImpMonth(months){
 
 // ── AI-anrop: via Supabase-funktionen ai när du är inloggad (nyckeln ligger på servern),
 // annars direkt till Anthropic med en egen nyckel på enheten ─
-function aiViaServer(){return!!sbCfg().url&&(!!_sbUser||Object.keys(localStorage).some(k=>/^sb-.+-auth-token$/.test(k)))}
+// Innan Supabase-klienten startat räcker en sparad inloggning; därefter gäller den verkliga sessionen
+function aiViaServer(){return!!sbCfg().url&&(_sb?!!_sbUser:Object.keys(localStorage).some(k=>/^sb-.+-auth-token$/.test(k)))}
 function aiReady(){return aiViaServer()||!!getApiKey()}
 async function aiFetch(body,beta){
   if(aiViaServer()){
@@ -4961,7 +4978,9 @@ async function aiFetch(body,beta){
     if(tok){
       const h={'Content-Type':'application/json',Authorization:'Bearer '+tok,apikey:sbCfg().key};
       if(beta)h['x-anthropic-beta']=beta;
-      return fetch(sbCfg().url+'/functions/v1/ai',{method:'POST',headers:h,body:JSON.stringify(body)});
+      const r=await fetch(sbCfg().url+'/functions/v1/ai',{method:'POST',headers:h,body:JSON.stringify(body)});
+      // Servern nekar eller är nere: prova din egen nyckel om du har en
+      if(!((r.status===401||r.status===403||r.status>=500)&&getApiKey()))return r;
     }
   }
   const key=getApiKey();
@@ -4978,13 +4997,14 @@ async function callClaude({system,messages,effort='low',max_tokens=16000,schema,
   if(schema)body.output_config.format={type:'json_schema',schema};
   if(model.fallbacks)body.fallbacks='default';
   const res=await aiFetch(body,model.fallbacks?'server-side-fallback-2026-07-01':null);
-  if(!res.ok){let m='HTTP '+res.status;try{const e=await res.json();m=e.error?.message||m}catch{}throw new Error(m)}
+  if(!res.ok){let m='HTTP '+res.status;try{const e=await res.json();m=e.error?.message||e.message||e.msg||m}catch{}throw new Error(m)}
   const reader=res.body.getReader(),dec=new TextDecoder();
-  let buf='',text='',served=model.id,stop=null;const usage={input_tokens:0,output_tokens:0};
+  let buf='',text='',served=model.id,stop=null,complete=false;const usage={input_tokens:0,output_tokens:0};
   const handle=ev=>{
     if(ev.type==='message_start'){served=ev.message?.model||served;const u=ev.message?.usage||{};usage.input_tokens=u.input_tokens||0;usage.cache_creation_input_tokens=u.cache_creation_input_tokens||0;usage.cache_read_input_tokens=u.cache_read_input_tokens||0}
     else if(ev.type==='content_block_delta'&&ev.delta?.type==='text_delta'){text+=ev.delta.text;onText&&onText(text)}
     else if(ev.type==='message_delta'){if(ev.delta?.stop_reason)stop=ev.delta.stop_reason;if(ev.usage){usage.output_tokens=ev.usage.output_tokens||usage.output_tokens;if(ev.usage.input_tokens)usage.input_tokens=ev.usage.input_tokens}}
+    else if(ev.type==='message_stop')complete=true;
     else if(ev.type==='error')throw new Error(ev.error?.message||'Fel under strömning');
   };
   for(;;){
@@ -5000,6 +5020,8 @@ async function callClaude({system,messages,effort='low',max_tokens=16000,schema,
   }
   const cost=calcCost(aiInTok(usage),usage.output_tokens,served);
   addAiCost(cost);updateAiStatus();
+  // Strömmen tog slut utan message_stop: svaret avbröts (t.ex. serverns tidsgräns vid mycket långa svar)
+  if(!complete)throw new Error('Svaret avbröts innan det var klart — försök igen, eller dela upp filen i mindre delar');
   if(stop==='refusal')throw new Error(modelNameForId(served)+' avböjde förfrågan');
   if(stop==='max_tokens')throw new Error('Svaret blev för långt — dela upp filen i mindre delar');
   return{text,served,cost,usage};
@@ -5410,6 +5432,12 @@ function removeRule(k){const r=getRules();delete r[k];sv('merchant_rules',r);ren
 function clearRules(){if(!confirm('Glöm all inlärd kategorisering?'))return;sv('merchant_rules',{});renderAccountSettings()}
 
 let aiHistory=ld('ai_history',[]);
+// Chatthistoriken synkas mellan enheter: läs om den när synken hämtat en nyare, och rita om chatten
+function reloadAiHistory(){
+  aiHistory=ld('ai_history',[]);if(!Array.isArray(aiHistory))aiHistory=[];
+  const box=document.getElementById('ai-msgs');
+  if(box&&_histRendered){box.querySelectorAll('.ai-msg').forEach(el=>el.remove());aiHistory.slice(-30).forEach(m=>addAiMsg(m.content,m.role==='user'?'user':'bot'))}
+}
 function persistAiHistory(){sv('ai_history',aiHistory.slice(-80))}
 
 // ── Träna AI — intervjuläge ────────────────
@@ -5504,7 +5532,10 @@ function clearAiCtx(){
 }
 
 // ── Build full context ─────────────────────
-function buildCtxWithExtra(){return buildCtx();}
+function buildCtxWithExtra(){const{fixed,live}=buildCtx();return live?fixed+'\n\n'+live:fixed}
+// Systemprompten i två block: den fasta delen (instruktioner + historik) cachas mellan frågorna,
+// den rörliga (minnen, vald månad, budget) läggs efter så att den inte bryter cachen
+function buildCtxBlocks(){const{fixed,live}=buildCtx();return[{type:'text',text:fixed,cache_control:{type:'ephemeral'}},...(live?[{type:'text',text:live}]:[])]}
 
 let _histRendered=false;
 function initAi(){
@@ -5563,11 +5594,11 @@ function buildCtx(){
   // Enskilda transaktioner hämtas med verktygen search_transactions/summarize_spending i stället för att allt skickas med
   const rec=detectRecurring(state.month);
   const ins=getInsights()[state.month];
-  const describedSection=(topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'')+
-    (rec.length?`\n\nÅTERKOMMANDE KOSTNADER (typiskt/mån):\n${rec.map(r=>`- ${r.name} (${r.cat}): ${r.typical} kr${r.status==='dyrare'?` — nu ${r.current} kr (dyrare)`:''}`).join('\n')}`:'')+
+  const merchantSection=topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'';
+  const monthSection=(rec.length?`\n\nÅTERKOMMANDE KOSTNADER (typiskt/mån):\n${rec.map(r=>`- ${r.name} (${r.cat}): ${r.typical} kr${r.status==='dyrare'?` — nu ${r.current} kr (dyrare)`:''}`).join('\n')}`:'')+
     (ins?`\n\nSENASTE AI-ANALYS AV ${mLabel(state.month).toUpperCase()}: ${ins.d.headline} — ${ins.d.summary}`:'');
 
-  return`Du är en personlig ekonomicoach. Du körs via Anthropics API; användaren kan byta modell (Opus, Sonnet, Fable) mellan meddelanden. Om användaren frågar vilken modell du är, svara Claude ${getAiModel().name}. Svara alltid på svenska. Var konkret och visuell.
+  const fixed=`Du är en personlig ekonomicoach. Du körs via Anthropics API; användaren kan byta modell (Opus, Sonnet, Fable) mellan meddelanden. Om användaren frågar vilken modell du är, svara Claude ${getAiModel().name}. Svara alltid på svenska. Var konkret och visuell.
 
 VIKTIGT — DU KAN RENDERA WIDGETS:
 Istället för långa textsvar, använd widgets när det passar. Placera dem var som helst i ditt svar.
@@ -5600,7 +5631,7 @@ Regler:
 - Använd ALLTID widgets för sifferjämförelser, trender och rekommendationer
 - Håll textdelar korta, låt widgets visa data
 - Avsluta med <memory>["..."]</memory> VARJE gång du lär dig något nytt om användaren (mål, familj, boende, lån, vanor, preferenser, riskprofil) — var generös med att spara
-- Använd dina sparade minnen aktivt för personliga råd; ställ gärna en kort följdfråga när information saknas${memSection}
+- Använd dina sparade minnen aktivt för personliga råd; ställ gärna en kort följdfråga när information saknas
 
 TRANSAKTIONSHISTORIK (${allMonths.length} månader):
 ${monthSums.join('\n')}
@@ -5612,7 +5643,9 @@ FÖRMÖGENHETSUTVECKLING:
 ${nwHistory||'Ingen data'}
 ${ln?`Senaste: Total ${Math.round(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${Math.round(ln[c.key])}`).join(' | ')}`:''}
 
-MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${coachExtraCtx()}${describedSection}`;
+MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${merchantSection}`;
+  const live=`${memSection}${coachExtraCtx()}${monthSection}`.replace(/^\n+/,'');
+  return{fixed,live};
 }
 // Samma bakgrund som importen använder: namn, förklaringar, budget och hur överföringar räknas
 function coachExtraCtx(){
@@ -5728,7 +5761,7 @@ async function sendAi(){
   // Tänkande är adaptivt som standard på alla tre modellerna (thinking-parametern utelämnas),
   // effort styr hur mycket de tänker. Historiken innehåller bara text — inga thinking-block
   // skickas tillbaka, så modellbyte mitt i en konversation fungerar.
-  const body={model:model.id,max_tokens:16000,output_config:{effort},system:buildCtxWithExtra(),messages:msgs};
+  const body={model:model.id,max_tokens:16000,output_config:{effort},system:buildCtxBlocks(),messages:msgs};
   // Om modellens säkerhetsfilter nekar körs frågan om på en rekommenderad reservmodell
   if(model.fallbacks)body.fallbacks='default';
   const beta=model.fallbacks?'server-side-fallback-2026-07-01':null;
@@ -5738,8 +5771,10 @@ async function sendAi(){
     const convo=[...msgs];let data=null;const usage={input_tokens:0,output_tokens:0};let cost=0;
     for(let round=0;round<6;round++){
       // Sista varvet: inga fler verktygsanrop, så att modellen alltid avslutar med ett svar (inte "Tomt svar")
-      const req={...body,messages:convo};if(round===5)req.tool_choice={type:'none'};
+      // Cachepunkt på sista meddelandet: verktygsvarven läser historiken ur cachen i stället för att betala för den igen
+      const req={...body,messages:withMsgCache(convo)};if(round===5)req.tool_choice={type:'none'};
       const res=await aiFetch(req,beta);
+      if(!res.ok){let m='HTTP '+res.status;try{const e=await res.json();m=e.error?.message||e.message||e.msg||m}catch{}data={error:{message:m}};break}
       data=await res.json();
       if(data.error)break;
       if(data.usage){const u=data.usage;usage.input_tokens+=(u.input_tokens||0)+(u.cache_creation_input_tokens||0)+(u.cache_read_input_tokens||0);usage.output_tokens+=u.output_tokens||0;cost+=calcCost(aiInTok(u),data.usage.output_tokens||0,data.model||model.id)}
@@ -5772,10 +5807,10 @@ async function sendAi(){
       // Beräkna och visa kostnad (prissatt efter modellen som faktiskt svarade)
       if(data._usage.input_tokens)addCostBadge(data._cost,data._usage,data.model||model.id,model.id,effort);
     }
-  }catch{
+  }catch(e){
     document.getElementById(tid)?.remove();
     dropPending();
-    addAiMsg('⚠️ Anslutningsfel — kontrollera nätverk och API-nyckel','bot');
+    addAiMsg('⚠️ '+(e?.message&&!/^Failed to fetch|NetworkError|Load failed/i.test(e.message)?e.message:'Anslutningsfel — kontrollera nätverket'),'bot');
   }
   document.getElementById('ai-send').disabled=false;
 }
@@ -5783,6 +5818,14 @@ async function sendAi(){
 // ── Kostnadsberäkning ─────────────────────
 // Priser per modell i MODEL_PRICES (USD per miljon tokens)
 const USD_TO_SEK=10.5; // ungefärlig växelkurs
+// Sista meddelandet som block med cache_control (en kopia, historiken ändras inte)
+function withMsgCache(convo){
+  if(!convo.length)return convo;
+  const last=convo[convo.length-1];
+  const content=typeof last.content==='string'?[{type:'text',text:last.content}]:last.content.map(b=>({...b}));
+  content[content.length-1]={...content[content.length-1],cache_control:{type:'ephemeral'}};
+  return[...convo.slice(0,-1),{...last,content}];
+}
 // Cachad kontext: skrivning kostar 1,25× och läsning 0,1× vanlig input
 function aiInTok(u){return(u.input_tokens||0)+1.25*(u.cache_creation_input_tokens||0)+0.1*(u.cache_read_input_tokens||0)}
 function calcCost(inTok,outTok,modelId){

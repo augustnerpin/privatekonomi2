@@ -36,3 +36,22 @@ test('tom batch ger Invalid Request', async () => {
   assert.equal(r.status, 400);
   assert.equal((await r.json()).error.code, -32600);
 });
+
+test('delete_transaction: motpartens överföringslänk tas bort', async () => {
+  const { tx } = await import('./helpers.mjs');
+  const w = await world({ transactions: [
+    tx(60, U, 'transfer', -3000, 'Egen överföring', '2026-09-10', '2026-09', { extra: { transfer_pair_id: 61 } }),
+    tx(61, U, 'transfer', 3000, 'Egen överföring', '2026-09-10', '2026-09', { account: 'amex', extra: { transfer_pair_id: 60, note: 'kvar' } }),
+  ] });
+  const r = await w.call('delete_transaction', { ids: [60] });
+  assert.deepEqual(r.deleted, [60]);
+  assert.deepEqual(w.txRow(61).extra, { note: 'kvar' });
+});
+
+test('bulk_update_transactions: rader i borttagen kategori kan få nytt konto', async () => {
+  const w = await world({ user_state: [{ user_id: U, key: 'cats_exp', value: ['Gym'], deleted: false }] });
+  const r = await w.call('bulk_update_transactions', { ids: [2, 3], changes: { account: 'AMEX' }, dry_run: false, expected_count: 2 });
+  assert.ok(!r.err, r.err);
+  assert.equal(w.txRow(2).account, 'amex');
+  assert.equal(w.txRow(2).category, 'Mat (Butik)');
+});
