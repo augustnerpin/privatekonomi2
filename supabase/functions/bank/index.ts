@@ -101,11 +101,12 @@ async function fetchAllTx(uid: string, from: string) {
   }
   return out;
 }
-// Befintliga rader på kontot, med 5 dagars marginal före from (dubblettkontrollen tillåter ±4 dagar)
+// Befintliga rader på kontot, med 5 dagars marginal före from (dubblettkontrollen tillåter ±4 dagar).
+// Även borttagna, så att bankrader du tagit bort inte läggs in igen.
 async function existingRows(uid: string, account: string, fromDate: string) {
   const from = addDays(fromDate, -5); const out: Obj[] = [];
   for (let i = 0; ; i += 1000) {
-    const rows = await must<Obj[]>(db.from('transactions').select('id,type,amount,tx_date,extra').eq('user_id', uid).eq('account', account).eq('deleted', false).gte('tx_date', from).order('id').range(i, i + 999));
+    const rows = await must<Obj[]>(db.from('transactions').select('id,type,amount,tx_date,extra,deleted').eq('user_id', uid).eq('account', account).gte('tx_date', from).order('id').range(i, i + 999));
     out.push(...rows); if (rows.length < 1000) break;
   }
   return out;

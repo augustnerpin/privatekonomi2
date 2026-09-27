@@ -41,9 +41,10 @@ export const rawOf = (r: Obj) => (r.type === 'income' || r.type === 'transfer' ?
 // Matchar nya bankrader mot befintliga rader på samma konto: samma bankreferens, eller samma belopp
 // inom ±4 dagar (kontoutdrag som importerats för hand har annan text och ibland annat datum).
 // Varje befintlig rad används högst en gång, så två likadana köp samma dag blir båda kvar.
+// Bankrader som du tagit bort (deleted) räknas också, så att de inte kommer tillbaka vid nästa hämtning.
 export function dedupe(fresh: Obj[], existing: Obj[]) {
   const refs = new Set(existing.map((r) => r.extra?.bank_ref).filter(Boolean));
-  const pool = existing.filter((r) => !r.extra?.bank_ref).map((r) => ({ raw: Math.round(rawOf(r) * 100), date: r.tx_date, used: false }));
+  const pool = existing.filter((r) => !r.extra?.bank_ref && !r.deleted).map((r) => ({ raw: Math.round(rawOf(r) * 100), date: r.tx_date, used: false }));
   const out: Obj[] = []; let dups = 0;
   for (const t of fresh) {
     if (refs.has(t.ref)) { dups++; continue; }

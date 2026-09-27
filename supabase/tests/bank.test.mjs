@@ -43,6 +43,10 @@ test('dedupe: kontoutdrag som redan importerats dubbleras inte, två likadana k�
   assert.equal(dups, 3);
   assert.deepEqual(out.map((t) => t.ref), ['a', 'b', 'p2']);
   assert.equal(overlap(fresh, existing), 3);
+  // Borttagen bankrad kommer inte tillbaka; borttagen importerad rad matchar inte längre
+  const gone = [{ id: 9, type: 'expense', amount: 99, tx_date: '2026-09-26', extra: { bank_ref: 'x' }, deleted: true }, { id: 8, type: 'expense', amount: 35, tx_date: '2026-09-26', extra: {}, deleted: true }];
+  const r2 = dedupe([mapTx(ebTx(99, 'DBIT', '2026-09-26', 'X', { ref: 'x' })), mapTx(ebTx(35, 'DBIT', '2026-09-26', 'KAFFE', { ref: 'k' }))], gone);
+  assert.deepEqual(r2.fresh.map((t) => t.ref), ['k']);
 });
 
 test('pickBalance: bokfört saldo först', () => {

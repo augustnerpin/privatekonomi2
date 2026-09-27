@@ -51,6 +51,30 @@ npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-… --project-ref qchasvatuhnd
 npx supabase functions deploy ai --project-ref qchasvatuhndtswxlucr --no-verify-jwt
 ```
 
+## Bankkoppling (SEB via Enable Banking)
+
+[`functions/bank`](functions/bank) hämtar saldon och bokförda transaktioner via PSD2. Du kopplar i
+appen under Inställningar → Databas → Bankkoppling och godkänner med BankID. Samtycket gäller i 180 dagar.
+
+- Transaktioner hämtas från och med kopplingens startdatum (den 1:a i månaden du kopplar). Äldre rader
+  i appen rörs aldrig, och befintliga rader ändras aldrig. Bankdata läggs bara till.
+- Dubbletter: en bankrad hoppas över om samma belopp redan finns på kontot inom ±4 dagar, eller om
+  bankreferensen redan finns (även på rader du tagit bort).
+- Kontoroller (`role` på kontot) gör att flyttar mellan egna konton inte räknas dubbelt: `card_payment`
+  (betalar kreditkortsfakturan), `mortgage` (bolånekonto) och `savings` (sparkonto).
+- Kategorisering: kontoroll, sedan inlärda regler, automatiska regler, AI och till sist en gissning.
+  Osäkra rader får `extra.review`.
+
+Installera (en gång):
+1. Skapa en app på enablebanking.com (Production, redirect-URL
+   `https://qchasvatuhndtswxlucr.supabase.co/functions/v1/bank/callback`) och koppla dina konton med
+   *Activate by linking accounts*.
+2. `npx supabase secrets set ENABLEBANKING_APP_ID=<id> ENABLEBANKING_KEY_B64=<.pem i base64> --project-ref qchasvatuhndtswxlucr`
+3. Kör `schema.sql` och `npx supabase functions deploy bank --no-verify-jwt`.
+4. **Nattjobb:** skapa en slumpad nyckel, spara den som `CRON_SECRET` (secret) och i databasens valv
+   (`bank_cron_secret`), och kör sedan [`cron.sql`](cron.sql). Jobbet `bank-nightly` hämtar kl. 05:00
+   (sommartid). Svaren syns i `net._http_response`.
+
 ## AI-koppling (MCP)
 
 [`functions/mcp`](functions/mcp) är en MCP-server (Model Context Protocol) som körs som en
