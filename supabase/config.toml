@@ -4,3 +4,7 @@ project_id = "privatekonomi2"
 # MCP-funktionen har egen nyckelkontroll (mcp_tokens), så Supabase ska inte kräva en JWT.
 [functions.mcp]
 verify_jwt = false
+
+# AI-proxyn kontrollerar inloggningen själv (auth.getUser), så att CORS-förfrågan (OPTIONS) går igenom.
+[functions.ai]
+verify_jwt = false

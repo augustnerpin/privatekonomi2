@@ -38,6 +38,19 @@ Tips: När du har skapat ditt konto kan du stänga av nya registreringar under
   inställningarna visar hur många.
 - Firebase-synken finns kvar under inställningar som "äldre" och kan tas bort när Supabase fungerar.
 
+## AI på servern
+
+[`functions/ai`](functions/ai) skickar appens AI-anrop vidare till Anthropic. Nyckeln ligger bara i
+Supabase och aldrig på telefonen. Funktionen kräver att du är inloggad i appen. Den släpper bara igenom
+appens modeller och cachar den långa kontexten, så att följdfrågor blir billigare. Utan inloggning kan
+appen fortfarande använda en egen nyckel under Inställningar → AI-assistent.
+
+Installera (en gång):
+```sh
+npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-… --project-ref qchasvatuhndtswxlucr
+npx supabase functions deploy ai --project-ref qchasvatuhndtswxlucr --no-verify-jwt
+```
+
 ## AI-koppling (MCP)
 
 [`functions/mcp`](functions/mcp) är en MCP-server (Model Context Protocol) som körs som en

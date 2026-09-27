@@ -1187,7 +1187,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
       <div>
         <div class="hdr-label">AI-assistent</div>
         <div class="ai-hdr-t">Ekonomicoach</div>
-        <div class="ai-hdr-s" id="ai-status">Ange din API-nyckel i inställningar</div>
+        <div class="ai-hdr-s" id="ai-status">Logga in under Inställningar → Databas för att använda AI</div>
       </div>
       </div>
       <div style="display:flex;gap:8px">
@@ -1196,7 +1196,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
       </div>
     </div>
   </div>
-  <div class="ai-key-note" id="ai-key-note" onclick="openSettings()">🔑 Ingen API-nyckel — ange den i inställningar ›</div>
+  <div class="ai-key-note" id="ai-key-note" onclick="openSettings()">🔑 AI kräver inloggning — Inställningar → Databas ›</div>
   <div class="ai-ctx-card" id="ai-ctx-card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div class="ai-ctx-label">Kontext från dashboard</div>
@@ -1436,7 +1436,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
     <div class="s-lbl">AI-assistent</div>
     <div class="s-card">
       <div class="s-row" style="flex-direction:column;align-items:stretch;gap:10px">
-        <div><div class="s-row-lbl">Anthropic API-nyckel</div><div class="s-row-sub">Skaffas på console.anthropic.com</div></div>
+        <div><div class="s-row-lbl">Egen Anthropic API-nyckel (valfri)</div><div class="s-row-sub">Behövs inte när du är inloggad under Databas — då används nyckeln på servern. Fyll bara i för att använda AI utan inloggning.</div></div>
         <input type="password" id="s-apikey" placeholder="sk-ant-..." oninput="saveApiKey(this.value)">
       </div>
     </div>
@@ -2573,7 +2573,7 @@ BEFINTLIGA UTGIFTSKATEGORIER: ${getExpCats().join(' | ')}`;
 }
 
 async function runMonthAnalysis(month,silent){
-  if(!getApiKey()){if(!silent)toast('Ange API-nyckel i inställningar','warn');return}
+  if(!aiReady()){if(!silent)toast('Logga in under Inställningar → Databas för att använda AI','warn');return}
   const txs=getTxs().filter(t=>t.month===month);
   if(!txs.length){if(!silent)toast('Inga transaktioner i månaden','warn');return}
   window._analysing=window._analysing||{};
@@ -2619,7 +2619,7 @@ function insightCardHtml(month){
       <div style="margin-top:6px">${rec.map(r=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:4px 0">
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(r.name)} <span style="color:var(--sub2)">· ${esc(r.cat)}</span></span>
         <span style="font-family:var(--mono);white-space:nowrap;color:${r.status==='dyrare'?'var(--amber)':'var(--text)'}">${r.status==='dyrare'?`${fmt(r.current)} (var ${fmt(r.typical)})`:fmt(r.typical)}</span></div>`).join('')}</div></details>`:'';
-  if(!getApiKey())return rec.length?`<div class="card"><div class="card-inner" style="padding:12px 17px">${recHtml.replace('margin-top:10px;border-top:1px solid var(--line);padding-top:8px','')}</div></div>`:'';
+  if(!aiReady())return rec.length?`<div class="card"><div class="card-inner" style="padding:12px 17px">${recHtml.replace('margin-top:10px;border-top:1px solid var(--line);padding-top:8px','')}</div></div>`:'';
   if(busy)return`<div class="card"><div class="card-inner" style="padding:16px 17px;display:flex;align-items:center;gap:12px"><div class="imp-spin" style="width:22px;height:22px;margin:0;border-width:2px"></div><div style="font-size:13px;color:var(--sub)">AI analyserar ${mLabel(month)}…</div></div></div>`;
   if(!ins)return`<div class="card"><div class="card-inner" style="padding:14px 17px">
       <div class="card-lbl">✨ AI-analys</div>
@@ -2666,7 +2666,7 @@ function insightCardHtml(month){
 // ═══════════════════════════════════════════
 function homeAsk(q){
   q=String(q||'').trim();if(!q)return;
-  if(!getApiKey()){toast('Ange API-nyckel i inställningar','warn');openSettings();return}
+  if(!aiReady()){toast('Logga in under Inställningar → Databas för att använda AI','warn');openSettings();return}
   document.getElementById('home-q').value='';
   showScreen('ai');
   document.getElementById('ai-inp').value=q;
@@ -2711,7 +2711,7 @@ function renderHome(){
   const isCur=month===currentPayPeriod();
   const ins=getInsights()[month];
   const busy=window._analysing?.[month];
-  const key=!!getApiKey();
+  const key=aiReady();
 
   // ── Berättelsen ──
   let story,storySub='';
@@ -2726,7 +2726,7 @@ function renderHome(){
     const{avg,months}=catAverages(month);
     const avgTot=Object.values(avg).reduce((s,v)=>s+v,0);
     story=`${mLabel(month)}: ${fmt(exp)} kr i utgifter${months&&avgTot?`, ${exp>avgTot?fmt(exp-avgTot)+' kr mer':fmt(avgTot-exp)+' kr mindre'} än ditt snitt`:''}.`;
-    storySub=key?`<span style="color:var(--acc);cursor:pointer" onclick="runMonthAnalysis('${month}')">Låt AI:n analysera månaden ›</span>`:'Lägg in en API-nyckel i inställningar så får du en AI-analys av varje månad.';
+    storySub=key?`<span style="color:var(--acc);cursor:pointer" onclick="runMonthAnalysis('${month}')">Låt AI:n analysera månaden ›</span>`:'Logga in under Inställningar → Databas så får du en AI-analys av varje månad.';
   }
   const eyebrow=ins&&!busy?'AI-sammanfattning':busy?'Analyserar':`${mLabel(month)}`;
   let html=`<div class="home-hero">
@@ -3982,7 +3982,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -4107,7 +4107,7 @@ async function sbClient(){
       const lib=await loadSbLib();
       const c=lib.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
       c._pkCfg=cfg;
-      c.auth.onAuthStateChange((ev,session)=>{_sbUser=session?.user||null;renderSbSettings()});
+      c.auth.onAuthStateChange((ev,session)=>{_sbUser=session?.user||null;renderSbSettings();updateAiStatus()});
       const{data}=await c.auth.getSession();_sbUser=data.session?.user||null;
       _sb=c;return c;
     })();
@@ -4406,7 +4406,7 @@ async function answerAiQuestions(){
   // Kategorisera om allt som AI:n eller gissningar bestämt (inte det du själv ändrat eller kända butiker)
   const redo=_imp.groups.filter(g=>!g.edited&&(g.src==='ai'||g.src==='guess'||g.src==='auto'&&answered.some(q=>q.groups.includes(g))));
   _imp.questions=[];
-  if(!redo.length||!getApiKey()){renderImport();toast('Förklaringen sparad ✓');return}
+  if(!redo.length||!aiReady()){renderImport();toast('Förklaringen sparad ✓');return}
   try{
     setBusy(`AI kategoriserar om ${redo.length} butik${redo.length>1?'er':''} med dina svar…`);
     await categorizeWithAI(redo);
@@ -4827,9 +4827,9 @@ function renderImpFiles(body,bar,sub){
     </div></div>`+top;
   else top+=`<div style="margin:0 20px 12px;font-size:11px;color:var(--sub2)">Egna överföringar känns igen på namnet <b style="color:var(--sub)">${esc(owner)}</b> (ändras i inställningar).</div>`;
   html=top+html;
-  const key=getApiKey();
+  const key=aiReady();
   html+=`<div style="margin:6px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">
-      ${key?`Nya butiker kategoriseras av Claude ${esc(getAiModel().name)}. Butiker du redan kategoriserat känns igen direkt.`:'⚠️ Utan API-nyckel kategoriseras bara butiker appen redan lärt sig — resten hamnar i Övrigt. PDF och bilder kräver API-nyckel.'}
+      ${key?`Nya butiker kategoriseras av Claude ${esc(getAiModel().name)}. Butiker du redan kategoriserat känns igen direkt.`:'⚠️ Utan AI (logga in under Inställningar → Databas) kategoriseras bara butiker appen redan lärt sig — resten hamnar i Övrigt. PDF och bilder kräver AI.'}
       Transaktioner som redan importerats hoppas över automatiskt.</div>`;
   body.innerHTML=html;
   // Dra-och-släpp hanteras för hela fönstret (se DRA OCH SLÄPP längre ner)
@@ -4867,22 +4867,38 @@ function defaultImpMonth(months){
   return[...inFiles].filter(m=>m<cur).sort().pop()||[...inFiles].sort().pop()||months.find(m=>m<cur)||cur;
 }
 
-// ── AI-anrop (strömmat, så långa svar inte slår i tidsgränser) ─
-async function callClaude({system,messages,effort='low',max_tokens=16000,schema,onText}){
+// ── AI-anrop: via Supabase-funktionen ai när du är inloggad (nyckeln ligger på servern),
+// annars direkt till Anthropic med en egen nyckel på enheten ─
+function aiViaServer(){return!!sbCfg().url&&(!!_sbUser||Object.keys(localStorage).some(k=>/^sb-.+-auth-token$/.test(k)))}
+function aiReady(){return aiViaServer()||!!getApiKey()}
+async function aiFetch(body,beta){
+  if(aiViaServer()){
+    const sb=await sbClient();const tok=(await sb?.auth.getSession())?.data?.session?.access_token;
+    if(tok){
+      const h={'Content-Type':'application/json',Authorization:'Bearer '+tok,apikey:sbCfg().key};
+      if(beta)h['x-anthropic-beta']=beta;
+      return fetch(sbCfg().url+'/functions/v1/ai',{method:'POST',headers:h,body:JSON.stringify(body)});
+    }
+  }
   const key=getApiKey();
-  if(!key)throw new Error('Ingen API-nyckel — ange den i inställningar');
+  if(!key)throw new Error('Logga in under Inställningar → Databas för att använda AI');
+  const h={'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+  if(beta)h['anthropic-beta']=beta;
+  return fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:h,body:JSON.stringify(body)});
+}
+// Strömmat, så att långa svar inte slår i tidsgränser
+async function callClaude({system,messages,effort='low',max_tokens=16000,schema,onText}){
   const model=getAiModel();
   const body={model:model.id,max_tokens,stream:true,output_config:{effort},messages};
   if(system)body.system=system;
   if(schema)body.output_config.format={type:'json_schema',schema};
-  const headers={'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
-  if(model.fallbacks){body.fallbacks='default';headers['anthropic-beta']='server-side-fallback-2026-07-01'}
-  const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body:JSON.stringify(body)});
+  if(model.fallbacks)body.fallbacks='default';
+  const res=await aiFetch(body,model.fallbacks?'server-side-fallback-2026-07-01':null);
   if(!res.ok){let m='HTTP '+res.status;try{const e=await res.json();m=e.error?.message||m}catch{}throw new Error(m)}
   const reader=res.body.getReader(),dec=new TextDecoder();
   let buf='',text='',served=model.id,stop=null;const usage={input_tokens:0,output_tokens:0};
   const handle=ev=>{
-    if(ev.type==='message_start'){served=ev.message?.model||served;usage.input_tokens=ev.message?.usage?.input_tokens||0}
+    if(ev.type==='message_start'){served=ev.message?.model||served;const u=ev.message?.usage||{};usage.input_tokens=u.input_tokens||0;usage.cache_creation_input_tokens=u.cache_creation_input_tokens||0;usage.cache_read_input_tokens=u.cache_read_input_tokens||0}
     else if(ev.type==='content_block_delta'&&ev.delta?.type==='text_delta'){text+=ev.delta.text;onText&&onText(text)}
     else if(ev.type==='message_delta'){if(ev.delta?.stop_reason)stop=ev.delta.stop_reason;if(ev.usage){usage.output_tokens=ev.usage.output_tokens||usage.output_tokens;if(ev.usage.input_tokens)usage.input_tokens=ev.usage.input_tokens}}
     else if(ev.type==='error')throw new Error(ev.error?.message||'Fel under strömning');
@@ -4898,7 +4914,7 @@ async function callClaude({system,messages,effort='low',max_tokens=16000,schema,
       handle(ev);
     }
   }
-  const cost=calcCost(usage.input_tokens,usage.output_tokens,served);
+  const cost=calcCost(aiInTok(usage),usage.output_tokens,served);
   addAiCost(cost);updateAiStatus();
   if(stop==='refusal')throw new Error(modelNameForId(served)+' avböjde förfrågan');
   if(stop==='max_tokens')throw new Error('Svaret blev för långt — dela upp filen i mindre delar');
@@ -5087,7 +5103,7 @@ async function processImport(){
     const unknown=groups.filter(g=>!g.src);
     // 4. AI för okända butiker
     let aiErr=null;
-    if(unknown.length&&getApiKey()){
+    if(unknown.length&&aiReady()){
       setBusy(`AI kategoriserar ${unknown.length} butik${unknown.length>1?'er':''}…`);
       try{await categorizeWithAI(unknown)}catch(e){aiErr=e.message}
     }
@@ -5155,7 +5171,7 @@ function renderImpReview(body,bar,sub){
       ${sav?`<br>Sparande: ${fmt(sav)} kr`:''}
       ${_imp.aiErr?`<br><span style="color:var(--red)">AI-fel: ${esc(_imp.aiErr)}</span>`:''}
     </div>`;
-  if(G.length&&getApiKey())html+=aiQuestionsHtml();
+  if(G.length&&aiReady())html+=aiQuestionsHtml();
   // Varning för manuella transaktioner i samma period
   Object.entries(_imp.overlap||{}).forEach(([acc,o])=>{
     const chk=!!_imp.replaceManual[acc];
@@ -5246,7 +5262,7 @@ function saveImport(){
   if(latest){state.month=latest;if(state.screen!=='home')showScreen('home');else render()}
   toast(`${n} transaktioner importerade ✓${removed?` · ${removed} manuella ersatta`:''}`);
   // Analysera månaden direkt i bakgrunden
-  if(latest&&getApiKey())setTimeout(()=>runMonthAnalysis(latest,true),600);
+  if(latest&&aiReady())setTimeout(()=>runMonthAnalysis(latest,true),600);
 }
 
 function undoImport(id){
@@ -5378,7 +5394,7 @@ function renderAiOpts(){
 
 // ── Status ─────────────────────────────────
 function updateAiStatus(){
-  const key=getApiKey();
+  const key=aiReady();
   const statusEl=document.getElementById('ai-status');
   const noteEl=document.getElementById('ai-key-note');
   if(!statusEl)return;
@@ -5388,7 +5404,7 @@ function updateAiStatus(){
     if(totalCost>0){statusEl.style.cursor='pointer';statusEl.onclick=resetAiCost;}
     if(noteEl)noteEl.style.display='none';
   } else {
-    statusEl.textContent='Ange din API-nyckel i inställningar';
+    statusEl.textContent='Logga in under Inställningar → Databas för att använda AI';
     if(noteEl)noteEl.style.display='block';
   }
 }
@@ -5611,8 +5627,7 @@ async function sendAi(){
   if(document.getElementById('ai-send').disabled)return; // ett svar i taget (Enter och förslag går annars förbi knappen)
   const inp=document.getElementById('ai-inp');
   const txt=inp.value.trim();if(!txt)return;
-  const key=getApiKey();
-  if(!key){openSettings();return}
+  if(!aiReady()){openSettings();return}
   inp.value='';inp.style.height='auto';
   addAiMsg(txt,'user');
   aiHistory.push({role:'user',content:txt});persistAiHistory();
@@ -5630,12 +5645,9 @@ async function sendAi(){
   // effort styr hur mycket de tänker. Historiken innehåller bara text — inga thinking-block
   // skickas tillbaka, så modellbyte mitt i en konversation fungerar.
   const body={model:model.id,max_tokens:16000,output_config:{effort},system:buildCtxWithExtra(),messages:msgs};
-  const headers={'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
-  if(model.fallbacks){
-    // Om modellens säkerhetsfilter nekar körs frågan om på en rekommenderad reservmodell
-    body.fallbacks='default';
-    headers['anthropic-beta']='server-side-fallback-2026-07-01';
-  }
+  // Om modellens säkerhetsfilter nekar körs frågan om på en rekommenderad reservmodell
+  if(model.fallbacks)body.fallbacks='default';
+  const beta=model.fallbacks?'server-side-fallback-2026-07-01':null;
   body.tools=COACH_TOOLS;
   try{
     // Verktygsloop: modellen kan söka/summera i transaktionerna flera gånger innan den svarar
@@ -5643,10 +5655,10 @@ async function sendAi(){
     for(let round=0;round<6;round++){
       // Sista varvet: inga fler verktygsanrop, så att modellen alltid avslutar med ett svar (inte "Tomt svar")
       const req={...body,messages:convo};if(round===5)req.tool_choice={type:'none'};
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body:JSON.stringify(req)});
+      const res=await aiFetch(req,beta);
       data=await res.json();
       if(data.error)break;
-      if(data.usage){usage.input_tokens+=data.usage.input_tokens||0;usage.output_tokens+=data.usage.output_tokens||0;cost+=calcCost(data.usage.input_tokens||0,data.usage.output_tokens||0,data.model||model.id)}
+      if(data.usage){const u=data.usage;usage.input_tokens+=(u.input_tokens||0)+(u.cache_creation_input_tokens||0)+(u.cache_read_input_tokens||0);usage.output_tokens+=u.output_tokens||0;cost+=calcCost(aiInTok(u),data.usage.output_tokens||0,data.model||model.id)}
       if(data.stop_reason!=='tool_use')break;
       // Skicka tillbaka assistentens block oförändrade (inkl. tänkande). Efter en reservmodells övertagande
       // gäller bara blocken efter sista "fallback"-markören.
@@ -5687,6 +5699,8 @@ async function sendAi(){
 // ── Kostnadsberäkning ─────────────────────
 // Priser per modell i MODEL_PRICES (USD per miljon tokens)
 const USD_TO_SEK=10.5; // ungefärlig växelkurs
+// Cachad kontext: skrivning kostar 1,25× och läsning 0,1× vanlig input
+function aiInTok(u){return(u.input_tokens||0)+1.25*(u.cache_creation_input_tokens||0)+0.1*(u.cache_read_input_tokens||0)}
 function calcCost(inTok,outTok,modelId){
   const[inP,outP]=MODEL_PRICES[modelId]||MODEL_PRICES['claude-opus-5-5'];
   const usd=(inTok/1e6)*inP + (outTok/1e6)*outP;
