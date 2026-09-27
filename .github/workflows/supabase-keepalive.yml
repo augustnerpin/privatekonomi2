@@ -1,0 +1,35 @@
+# Håller Supabase-projektet vid liv: gratisprojekt pausas efter ~7 dagar utan aktivitet.
+# Läser URL och publik nyckel direkt från index.html, så inget behöver ställas in.
+# Misslyckas pingen (t.ex. om projektet redan pausats) skickar GitHub ett mejl.
+name: Håll Supabase vaken
+
+on:
+  schedule:
+    - cron: '17 6 * * 1,4'   # måndag och torsdag 08:17 svensk sommartid
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pinga Supabase
+        run: |
+          URL=$(grep -oP "SB_DEF_URL='\K[^']+" index.html)
+          KEY=$(grep -oP "SB_DEF_KEY='\K[^']+" index.html)
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "Hittade inte Supabase-URL/nyckel i index.html"; exit 1; fi
+          curl -fsS "$URL/auth/v1/health" -H "apikey: $KEY" > /dev/null
+          BODY=$(curl -sS "$URL/rest/v1/mcp_tokens?select=id&limit=1" -H "apikey: $KEY")
+          echo "$BODY"
+          # 42501 = databasen svarade men tabellen kräver inloggning — räknas ändå som aktivitet
+          echo "$BODY" | grep -qE '^\[|"42501"' || { echo "Oväntat svar från Supabase"; exit 1; }
+
+      - name: Håll schemat igång (GitHub stänger annars av schemat efter 60 dagar utan commits)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/supabase-keepalive.yml/enable"
