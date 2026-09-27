@@ -820,12 +820,24 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
       <div style="font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px">Välkommen till Ekonomi</div>
       <div style="font-size:13px;color:var(--sub);line-height:1.55;margin-bottom:20px">Din privata budget- och förmögenhetsapp. Importera kontoutdrag från banken och kreditkortet — AI kategoriserar allt åt dig. Data sparas lokalt på din enhet; bara det du skickar till AI:n lämnar telefonen.</div>
     </div>
-    <div class="field"><label>Din månadslön (kr, efter skatt)</label><input type="number" id="ob-salary" placeholder="t.ex. 27 500" inputmode="numeric"></div>
     <div class="field"><label>Förmögenhetsmål (kr)</label><input type="number" id="ob-goal" placeholder="t.ex. 700 000" inputmode="numeric"></div>
     <div class="field"><label>Ditt namn (som på kontoutdragen)</label><input type="text" id="ob-name" placeholder="FÖRNAMN EFTERNAMN" autocapitalize="characters" autocomplete="name"></div>
     <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-bottom:12px;line-height:1.5">Du kan ändra allt senare i inställningar — kategorier, löneperioder, mål och mer.</div>
     <button class="btn-p" onclick="finishOnboarding()">Kom igång</button>
     <button class="btn-s" onclick="skipOnboarding()">Hoppa över</button>
+  </div>
+</div>
+
+<!-- ═══ BUDGET MODAL ═══ -->
+<div class="overlay" id="budget-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Budget per månad</div>
+    <div id="budget-sub" style="font-size:12px;color:var(--sub);margin:-10px 0 8px"></div>
+    <button class="btn-s" style="margin:0 0 6px" onclick="fillBudgetFromAvg()">Fyll i från mitt snitt</button>
+    <div id="budget-fields"></div>
+    <button class="btn-p" onclick="saveBudgets()">Spara budget</button>
+    <button class="btn-s" onclick="closeOverlay('budget-modal')">Avbryt</button>
   </div>
 </div>
 
@@ -855,6 +867,9 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
     <div class="field"><label>Belopp (kr)</label><input type="number" id="tx-amt" placeholder="0" inputmode="decimal"></div>
     <div class="field"><label>Beskrivning</label><input type="text" id="tx-desc" placeholder="Valfritt"></div>
     <div class="field"><label>Kategori</label><select id="tx-cat"></select></div>
+    <div class="field" id="tx-contact-field" style="display:none"><label>Vem är <span id="tx-contact-nr"></span>?</label>
+      <input type="text" id="tx-contact" placeholder="T.ex. Anna (sambo)">
+      <div style="font-size:11px;color:var(--sub2);margin-top:5px;line-height:1.5">Namnet visas i stället för numret överallt och hjälper AI:n att kategorisera.</div></div>
     <div class="field"><label>Konto</label><select id="tx-acc"></select></div>
     <div class="field"><label>Datum</label><input type="date" id="tx-date"></div>
     <button class="btn-p" onclick="saveTx()">Spara</button>
@@ -1033,10 +1048,6 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
   <div class="s-sec">
     <div class="s-lbl">Ekonomi</div>
     <div class="s-card">
-      <div class="s-row">
-        <div><div class="s-row-lbl">Månadslön (netto)</div></div>
-        <input type="number" id="s-salary" placeholder="0" onchange="saveSetting('salary',this.value)">
-      </div>
       <div class="s-row">
         <div><div class="s-row-lbl">Förmögenhetsmål</div></div>
         <input type="number" id="s-goal" placeholder="700000" onchange="saveSetting('goal',this.value)">
@@ -1225,6 +1236,36 @@ const ASSET_TRF='Bostad, lån & tillgångar'; // bostadsköp, lånebelopp, handp
 const getTrfCats=()=>ld('cats_trf',DEF_TRF);
 function catsForType(t){return t==='expense'?getExpCats():t==='income'?getIncCats():t==='savings'?getSavCats():getTrfCats()}
 const TYPE_LABEL={expense:'Utgift',income:'Inkomst',savings:'Sparande',transfer:'Överföring'};
+
+// ── Namn på Swish-/kontonummer ─────────────
+// SEB visar bara numret; du kan ge det ett namn ("Anna") som visas överallt och hjälper AI:n
+const getContacts=()=>ld('contact_names',{});
+function contactName(desc){const n=descNumber(desc);return n?(getContacts()[n]||null):null}
+function displayDesc(desc){return contactName(desc)||desc}
+function setContactName(desc,name){
+  const n=descNumber(desc);if(!n)return;
+  const c=getContacts();name=String(name||'').trim();
+  if(name)c[n]=name;else delete c[n];
+  sv('contact_names',c);
+}
+
+// ── Budget per kategori ────────────────────
+const getBudgets=()=>ld('cat_budgets',{});
+function periodShift(ym,d){const[y,m]=ym.split('-').map(Number);const x=new Date(y,m-1+d,1);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')}
+// Snitt per utgiftskategori för de n senaste perioderna före `month` som har data
+function catAverages(month,n=3){
+  const txs=getTxs();
+  const per=[];
+  for(let i=1;i<=12&&per.length<n;i++){
+    const p=periodShift(month,-i);
+    const pt=txs.filter(t=>t.month===p&&t.type==='expense');
+    if(pt.length)per.push(pt);
+  }
+  const avg={};
+  per.forEach(pt=>pt.forEach(t=>{avg[t.cat]=(avg[t.cat]||0)+t.amount}));
+  Object.keys(avg).forEach(k=>avg[k]=avg[k]/per.length);
+  return{avg,months:per.length};
+}
 // Migrera äldre transaktioner: betalmetod (pay) → konto (account)
 (function(){
   const txs=getTxs();let ch=false;
@@ -1443,6 +1484,7 @@ function openManualAdd(){
   document.getElementById('tx-amt').value='';
   document.getElementById('tx-desc').value='';
   fillAccountSelect(document.getElementById('tx-acc'));
+  document.getElementById('tx-contact-field').style.display='none';
   const d=new Date();
   document.getElementById('tx-date').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   openOverlay('tx-modal');
@@ -1460,6 +1502,10 @@ function openEdit(id){
   document.getElementById('tx-desc').value=tx.desc||'';
   document.getElementById('tx-date').value=tx.date;
   fillAccountSelect(document.getElementById('tx-acc'),tx.account);
+  const num=descNumber(tx.desc);
+  document.getElementById('tx-contact-field').style.display=num?'block':'none';
+  document.getElementById('tx-contact-nr').textContent=num||'';
+  document.getElementById('tx-contact').value=num?(getContacts()[num]||''):'';
   // Om kategorin tagits bort ur listan: lägg till den så att den inte byts tyst vid sparning
   const sel=document.getElementById('tx-cat');
   if(![...sel.options].some(o=>o.value===tx.cat)){
@@ -1499,6 +1545,11 @@ function saveTx(){
   };
   if(state.editId){txs=txs.map(t=>t.id===state.editId?obj:t)}
   else{txs.push(obj)}
+  // Namn på Swish-/kontonummer
+  if(document.getElementById('tx-contact-field').style.display!=='none'){
+    const nm=document.getElementById('tx-contact').value.trim();
+    if(nm!==(getContacts()[descNumber(obj.desc)]||''))setContactName(obj.desc,nm);
+  }
   // Ändrad kategori på en importerad transaktion → lär in regeln och erbjud att uppdatera samma butik
   if(prev&&prev.mkey&&(prev.cat!==obj.cat||prev.type!==obj.type)){
     setRule(prev.mkey,obj.type,obj.cat);
@@ -1564,8 +1615,12 @@ function openNWModal(){
       help+=(help?'<br>':'')+`Sedan ${mLabel(latest.period)}: sparat <b>${fmt(s('savings'))} kr</b> · över <b>${fmtSigned(s('income')-s('expense')-s('savings'))} kr</b>`;
     }
   }
+  // Summan av bankkontonas saldon kan fyllas i som likvida medel med ett tryck
+  const bankBal=withBal.filter(a=>a.kind!=='card').reduce((s,a)=>s+a.balance.value,0);
+  const cashCat=cats.find(c=>c.key==='cash')||cats[0];
+  const fillBtn=withBal.some(a=>a.kind!=='card')&&cashCat?`<button type="button" onclick="document.getElementById('nwm-${cashCat.key}').value=${Math.round(bankBal)};toast('${esc(cashCat.label)} ifyllt')" style="margin-top:8px;width:100%;padding:9px;border-radius:12px;background:var(--acc2);border:1px solid var(--acc);color:var(--acc);font-family:var(--sans);font-size:13px;cursor:pointer">Fyll i ${esc(cashCat.label)}: ${fmt(bankBal)} kr</button>`:'';
   const helpHtml=help?`<div style="background:var(--bg2);border:1px solid var(--line);border-radius:var(--rsm);padding:10px 12px;font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:12px">
-    <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--sub2);font-family:var(--mono);margin-bottom:2px">Från dina importer</div>${help}</div>`:'';
+    <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--sub2);font-family:var(--mono);margin-bottom:2px">Från dina importer</div>${help}${fillBtn}</div>`:'';
 
   // Build fields dynamically, pre-filling with last snapshot values
   const prevValues=latest||{};
@@ -1625,8 +1680,8 @@ function txRowHtml(tx,clickable=true){
   return`<div class="txi${tx.type==='transfer'?' trf':''}"${clickable?` onclick="openEdit(${tx.id})"`:' style="cursor:default"'}>
     <div class="txav" style="background:${bg}">${tx.type==='transfer'?'⇄':esc(catIcon(tx.cat))}</div>
     <div class="txi-info">
-      <div class="txi-name">${esc(tx.desc||tx.cat)}${accTag}</div>
-      <div class="txi-meta">${esc(tx.cat)} · ${tx.date.slice(5)}</div>
+      <div class="txi-name">${esc(displayDesc(tx.desc)||tx.cat)}${accTag}</div>
+      <div class="txi-meta">${esc(tx.cat)} · ${tx.date.slice(5)}${contactName(tx.desc)?` · ${esc(tx.desc)}`:''}</div>
     </div>
     <div class="txi-amt" style="color:${col}">${sign}${fmt(Math.abs(tx.amount))}</div>
   </div>`;
@@ -1660,23 +1715,36 @@ function renderBudget(){
   let html=`<div class="mnav">
     <button class="mnav-b" onclick="changeMonth(-1)">‹</button>
     <div style="text-align:center">
-      <div class="mnav-m">${mLabel(month)}</div>
-      <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:2px">${payPeriodLabel(month)}</div>
+      <div class="mnav-m" style="font-size:13px">${payPeriodLabel(month).replace('Löneperiod ','Löneperiod<br><span style="font-size:15px">')}</span></div>
+      ${month===currentPayPeriod()?'<div style="font-size:10px;color:var(--acc);font-family:var(--mono);margin-top:2px">pågår</div>':''}
     </div>
     <button class="mnav-b" onclick="changeMonth(1)">›</button>
   </div>`;
 
-  // Import-genväg
-  const imps=getImports();
-  const lastImp=imps[imps.length-1];
-  html+=`<div class="card" style="cursor:pointer" onclick="openImport()"><div class="card-inner" style="display:flex;align-items:center;gap:14px;padding:14px 17px">
-    <div class="imp-drop-ic" style="margin:0;width:40px;height:40px;font-size:19px">⇪</div>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:14px;font-weight:600">Importera kontoutdrag</div>
-      <div style="font-size:11px;color:var(--sub);margin-top:2px">${lastImp?`Senast ${lastImp.date.slice(0,10)} · ${lastImp.count} transaktioner`:'Bank eller kreditkort — AI kategoriserar'}</div>
-    </div>
-    <span style="color:var(--sub2);font-size:18px">›</span>
-  </div></div>`;
+  // Påminnelse: förra löneperioden är inte importerad än
+  const prevP=periodShift(currentPayPeriod(),-1);
+  const prevImported=allTx.some(t=>t.month===prevP&&t.source==='import');
+  if(!prevImported&&(month===currentPayPeriod()||month===prevP)){
+    html+=`<div class="card" style="cursor:pointer;border-color:rgba(48,209,136,.4)" onclick="openImport('${prevP}')"><div class="card-inner" style="display:flex;align-items:center;gap:14px;padding:14px 17px">
+      <div class="imp-drop-ic" style="margin:0;width:40px;height:40px;font-size:19px">⇪</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600">Dags att importera ${mLabel(prevP)}</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">Löneperioden ${payPeriodLabel(prevP).replace('Löneperiod ','')} är slut — ladda upp bank + kort</div>
+      </div>
+      <span style="color:var(--sub2);font-size:18px">›</span>
+    </div></div>`;
+  }else{
+    const imps=getImports();
+    const lastImp=imps[imps.length-1];
+    html+=`<div class="card" style="cursor:pointer" onclick="openImport('${month}')"><div class="card-inner" style="display:flex;align-items:center;gap:14px;padding:12px 17px">
+      <div class="imp-drop-ic" style="margin:0;width:36px;height:36px;font-size:17px">⇪</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600">Importera kontoutdrag</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">${lastImp?`Senast ${lastImp.month?mLabel(lastImp.month):lastImp.date.slice(0,10)} · ${lastImp.count} transaktioner`:'Bank eller kreditkort — AI kategoriserar'}</div>
+      </div>
+      <span style="color:var(--sub2);font-size:18px">›</span>
+    </div></div>`;
+  }
 
   // Balans
   const accs=getAccounts();
@@ -1689,7 +1757,20 @@ function renderBudget(){
       <span class="bdg" style="background:${sRate>=20?'var(--green2)':'var(--red2)'};color:${sRate>=20?'var(--green)':'var(--red)'}">Kvot ${sRate}%</span>
       ${perAcc.length>1?perAcc.map(x=>`<span class="bdg" style="background:var(--bg3);color:var(--sub)">${esc(x.a.name)} ${fmt(x.v)} kr</span>`).join(''):''}
     </div>
+    ${(()=>{
+      // Pengar som flyttats till egna konton/tillgångar syns här — annars ser "Över" ut som ett underskott
+      const moved=-txs.filter(t=>t.type==='transfer'&&t.cat!=='Kreditkortsbetalning').reduce((s,t)=>s+t.amount,0);
+      if(Math.abs(moved)<1)return'';
+      return`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6">
+        ⇄ ${moved>0?'Flyttat till':'Hämtat från'} egna konton: <b style="color:var(--text)">${fmt(Math.abs(moved))} kr</b> — räknas inte som utgift.
+        ${moved>0?`<br>Inklusive detta: <b style="color:${balance+moved>=0?'var(--green)':'var(--red)'}">${fmtSigned(balance+moved)} kr</b> kvar av månadens pengar.`:''}
+        ${moved>0?`<br><span style="color:var(--sub2)">Är något av det sparande? Tryck på raden och välj Sparande — appen minns det.</span>`:''}
+      </div>`;
+    })()}
   </div></div>`;
+
+  // Budget per kategori
+  html+=budgetCardHtml(month,byCat);
 
   // Donut
   if(sortedCats.length){
@@ -1729,6 +1810,76 @@ function renderBudget(){
   renderBgtList();
 }
 
+// ── Budgetkort: förbrukat mot budget per kategori + snitt senaste 3 månaderna ──
+function budgetCardHtml(month,byCat){
+  const B=getBudgets();
+  const{avg,months}=catAverages(month);
+  const cats=Object.keys(B).filter(c=>B[c]>0);
+  if(!cats.length){
+    return`<div class="card"><div class="card-inner" style="padding:14px 17px">
+      <div class="card-lbl">Budget</div>
+      <div style="font-size:13px;color:var(--sub);line-height:1.5;margin:4px 0 10px">Sätt ett tak per kategori och se direkt hur månaden går.${months?` Förslag finns utifrån ditt snitt de senaste ${months} månaderna.`:''}</div>
+      <button class="btn-s" style="margin-top:0" onclick="openBudgetModal()">Skapa budget</button>
+    </div></div>`;
+  }
+  const isCur=month===currentPayPeriod();
+  // Hur stor del av perioden som gått (för "i takt"-markering i pågående månad)
+  let elapsed=1;
+  if(isCur){
+    const s=parseLocalDate(getPeriodStart(month)),e=parseLocalDate(getPeriodStart(periodShift(month,1)));
+    elapsed=Math.min(1,Math.max(0,(Date.now()-s)/(e-s)));
+  }
+  const rows=cats.map(c=>({c,b:B[c],s:byCat[c]||0,a:avg[c]||0})).sort((x,y)=>y.s/y.b-x.s/x.b);
+  const totB=rows.reduce((s,r)=>s+r.b,0),totS=rows.reduce((s,r)=>s+r.s,0);
+  const unbudgeted=Object.entries(byCat).filter(([c,v])=>!(B[c]>0)&&v>0).reduce((s,[,v])=>s+v,0);
+  const bar=(s,b)=>{const p=b>0?s/b:0;const col=p>1?'var(--red)':p>(isCur?Math.max(elapsed,0.85):0.85)?'var(--amber)':'var(--green)';
+    return`<div class="pbar" style="height:5px;margin:6px 0 2px;position:relative"><div class="pfill" style="width:${Math.min(p*100,100).toFixed(1)}%;background:${col}"></div>${isCur?`<div style="position:absolute;top:-2px;bottom:-2px;left:${(elapsed*100).toFixed(1)}%;width:1.5px;background:var(--sub2)"></div>`:''}</div>`};
+  let h=`<div class="card"><div class="card-inner" style="padding:14px 17px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div class="card-lbl">Budget</div>
+      <button onclick="openBudgetModal()" style="background:none;border:none;color:var(--acc);font-size:12px;cursor:pointer;font-family:var(--sans)">Redigera</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:2px">
+      <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:${totS>totB?'var(--red)':'var(--text)'}">${fmt(totS)} <span style="font-size:13px;color:var(--sub2);font-weight:400">/ ${fmt(totB)} kr</span></div>
+      <div style="font-size:12px;color:${totB-totS>=0?'var(--green)':'var(--red)'}">${totB-totS>=0?fmt(totB-totS)+' kr kvar':fmt(totS-totB)+' kr över'}</div>
+    </div>
+    ${bar(totS,totB)}
+    ${isCur?`<div style="font-size:10px;color:var(--sub2);font-family:var(--mono)">strecket = hur långt perioden kommit (${Math.round(elapsed*100)} %)</div>`:''}
+    <div style="margin-top:10px">`;
+  rows.forEach(r=>{
+    const over=r.s>r.b;
+    h+=`<div style="padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="setBgtCat(${jsArg(r.c)})">
+      <div style="display:flex;justify-content:space-between;font-size:13px;gap:8px">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.c)}</span>
+        <span style="font-family:var(--mono);white-space:nowrap;color:${over?'var(--red)':'var(--text)'}">${fmt(r.s)} <span style="color:var(--sub2)">/ ${fmt(r.b)}</span></span>
+      </div>
+      ${bar(r.s,r.b)}
+      ${r.a?`<div style="font-size:10px;color:var(--sub2);font-family:var(--mono)">snitt ${fmt(r.a)} kr/mån${r.s&&!isCur?` · ${r.s>r.a?'+':'−'}${fmt(Math.abs(r.s-r.a))} mot snittet`:''}</div>`:''}
+    </div>`;
+  });
+  if(unbudgeted>0)h+=`<div style="padding:8px 0 0;border-top:1px solid var(--line);font-size:12px;color:var(--sub)">Utan budget: <b style="color:var(--text)">${fmt(unbudgeted)} kr</b> <span style="color:var(--sub2)">(${Object.entries(byCat).filter(([c,v])=>!(B[c]>0)&&v>0).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([c])=>esc(c)).join(', ')})</span></div>`;
+  return h+`</div></div></div>`;
+}
+function openBudgetModal(){
+  const B=getBudgets();
+  const{avg,months}=catAverages(state.month);
+  document.getElementById('budget-sub').textContent=months?`Snitt = dina ${months} senaste importerade månader.`:'Inga tidigare månader att räkna snitt på ännu.';
+  document.getElementById('budget-fields').innerHTML=getExpCats().map(c=>`<div class="s-row" style="padding:10px 0">
+      <div style="min-width:0"><div style="font-size:14px">${esc(c)}</div>${avg[c]?`<div class="s-row-sub">snitt ${fmt(avg[c])} kr</div>`:''}</div>
+      <input type="number" inputmode="numeric" data-bcat="${esc(c)}" data-avg="${Math.round(avg[c]||0)}" value="${B[c]||''}" placeholder="—" style="width:110px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:var(--rsm);padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:14px;outline:none;text-align:right">
+    </div>`).join('');
+  openOverlay('budget-modal');
+}
+function fillBudgetFromAvg(){
+  // Snitt avrundat uppåt till närmaste 100 kr
+  document.querySelectorAll('#budget-fields input[data-bcat]').forEach(i=>{const a=+i.dataset.avg;if(a>0)i.value=Math.ceil(a/100)*100});
+}
+function saveBudgets(){
+  const B={};
+  document.querySelectorAll('#budget-fields input[data-bcat]').forEach(i=>{const v=parseFloat(i.value);if(v>0)B[i.dataset.bcat]=v});
+  sv('cat_budgets',B);closeOverlay('budget-modal');toast('Budget sparad ✓');render();
+}
+
 function setBgtCat(c){_bgt.cat=_bgt.cat===c?null:c;_bgt.showAll=false;renderBudget()}
 
 function renderBgtList(){
@@ -1741,7 +1892,7 @@ function renderBgtList(){
     txs=txs.filter(t=>t.type==='expense'&&cats.has(t.cat));
   }
   const q=_bgt.q.trim().toLowerCase();
-  if(q)txs=txs.filter(t=>(t.desc||'').toLowerCase().includes(q)||(t.cat||'').toLowerCase().includes(q)||String(Math.round(Math.abs(t.amount))).includes(q.replace(/\s/g,'')));
+  if(q)txs=txs.filter(t=>(t.desc||'').toLowerCase().includes(q)||(contactName(t.desc)||'').toLowerCase().includes(q)||(t.cat||'').toLowerCase().includes(q)||String(Math.round(Math.abs(t.amount))).includes(q.replace(/\s/g,'')));
   txs.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
   const cnt=document.getElementById('bgt-count');
   if(cnt)cnt.textContent=`${txs.length} st`+(_bgt.cat||q?` · ${fmt(txs.reduce((s,t)=>s+(t.type==='income'?0:t.amount),0))} kr`:'');
@@ -2538,7 +2689,6 @@ function renderSettings(){
   document.getElementById('s-owner').value=getOwnerName();
   const isLight=ld('theme','dark')==='light';
   document.getElementById('theme-toggle').checked=isLight;
-  document.getElementById('s-salary').value=ld('salary',0)||'';
   document.getElementById('s-goal').value=ld('goal',700000)||'';
   document.getElementById('s-apikey').value=getApiKey();
   renderFontPicker();
@@ -2807,7 +2957,7 @@ function buildBackup(){
     settings:{goal:ld('goal',700000),salary:ld('salary',0),theme:ld('theme','dark'),font:localStorage.getItem('font_theme')||'dm',
       cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
       accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{}),
-      owner_name:getOwnerName(),ai_import_notes:getImportNotes()}};
+      owner_name:getOwnerName(),ai_import_notes:getImportNotes(),cat_budgets:getBudgets(),contact_names:getContacts()}};
 }
 function exportData(){
   const data=buildBackup();
@@ -2849,7 +2999,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes'].forEach(k=>{if(d.settings[k])sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names'].forEach(k=>{if(d.settings[k])sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -2868,7 +3018,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -3029,7 +3179,7 @@ function aiQuestionsHtml(){
         <div style="font-size:14px;font-weight:600">AI:n undrar (${Q.length})</div></div>
       <div style="font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:10px">Svara så kategoriserar den om. Dina svar sparas och används vid alla framtida importer.</div>`;
     Q.forEach(q=>{
-      const ex=q.groups.slice(0,3).map(g=>`${esc(g.rows[0].desc)} <span style="color:var(--sub2)">${g.total<0?'−':'+'}${fmt(Math.abs(g.total))} kr${g.rows.length>1?` · ${g.rows.length} st`:''}</span>`).join('<br>');
+      const ex=q.groups.slice(0,3).map(g=>`${esc(displayDesc(g.rows[0].desc))} <span style="color:var(--sub2)">${g.total<0?'−':'+'}${fmt(Math.abs(g.total))} kr${g.rows.length>1?` · ${g.rows.length} st`:''}</span>`).join('<br>');
       h+=`<div style="padding:10px 0;border-top:1px solid var(--line)">
         <div style="font-size:13px;font-weight:500;line-height:1.5">${esc(q.q)}</div>
         ${ex?`<div style="font-size:11px;font-family:var(--mono);color:var(--sub);margin:6px 0;line-height:1.6">${ex}</div>`:''}
@@ -3253,8 +3403,9 @@ function tableToRows(t,map,invert){
 // ── Importstatus ───────────────────────────
 let _imp=null;
 function newImpState(){return{step:'files',files:[],groups:[],busy:null,replaceManual:{},from:ld('import_from','')}}
-function openImport(){
+function openImport(month){
   if(!_imp||_imp.step==='done')_imp=newImpState();
+  if(typeof month==='string'&&/^\d{4}-\d{2}$/.test(month)&&_imp.step==='files')_imp.month=month;
   document.getElementById('import-screen').classList.add('open');
   renderImport();
 }
@@ -3325,13 +3476,18 @@ function setImpFile(id,key,val){
 }
 function fileSummary(f){
   if(f.kind==='doc')return`${f.media==='application/pdf'?'PDF':'Bild'} · ${Math.round(f.size/1024)} kB · läses av AI`;
-  const rows=fileRows(f);
-  if(!rows.length)return'Inga transaktioner hittades med nuvarande kolumnval';
-  const dates=rows.map(r=>r.date).sort();
+  const all=fileRows(f);
+  if(!all.length)return'Inga transaktioner hittades med nuvarande kolumnval';
+  const dates=all.map(r=>r.date).sort();
+  // Siffrorna gäller vald månad — hela filen visas bara som bakgrund
+  const rows=_imp.month?all.filter(r=>periodOf(r.date)===_imp.month):all;
   const out=rows.filter(r=>r.amount<0).reduce((s,r)=>s+r.amount,0);
   const inn=rows.filter(r=>r.amount>0).reduce((s,r)=>s+r.amount,0);
   const H=i=>i>=0?(f.table.header[i]||`kolumn ${i+1}`):'—';
-  return`${rows.length} rader · ${dates[0]} – ${dates[dates.length-1]}<br>ut ${fmt(-out)} kr · in ${fmt(inn)} kr<br>`+
+  return(rows.length
+      ?`<b style="color:var(--text)">${mLabel(_imp.month)}: ${rows.length} rader</b> · ut ${fmt(-out)} kr · in ${fmt(inn)} kr<br>`
+      :`<span style="color:var(--amber)">Inga rader i ${mLabel(_imp.month)}</span><br>`)+
+    `<span style="color:var(--sub2)">Filen: ${all.length} rader, ${dates[0]} – ${dates[dates.length-1]}</span><br>`+
     `<span style="color:var(--sub2)">${esc(H(f.map.date))} · ${esc(H(f.map.desc))} · ${esc(f.map.amount>=0?H(f.map.amount):H(f.map.out)+'/'+H(f.map.in))}</span>`;
 }
 
@@ -3585,7 +3741,7 @@ Om något är oklart på ett sätt som påverkar resultatet mycket (t.ex. vad et
       const amts=g.rows.map(r=>Math.abs(r.amount)).sort((a,b)=>a-b);
       const typical=g.rows.length>1?` (median ${fmt(amts[Math.floor(amts.length/2)])} kr)`:'';
       const extra=g.rows.find(r=>r.extra)?.extra;
-      return`${s+j}|${g.dir}|${g.accKind==='card'?'kort':'bank'}|${kind}|${g.rows.length}st|${fmt(Math.abs(g.total))} kr${typical}|${r0.desc}${extra?` [${extra}]`:''}`;
+      return`${s+j}|${g.dir}|${g.accKind==='card'?'kort':'bank'}|${kind}|${g.rows.length}st|${fmt(Math.abs(g.total))} kr${typical}|${r0.desc}${contactName(r0.desc)?` (= ${contactName(r0.desc)})`:''}${extra?` [${extra}]`:''}`;
     }).join('\n');
     const r=await callClaude({system,messages:[{role:'user',content:`k|riktning|konto|typ|antal|summa|beskrivning\n${lines}`}],effort:'low',max_tokens:16000,schema});
     const out=JSON.parse(r.text);
@@ -3779,8 +3935,8 @@ function renderImpReview(body,bar,sub){
       h+=`<div class="imp-grp${g.on?'':' off'}">
         <span class="imp-dot" style="background:${dot}" title="${g.src==='rule'?'Känd butik':g.src==='auto'?'Regel':g.conf==='low'?'Osäker':'AI'}"></span>
         <div class="imp-grp-info" onclick="toggleImpRows(${idx})" style="cursor:pointer">
-          <div class="imp-grp-name">${esc(g.rows[0].desc||'(ingen text)')}</div>${hint}
-          <div class="txi-meta">${g.rows.length>1?g.rows.length+' st · ':''}${esc(accountName(g.rows[0].account))} · <span style="color:${g.total<0?'var(--text)':'var(--green)'}">${g.total<0?'−':'+'}${fmt(Math.abs(g.total))} kr</span></div>
+          <div class="imp-grp-name">${esc(displayDesc(g.rows[0].desc)||'(ingen text)')}${contactName(g.rows[0].desc)?` <span style="color:var(--sub2);font-weight:400;font-size:11px">${esc(g.rows[0].desc)}</span>`:''}</div>${hint}
+          <div class="txi-meta"><span style="color:${g.type==='expense'?'var(--red)':g.type==='income'?'var(--green)':g.type==='savings'?'var(--blue)':'var(--sub)'}">${TYPE_LABEL[g.type]||''}</span> · ${g.rows.length>1?g.rows.length+' st · ':''}${esc(accountName(g.rows[0].account))} ·<span style="color:${g.total<0?'var(--text)':'var(--green)'}">${g.total<0?'−':'+'}${fmt(Math.abs(g.total))} kr</span></div>
         </div>
         ${catSelectHtml(g,idx)}
         <button class="tag-rm" onclick="toggleImpGroup(${idx})" title="${g.on?'Hoppa över':'Ta med'}">${g.on?'×':'↺'}</button>
@@ -4047,7 +4203,7 @@ function buildCtx(){
   const topMerchants=Object.values(byMerchant).sort((a,b)=>b.sum-a.sum).slice(0,40)
     .map(m=>`${m.name} (${m.cat}): ${Math.round(m.sum)} kr, ${m.n} st`);
   const recent=[...txs].filter(t=>t.type!=='transfer').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,150)
-    .map(t=>`${t.date} ${TYPE_LABEL[t.type]||''} ${t.cat}: "${t.desc||''}" ${Math.round(t.amount)} kr [${accountName(t.account)}]`);
+    .map(t=>`${t.date} ${TYPE_LABEL[t.type]||''} ${t.cat}: "${displayDesc(t.desc)||''}" ${Math.round(t.amount)} kr [${accountName(t.account)}]`);
   const describedSection=(topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'')+
     (recent.length?`\n\nSENASTE TRANSAKTIONER (nyast först, överföringar exkluderade):\n${recent.join('\n')}`:'');
 
@@ -4090,7 +4246,24 @@ FÖRMÖGENHETSUTVECKLING:
 ${nwHistory||'Ingen data'}
 ${ln?`Senaste: Total ${Math.round(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${Math.round(ln[c.key])}`).join(' | ')}`:''}
 
-MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${describedSection}`;
+MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${coachExtraCtx()}${describedSection}`;
+}
+// Samma bakgrund som importen använder: namn, förklaringar, budget och hur överföringar räknas
+function coachExtraCtx(){
+  const owner=getOwnerName();
+  const notes=getImportNotes();
+  const B=getBudgets();
+  const cur=state.month;
+  const spent={};getTxs().filter(t=>t.month===cur&&t.type==='expense').forEach(t=>spent[t.cat]=(spent[t.cat]||0)+t.amount);
+  const contacts=Object.entries(getContacts());
+  const moved=-getTxs().filter(t=>t.month===cur&&t.type==='transfer'&&t.cat!=='Kreditkortsbetalning').reduce((s,t)=>s+t.amount,0);
+  let s=`\n\nOM DATAN:\n- Transaktionerna importeras från kontoutdrag och kategoriseras av AI + användaren. Typer: utgift (konsumtion), inkomst, sparande, överföring (räknas inte — kortfaktura, flytt mellan egna konton, bostad/lån).\n- "Swish (privat)" är netto: Swish in från privatpersoner minskar kostnaden.${owner?`\n- Användaren heter ${owner}.`:''}`;
+  if(Math.abs(moved)>=1)s+=`\n- ${mLabel(cur)}: ${fmt(Math.abs(moved))} kr ${moved>0?'flyttades till':'hämtades från'} egna konton (överföringar, ej utgift).`;
+  if(notes.length)s+=`\n\nANVÄNDARENS FÖRKLARINGAR OM SIN EKONOMI:\n${notes.map(n=>n.q?`- ${n.q} → ${n.a}`:`- ${n.a}`).join('\n')}`;
+  if(contacts.length)s+=`\n\nNAMN PÅ SWISH-/KONTONUMMER:\n${contacts.map(([n,nm])=>`- ${n} = ${nm}`).join('\n')}`;
+  const bc=Object.entries(B).filter(([,v])=>v>0);
+  if(bc.length)s+=`\n\nBUDGET (${mLabel(cur)}, förbrukat/budget):\n${bc.map(([c,v])=>`- ${c}: ${Math.round(spent[c]||0)}/${Math.round(v)} kr`).join('\n')}`;
+  return s;
 }
 
 // ── Extrahera och spara minnen ──────────────
@@ -4423,9 +4596,7 @@ setTimeout(()=>{
 
 // ── Onboarding för nya användare ──────────
 function finishOnboarding(){
-  const sal=parseFloat(document.getElementById('ob-salary').value)||0;
   const goal=parseFloat(document.getElementById('ob-goal').value)||0;
-  if(sal>0)sv('salary',sal);
   if(goal>0)sv('goal',goal);
   const nm=document.getElementById('ob-name').value;
   if(nm.trim())saveOwnerName(nm);
@@ -4445,6 +4616,15 @@ function skipOnboarding(){
   } else if(hasData){
     localStorage.setItem('onboarded','1');
   }
+})();
+
+// Starta på en månad med innehåll: pågående period om den har utgifter, annars senast importerade
+(function(){
+  const cur=currentPayPeriod();
+  const txs=getTxs();
+  if(txs.some(t=>t.month===cur&&t.type==='expense'))return;
+  const latest=txs.filter(t=>t.month<=cur&&t.type==='expense').map(t=>t.month).sort().pop();
+  if(latest)state.month=latest;
 })();
 
 render();
