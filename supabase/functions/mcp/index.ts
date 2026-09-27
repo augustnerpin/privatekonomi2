@@ -479,7 +479,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'update_transaction',
     title: 'Ändra transaktion',
-    description: 'Ändrar en transaktion (id från list_transactions). Ändras typ/kategori på en importerad rad lärs regeln in för butiken, som i appen. apply_to_same_merchant ändrar även övriga rader från samma butik.',
+    description: 'Ändrar en transaktion (id från list_transactions). Ändras typ/kategori på en importerad rad lärs regeln in för butiken, som i appen; svaret har då rule_id och previous_rule så att det kan ångras med update_rule/delete_rule (se undo). apply_to_same_merchant ändrar även övriga rader från samma butik. dry_run: true visar exakt vad som skulle ändras (raden, regeln och övriga rader) utan att spara. Belopp följer teckenkonventionen: utgift/sparande positivt = pengar ut, inkomst positivt = in, överföring negativt = ut.',
     write: true,
     inputSchema: {
       type: 'object',
@@ -490,6 +490,7 @@ export const TOOLS: Tool[] = [
         description: { type: 'string' }, date: S.date, account: { type: 'string' },
         from_account: TRF_SIDE.from, to_account: TRF_SIDE.to,
         apply_to_same_merchant: { type: 'boolean', default: false },
+        dry_run: { type: 'boolean', default: false, description: 'true = visa ändringarna utan att spara' },
       },
     },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
@@ -513,14 +514,32 @@ export const TOOLS: Tool[] = [
         if (from_account || to_account || transfer_pair_id) patch.extra = rest;
         if (transfer_pair_id) unpair = Number(transfer_pair_id);
       }
+      const changedCat = next.category !== r.category || next.type !== r.type;
+      const learn = !!r.mkey && changedCat;
+      const prevRule = learn ? s.merchant_rules[r.mkey] ?? null : null;
+      if (a.dry_run) {
+        const same = learn && a.apply_to_same_merchant
+          ? (await must<Obj[]>(uq(c, 'transactions', TX_COLS).eq('mkey', r.mkey).eq('deleted', false).neq('id', a.id))).filter((x) => x.type !== next.type || x.category !== next.category)
+          : [];
+        return {
+          dry_run: true, would_update: { id: a.id, ...rowDiff(r, patch) },
+          would_learn_rule: learn ? { rule_id: r.mkey, before: ruleView(r.mkey, prevRule), after: { type: next.type, category: next.category } } : null,
+          would_also_update: same.map((x) => ({ id: Number(x.id), date: x.tx_date, description: x.description, amount: Number(x.amount), before: { type: x.type, category: x.category }, after: { type: next.type, category: next.category } })),
+          note: 'Inget sparat. Kör igen utan dry_run för att spara.',
+        };
+      }
       await must(c.db.from('transactions').update(patch).eq('user_id', c.uid).eq('id', a.id));
       if (unpair) await unlinkPair(c, unpair);
       const out: Obj = { updated: { id: a.id, ...patch } };
-      const changedCat = next.category !== r.category || next.type !== r.type;
-      if (r.mkey && changedCat) {
-        s.merchant_rules[r.mkey] = { type: next.type, cat: next.category, t: Date.now() };
+      if (learn) {
+        s.merchant_rules[r.mkey] = { ...(prevRule?.created ? { created: prevRule.created } : prevRule ? {} : { created: Date.now() }), type: next.type, cat: next.category, t: Date.now() };
         await saveState(c, 'merchant_rules', s.merchant_rules);
         out.learned_rule = r.mkey;
+        out.rule_id = r.mkey;
+        out.previous_rule = prevRule ? ruleView(r.mkey, prevRule) : null;
+        out.undo = prevRule
+          ? { tool: 'update_rule', arguments: { id: r.mkey, type: prevRule.type, category: prevRule.cat } }
+          : { tool: 'delete_rule', arguments: { id: r.mkey } };
         if (a.apply_to_same_merchant) {
           const same = await must<Obj[]>(c.db.from('transactions').update({ type: next.type, category: next.category })
             .eq('user_id', c.uid).eq('mkey', r.mkey).eq('deleted', false).neq('id', a.id).select('id'));
@@ -827,6 +846,80 @@ export const TOOLS: Tool[] = [
     },
   },
 
+  // ── Batch ───────────────────────────────────────────────────────────
+  {
+    name: 'bulk_update_transactions',
+    title: 'Ändra många transaktioner',
+    description: 'Ändrar typ, kategori, konto och/eller beskrivning på många transaktioner på en gång — valda med ids ELLER filter (samma filter som list_transactions, t.ex. {search: "spotify"} eller {category: "Spanien"}). Arbetsgång: 1) anropa med dry_run: true (standard) — inget sparas, du får exakt vilka rader som ändras med före/efter och expected_count; 2) visa för användaren; 3) anropa igen med samma urval, dry_run: false och expected_count. Om antalet inte stämmer (datan har ändrats) sparas inget. Högst 2 000 rader. Belopp och datum ändras inte här (använd update_transaction). Inga regler lärs in.',
+    write: true,
+    inputSchema: {
+      type: 'object', required: ['changes'],
+      properties: {
+        ids: { type: 'array', items: { type: 'integer' }, minItems: 1, maxItems: 2000 },
+        filter: { type: 'object', properties: FILTERS, description: 'Samma filter som list_transactions. Minst ett villkor.' },
+        changes: { type: 'object', properties: { type: S.type, category: { type: 'string' }, account: { type: 'string', description: 'Kontots id, namn eller nummer' }, description: { type: 'string' } } },
+        dry_run: { type: 'boolean', default: true, description: 'Standard true. Bara false sparar.' },
+        expected_count: { type: 'integer', minimum: 0, description: 'would_update från dry_run. Krävs när dry_run är false.' },
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const ch = a.changes;
+      if (!!a.ids === !!a.filter) throw new UserError('Ange antingen ids eller filter (inte båda)');
+      if (!Object.keys(ch).length) throw new UserError('changes är tomt — ange type, category, account och/eller description');
+      if (a.filter && !Object.values(a.filter).some((v) => v != null && v !== '')) throw new UserError('filter får inte vara tomt — ange minst ett villkor (annars skulle alla rader ändras)');
+      const s = await loadState(c, ['accounts', 'contact_names', ...Object.values(CAT_KEY)]);
+      const acc = ch.account != null ? accountId(s, ch.account) : undefined;
+      if (acc === null) throw new UserError(unknownAccount(s, ch.account));
+      let txs: Obj[]; let notFound: number[] = [];
+      if (a.ids) {
+        const raw: Obj[] = [];
+        for (let i = 0; i < a.ids.length; i += 200) raw.push(...await must<Obj[]>(uq(c, 'transactions', TX_COLS).eq('deleted', false).in('id', a.ids.slice(i, i + 200))));
+        txs = raw.map((r) => txView(r, s));
+        notFound = a.ids.filter((id: number) => !txs.some((t) => t.id === id));
+      } else txs = await queryTxs(c, a.filter, s);
+      if (txs.length > 2000) throw new UserError(`Urvalet träffar ${txs.length} rader — högst 2 000 per anrop. Smalna av filtret (t.ex. med month_from/month_to).`);
+      const bad = txs.filter((t) => !s[CAT_KEY[ch.type ?? t.type]].includes(ch.category ?? t.category));
+      if (bad.length) {
+        const ex = bad.slice(0, 5).map((t) => `${t.id} (${TYPE_LABEL[ch.type ?? t.type].toLowerCase()} "${ch.category ?? t.category}")`).join(', ');
+        throw new UserError(`${bad.length} rader skulle få en kategori som inte finns för sin typ: ${ex}. Ange en category som finns för typen (se get_settings).`);
+      }
+      const desc = ch.description != null ? String(ch.description).trim() : undefined;
+      const items = txs.map((t) => {
+        const before: Obj = {}, after: Obj = {};
+        if (ch.type && ch.type !== t.type) { before.type = t.type; after.type = ch.type; }
+        if (ch.category && ch.category !== t.category) { before.category = t.category; after.category = ch.category; }
+        if (acc && acc !== t._acc) { before.account = t.account ?? null; after.account = accountName(s, acc); }
+        if (desc != null && desc !== t.description) { before.description = t.description; after.description = desc; }
+        return { t, view: { id: t.id, date: t.date, description: t.description, amount: t.amount, before, after } };
+      }).filter((x) => Object.keys(x.view.after).length);
+      const res = { matched: txs.length, would_update: items.length, unchanged: txs.length - items.length, ...(notFound.length ? { not_found: notFound } : {}) };
+      if (a.dry_run !== false) {
+        return { dry_run: true, ...res, expected_count: items.length, shown: Math.min(items.length, 200), changes: items.slice(0, 200).map((x) => x.view),
+          next: items.length ? `Inget sparat. Kör igen med samma urval, dry_run: false och expected_count: ${items.length}.` : 'Inget att ändra.' };
+      }
+      if (a.expected_count == null) throw new UserError(`Ange expected_count (${items.length} enligt urvalet nu) — kör dry_run först och kontrollera ändringarna.`);
+      if (a.expected_count !== items.length) throw new UserError(`Antalet rader som skulle ändras är nu ${items.length}, inte ${a.expected_count}. Datan har ändrats sedan förhandsgranskningen — kör dry_run igen. Inget sparat.`);
+      const patch: Obj = {};
+      if (ch.type) patch.type = ch.type;
+      if (ch.category) patch.category = ch.category;
+      if (acc) patch.account = acc;
+      if (desc != null) patch.description = desc;
+      const ids = items.map((x) => x.t.id);
+      for (let i = 0; i < ids.length; i += 200) await must(c.db.from('transactions').update(patch).eq('user_id', c.uid).eq('deleted', false).in('id', ids.slice(i, i + 200)));
+      // En överföring som blir något annat tappar sina sidor och sin motpart (som i update_transaction)
+      if (ch.type && ch.type !== 'transfer') {
+        for (const { t } of items) {
+          const { from_account, to_account, transfer_pair_id, ...rest } = t._extra;
+          if (t.type !== 'transfer' || !(from_account || to_account || transfer_pair_id)) continue;
+          await must(c.db.from('transactions').update({ extra: rest }).eq('user_id', c.uid).eq('id', t.id));
+          if (transfer_pair_id) await unlinkPair(c, Number(transfer_pair_id));
+        }
+      }
+      return { updated: items.length, ...(notFound.length ? { not_found: notFound } : {}), note: 'Ändringarna syns på alla enheter vid nästa synk.' };
+    },
+  },
+
   // ── Dela upp ────────────────────────────────────────────────────────
   {
     name: 'split_transaction',
@@ -894,6 +987,23 @@ export const TOOLS: Tool[] = [
 ];
 
 class UserError extends Error {}
+// Före/efter för de fält som ändras (databaskolumner med appens namn)
+const FIELD: Obj = { tx_date: 'date' };
+function rowDiff(r: Obj, patch: Obj) {
+  const before: Obj = {}, after: Obj = {};
+  for (const [k, v] of Object.entries(patch)) {
+    const old = k === 'amount' ? Number(r[k]) : r[k];
+    if (JSON.stringify(old) === JSON.stringify(v)) continue;
+    before[FIELD[k] || k] = old; after[FIELD[k] || k] = v;
+  }
+  return { before, after };
+}
+// Regel som den visas för AI:n; id = butiksnyckeln (mönster|riktning)
+function ruleView(id: string, v: Obj) {
+  const [pattern, dir] = id.split('|');
+  return { id, pattern, direction: dir === 'in' ? 'in' : 'ut', type: v?.type ?? null, category: v?.cat ?? null,
+    ...(v?.created ? { created: new Date(v.created).toISOString() } : {}), ...(v?.t ? { updated: new Date(v.t).toISOString() } : {}) };
+}
 // from_account/to_account: konto i appen sparas som dess id, annat (t.ex. ett kontonummer) som fritext
 function trfSides(s: Obj, a: Obj, extra: Obj) {
   if ((a.from_account != null || a.to_account != null) && a.type && a.type !== 'transfer') throw new UserError('from_account/to_account gäller bara överföringar (type: transfer)');
