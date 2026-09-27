@@ -1,7 +1,7 @@
 // Bankkopplingens logik (functions/bank/core.ts): tolkning, dubbletter, kategorisering.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules } from '../functions/bank/core.ts';
+import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, markSavingsWithdrawals } from '../functions/bank/core.ts';
 
 const ebTx = (amount, cd, date, text, o = {}) => ({
   entry_reference: o.ref || `${date}-${text}-${amount}`, transaction_amount: { amount: String(amount), currency: 'SEK' },
@@ -21,6 +21,8 @@ test('mapTx: tecken, text och köpdatum i SEB-texten', () => {
   // Utan text: motpartens namn
   assert.equal(mapTx({ ...ebTx(100, 'DBIT', '2026-09-01', ''), remittance_information: [], creditor: { name: 'Hyresvärd AB' } }).desc, 'Hyresvärd AB');
   assert.equal(mapTx(ebTx(0, 'DBIT', '2026-09-01', 'NOLL')), null);
+  // Överföring till konto: kontonummer + referens → bara kontonumret (som i kontoutdraget)
+  assert.equal(mapTx(ebTx(6025, 'DBIT', '2026-09-25', '53293315887 224758863226')).desc, '53293315887');
 });
 
 test('dedupe: kontoutdrag som redan importerats dubbleras inte, två likadana köp blir kvar', () => {
@@ -48,9 +50,41 @@ test('pickBalance: bokfört saldo först', () => {
   assert.equal(pickBalance([]), null);
 });
 
-test('newAppAccount: namn och typ från banken', () => {
-  const a = newAppAccount({ uid: 'u1', aspsp: 'SEB', name: 'Sparkonto', cash_account_type: 'SVGS', account_id: { iban: 'SE45 5000 0000 0583 9825 7466' } }, new Set(['seb_7466']));
-  assert.deepEqual(a, { id: 'seb_7466x', name: 'Sparkonto ••7466', kind: 'savings', number: 'SE4550000000058398257466' });
+test('newAppAccount: namn från produkten, typ och löpnummer', () => {
+  const a = newAppAccount({ uid: 'u1', aspsp: 'SEB', name: 'Sparkonto', cash_account_type: 'SVGS', iban: 'SE45 5000 0000 0583 9825 7466' }, [{ id: 'seb_7466', name: 'x' }]);
+  assert.deepEqual(a, { id: 'seb_7466x', name: 'Sparkonto (SEB)', kind: 'savings', number: 'SE4550000000058398257466' });
+  // SEB: name = kontohavaren, product = kontot, CACC även för sparkonton, inget kontonummer
+  const b = newAppAccount({ uid: '4fc58291-5673-4aac-8d03-7e3cb8f345bb', aspsp: 'SEB', name: 'AUGUST NERPIN', product: 'Enkla sparkontot', cash_account_type: 'CACC' }, [{ id: 'lonekonto', name: 'Enkla sparkontot (SEB)' }]);
+  assert.deepEqual(b, { id: 'seb_45bb', name: 'Enkla sparkontot 2 (SEB)', kind: 'savings' });
+});
+
+test('kontoroller: AMEX-konto, bolånekonto och sparkonto räknas inte dubbelt', async () => {
+  const acc = { lonekonto: { kind: 'bank' }, amexk: { kind: 'bank', role: 'card_payment' }, bolan: { kind: 'savings', role: 'mortgage' }, spar: { kind: 'savings', role: 'savings' } };
+  const S2 = { ...S, cats_sav: ['Avanza', 'SEB'], merchant_rules: { '#53293380441|ut': { type: 'savings', cat: 'SEB' }, '#53293315887|ut': { type: 'expense', cat: 'Boende (Lån)' } }, cats_exp: [...S.cats_exp, 'Boende (Lån)'] };
+  const rows = [
+    { ...mapTx(ebTx(10000, 'DBIT', '2026-09-25', '53293380441 224830234577', { ref: 'l1' })), account: 'lonekonto' },
+    { ...mapTx(ebTx(10000, 'CRDT', '2026-09-25', 'AUGUST NERPI', { ref: 's1' })), account: 'spar' },
+    { ...mapTx(ebTx(6025, 'DBIT', '2026-09-25', '53293315887 224758863226', { ref: 'l2' })), account: 'lonekonto' },
+    { ...mapTx(ebTx(6025, 'CRDT', '2026-09-25', 'AUGUST NERPI', { ref: 'b1' })), account: 'bolan' },
+    { ...mapTx(ebTx(7930, 'DBIT', '2026-09-25', '51960273264 225717143320', { ref: 's2' })), account: 'spar' },
+    { ...mapTx(ebTx(7930, 'CRDT', '2026-09-25', 'AUGUST NERPI', { ref: 'a1' })), account: 'amexk' },
+    { ...mapTx(ebTx(5977.3, 'DBIT', '2026-10-07', 'AMERICAN EXPRESS', { ref: 'a2' })), account: 'amexk' },
+    { ...mapTx(ebTx(5977.3, 'DBIT', '2026-09-07', '53290207161 162051819843', { ref: 'a3' })), account: 'amexk' },
+    { ...mapTx(ebTx(60, 'DBIT', '2026-09-02', 'BETALSERVICE', { ref: 'a4' })), account: 'amexk' },
+  ];
+  const groups = await categorize(S2, rows, (id) => acc[id], async () => []);
+  const out = toRows('u', groups, S2, 1);
+  assert.equal(markSavingsWithdrawals(S2, out, (id) => acc[id]), 1);
+  const by = Object.fromEntries(out.map((r) => [r.extra.bank_ref, [r.type, r.category, r.amount]]));
+  assert.deepEqual(by.l1, ['savings', 'SEB', 10000]);          // sparande räknas på lönekontot
+  assert.deepEqual(by.s1, ['transfer', 'Egen överföring', 10000]);
+  assert.deepEqual(by.l2, ['expense', 'Boende (Lån)', 6025]);  // bolånekostnaden räknas när den sätts in
+  assert.deepEqual(by.b1, ['transfer', 'Egen överföring', 6025]);
+  assert.deepEqual(by.s2, ['transfer', 'Egen överföring', -7930]);
+  assert.deepEqual(by.a1, ['savings', 'SEB', -7930]);          // uttag ur sparandet
+  assert.deepEqual(by.a2, ['transfer', 'Kreditkortsbetalning', -5977.3]);
+  assert.deepEqual(by.a3, ['transfer', 'Kreditkortsbetalning', -5977.3]); // fakturan till girnummer
+  assert.deepEqual(by.a4, ['expense', 'Övrigt', 60]);                    // bankavgift = vanlig utgift
 });
 
 test('categorize: regler, automatiska regler, AI och gissning', async () => {
@@ -63,7 +97,7 @@ test('categorize: regler, automatiska regler, AI och gissning', async () => {
   ];
   let asked;
   const ai = async (groups) => { asked = groups.map((g) => g.desc); return [{ k: 0, type: 'expense', cat: 'Mat (Butik)', conf: 'high' }, { k: 1, type: 'expense', cat: 'Finns inte', conf: 'high' }]; };
-  const groups = await categorize(S, rows, () => 'bank', ai);
+  const groups = await categorize(S, rows, () => ({ kind: 'bank' }), ai);
   const by = Object.fromEntries(groups.map((g) => [g.desc, [g.type, g.cat, g.src]]));
   assert.deepEqual(asked, ['WILLYS UMEA', 'OKAND BUTIK']);
   assert.deepEqual(by['PARTYLAND'], ['expense', 'Fest', 'rule']);
@@ -80,6 +114,6 @@ test('categorize: regler, automatiska regler, AI och gissning', async () => {
   assert.deepEqual(new Set(out.map((r) => r.source)), new Set(['bank']));
   assert.deepEqual(Object.keys(learnRules(S, groups)).sort(), ['partyland|ut', 'willys umea|ut']);
   // Fel i AI:n: allt som inte har regel gissas, inget kraschar
-  const g2 = await categorize(S, rows.slice(3), () => 'bank', async () => { throw new Error('nere'); });
+  const g2 = await categorize(S, rows.slice(3), () => ({ kind: 'bank' }), async () => { throw new Error('nere'); });
   assert.deepEqual(g2.map((g) => g.src), ['guess', 'guess']);
 });

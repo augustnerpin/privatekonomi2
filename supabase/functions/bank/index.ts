@@ -7,8 +7,8 @@
 // Driftsätt: npx supabase functions deploy bank --no-verify-jwt   (inloggningen kontrolleras här)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today } from '../_shared/finance.ts';
-import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom } from './core.ts';
+import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays } from '../_shared/finance.ts';
+import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
 const EB = 'https://api.enablebanking.com';
@@ -101,8 +101,9 @@ async function fetchAllTx(uid: string, from: string) {
   }
   return out;
 }
-async function existingRows(uid: string, account: string, from: string) {
-  const out: Obj[] = [];
+// Befintliga rader på kontot, med 5 dagars marginal före from (dubblettkontrollen tillåter ±4 dagar)
+async function existingRows(uid: string, account: string, fromDate: string) {
+  const from = addDays(fromDate, -5); const out: Obj[] = [];
   for (let i = 0; ; i += 1000) {
     const rows = await must<Obj[]>(db.from('transactions').select('id,type,amount,tx_date,extra').eq('user_id', uid).eq('account', account).eq('deleted', false).gte('tx_date', from).order('id').range(i, i + 999));
     out.push(...rows); if (rows.length < 1000) break;
@@ -129,7 +130,7 @@ export async function syncUser(uid: string) {
             if (n >= 3 && (!best || n > best.n)) best = { id: acc.id, n };
           }
           if (best) a.app_account = best.id;
-          else { const na = newAppAccount({ ...a, aspsp: c.aspsp }, new Set(s.accounts.map((x: Obj) => x.id))); s.accounts.push(na); a.app_account = na.id; accountsChanged = true; }
+          else { const na = newAppAccount({ ...a, aspsp: c.aspsp }, s.accounts); s.accounts.push(na); a.app_account = na.id; accountsChanged = true; }
         }
         const acc = s.accounts.find((x: Obj) => x.id === a.app_account);
         const { fresh, dups } = dedupe(fetched, await existingRows(uid, a.app_account, from));
@@ -155,10 +156,11 @@ export async function syncUser(uid: string) {
   // Kategorisera och spara nya rader
   let added = 0, review = 0;
   if (newRows.length) {
-    const kindOf = (id: string) => s.accounts.find((x: Obj) => x.id === id)?.kind || 'bank';
-    const groups = await categorize(s, newRows, kindOf, (g) => aiCategorize(s, g));
+    const accOf = (id: string) => s.accounts.find((x: Obj) => x.id === id);
+    const groups = await categorize(s, newRows, accOf, (g) => aiCategorize(s, g));
     const top = await must<Obj[]>(db.from('transactions').select('id').eq('user_id', uid).order('id', { ascending: false }).limit(1));
     const rows = toRows(uid, groups, s, Math.max((top[0]?.id || 0) + 1, Date.now()));
+    markSavingsWithdrawals(s, rows, accOf);
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
     added = rows.length; review = rows.filter((r) => r.extra.review).length;
     const rules = learnRules(s, groups); if (rules) await saveState(uid, 'merchant_rules', rules);
