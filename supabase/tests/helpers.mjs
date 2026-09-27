@@ -31,7 +31,11 @@ export async function world(extra = {}, opts = {}) {
     ],
     net_worth_snapshots: [{ user_id: U, period: '2026-08', total: 100000, amounts: { cash: 100000 }, deleted: false }],
   };
-  for (const [k, v] of Object.entries(extra)) tables[k] = [...(tables[k] || []), ...v];
+  for (const [k, v] of Object.entries(extra)) {
+    // En extra rad i user_state ersätter standardraden med samma användare och nyckel
+    const same = (x, y) => k === 'user_state' && x.user_id === y.user_id && x.key === y.key;
+    tables[k] = [...(tables[k] || []).filter((x) => !v.some((y) => same(x, y))), ...v];
+  }
   const db = fakeDb(tables, opts);
   const h = M.createHandler(db);
   let n = 0;

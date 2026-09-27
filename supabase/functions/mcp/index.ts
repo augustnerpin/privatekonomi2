@@ -279,7 +279,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'get_settings',
     title: 'Inställningar och kategorier',
-    description: 'Hämtar kategorier per typ, budget per kategori, konton (typ, kontonummer och senaste saldo), kategorigrupper, förmögenhetsmål, lön, förmögenhetskategorier och aktuell löneperiod. Anropa först för att få exakta kategorinamn och konton.',
+    description: 'Hämtar kategorier per typ, budget per kategori, konton (typ, kontonummer och senaste saldo), kategorigrupper, förmögenhetsmål, lön, förmögenhetskategorier och aktuell löneperiod. orphan_categories = kategorier som används i transaktioner men saknas i inställningarna (städa med merge_categories eller rename_category). Anropa först för att få exakta kategorinamn och konton.',
     inputSchema: { type: 'object', properties: {} },
     annotations: RO,
     async run(c) {
@@ -289,6 +289,7 @@ export const TOOLS: Tool[] = [
       return {
         current_period: { month: cur, ...periodRange(cur, s.pay_periods) },
         categories: { expense: s.cats_exp, income: s.cats_inc, savings: s.cats_sav, transfer: s.cats_trf },
+        orphan_categories: orphans(s, await categoryUsage(c)),
         category_groups: s.cat_groups,
         budgets: s.cat_budgets,
         accounts: s.accounts.map((a: Obj) => accountView(a, hist[a.id])),
@@ -992,6 +993,59 @@ export const TOOLS: Tool[] = [
     },
   },
 
+  // ── Kategorier ──────────────────────────────────────────────────────
+  {
+    name: 'create_category',
+    title: 'Skapa kategori',
+    description: 'Skapar en kategori för en typ (expense, income, savings eller transfer). Namnet måste vara unikt inom typen.',
+    write: true,
+    inputSchema: { type: 'object', required: ['type', 'name'], properties: { type: S.type, name: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    async run(c, a) {
+      const key = CAT_KEY[a.type], name = catName(a.name);
+      const s = await loadState(c, [key]);
+      const dup = s[key].find((x: string) => x.toLowerCase() === name.toLowerCase());
+      if (dup) throw new UserError(`Kategorin "${dup}" finns redan för ${TYPE_LABEL[a.type].toLowerCase()}`);
+      await saveState(c, key, [...s[key], name]);
+      return { type: a.type, created: name, categories: [...s[key], name] };
+    },
+  },
+  {
+    name: 'rename_category',
+    title: 'Byt namn på kategori',
+    description: 'Byter namn på en kategori inom en typ. Alla transaktioner, budgeten, kategorigrupper och inlärda regler följer med. Fungerar även för föräldralösa kategorier (orphan_categories i get_settings) — de läggs då till i inställningarna under det nya namnet. Finns det nya namnet redan: använd merge_categories. dry_run: true visar vad som skulle ändras.',
+    write: true,
+    inputSchema: { type: 'object', required: ['type', 'old', 'new'], properties: { type: S.type, old: { type: 'string' }, new: { type: 'string' }, dry_run: { type: 'boolean', default: false } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const key = CAT_KEY[a.type], to = catName(a.new);
+      const s = await loadState(c, [key]);
+      if (a.old === to) throw new UserError('Det nya namnet är samma som det gamla');
+      const dup = s[key].find((x: string) => x.toLowerCase() === to.toLowerCase() && x !== a.old);
+      if (dup) throw new UserError(`Kategorin "${dup}" finns redan för ${TYPE_LABEL[a.type].toLowerCase()} — använd merge_categories för att slå ihop "${a.old}" med den`);
+      return moveCategories(c, a.type, [a.old], to, true, !!a.dry_run);
+    },
+  },
+  {
+    name: 'merge_categories',
+    title: 'Slå ihop kategorier',
+    description: 'Slår ihop en eller flera kategorier (from) till en befintlig kategori (to) inom samma typ: alla transaktioner flyttas, budgetarna läggs ihop på to, kategorigrupper och inlärda regler uppdateras och de gamla kategorierna tas bort ur inställningarna. from får innehålla föräldralösa kategorier, t.ex. from: ["Spanien"], to: "Resa". dry_run: true visar vad som skulle ändras.',
+    write: true,
+    inputSchema: {
+      type: 'object', required: ['type', 'from', 'to'],
+      properties: { type: S.type, from: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 50 }, to: { type: 'string' }, dry_run: { type: 'boolean', default: false } },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const key = CAT_KEY[a.type];
+      const s = await loadState(c, [key]);
+      if (!s[key].includes(a.to)) throw new UserError(`Målkategorin "${a.to}" finns inte för ${TYPE_LABEL[a.type].toLowerCase()}. Finns: ${s[key].join(', ')}. Skapa den först med create_category eller använd rename_category.`);
+      const from = [...new Set(a.from as string[])];
+      if (from.includes(a.to)) throw new UserError(`"${a.to}" kan inte slås ihop med sig själv`);
+      return moveCategories(c, a.type, from, a.to, false, !!a.dry_run);
+    },
+  },
+
   // ── Dela upp ────────────────────────────────────────────────────────
   {
     name: 'split_transaction',
@@ -1059,6 +1113,56 @@ export const TOOLS: Tool[] = [
 ];
 
 class UserError extends Error {}
+// Antal transaktioner per typ och kategori
+async function categoryUsage(c: Ctx) {
+  const rows = await fetchAll(() => uq(c, 'transactions', 'type,category').eq('deleted', false).order('id', { ascending: true }));
+  const n: Obj = {}; for (const r of rows) { const t = (n[r.type] ||= {}); t[r.category] = (t[r.category] || 0) + 1; }
+  return n;
+}
+// Kategorier som används i transaktioner men saknas i inställningarna
+function orphans(s: Obj, usage: Obj) {
+  const out: Obj = {};
+  for (const [type, key] of Object.entries(CAT_KEY)) {
+    const list: Obj[] = Object.entries(usage[type] || {}).filter(([name]) => !s[key as string].includes(name)).map(([name, count]) => ({ name, count }));
+    if (list.length) out[type] = list.sort((x, y) => y.count - x.count || x.name.localeCompare(y.name, 'sv'));
+  }
+  return out;
+}
+function catName(v: any) {
+  const n = String(v ?? '').trim();
+  if (!n) throw new UserError('Kategorin måste ha ett namn');
+  if (n.length > 60) throw new UserError('Kategorinamnet får vara högst 60 tecken');
+  return n;
+}
+// Flytta kategorier till en annan: transaktioner, budget och grupper (utgifter) samt inlärda regler.
+// rename = målet är ett nytt namn som tar den gamlas plats i listan; annars (merge) tas de gamla bort.
+async function moveCategories(c: Ctx, type: string, from: string[], to: string, rename: boolean, dry: boolean) {
+  const key = CAT_KEY[type];
+  const s = await loadState(c, [key, 'cat_budgets', 'cat_groups', 'merchant_rules']);
+  const usage = (await categoryUsage(c))[type] || {};
+  for (const f of from) if (!s[key].includes(f) && !usage[f]) throw new UserError(`Okänd kategori "${f}" för ${TYPE_LABEL[type].toLowerCase()} — den finns varken i inställningarna eller i några transaktioner`);
+  const txCount = from.reduce((x, f) => x + (usage[f] || 0), 0);
+  const cats = rename
+    ? (s[key].includes(from[0]) ? s[key].map((x: string) => (x === from[0] ? to : x)) : [...s[key], to])
+    : s[key].filter((x: string) => !from.includes(x));
+  const B = { ...(s.cat_budgets || {}) }, budgetMoved: Obj = {};
+  let groups = s.cat_groups;
+  if (type === 'expense') {
+    for (const f of from) if (B[f] != null) { budgetMoved[f] = +B[f]; B[to] = (+B[to] || 0) + +B[f]; delete B[f]; }
+    groups = (s.cat_groups || []).map((g: Obj) => ({ ...g, cats: [...new Set((g.cats || []).map((x: string) => (from.includes(x) ? to : x)))] }));
+  }
+  const rules = { ...s.merchant_rules }, ruleIds: string[] = [];
+  for (const [id, v] of Object.entries(rules as Obj)) if (v.type === type && from.includes(v.cat)) { rules[id] = { ...v, cat: to, t: Date.now() }; ruleIds.push(id); }
+  const res: Obj = { type, from, to, transactions: txCount, budgets_moved: budgetMoved, rules_updated: ruleIds, categories_after: cats };
+  if (type === 'expense' && Object.keys(budgetMoved).length) res.budget_after = B[to];
+  if (dry) return { dry_run: true, ...res, note: 'Inget sparat.' };
+  if (txCount) await must(c.db.from('transactions').update({ category: to }).eq('user_id', c.uid).eq('type', type).eq('deleted', false).in('category', from));
+  await saveState(c, key, cats);
+  if (Object.keys(budgetMoved).length) await saveState(c, 'cat_budgets', B);
+  if (type === 'expense' && JSON.stringify(groups) !== JSON.stringify(s.cat_groups)) await saveState(c, 'cat_groups', groups);
+  if (ruleIds.length) await saveState(c, 'merchant_rules', rules);
+  return { ...res, note: 'Ändringarna syns på alla enheter vid nästa synk.' };
+}
 // Regel-id = butiksnyckeln "mönster|riktning". Utan riktning godtas mönstret om det bara finns en regel för det.
 function findRule(rules: Obj, id: string, mustExist = true) {
   if (rules[id]) return id;
