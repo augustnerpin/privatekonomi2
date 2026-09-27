@@ -21,8 +21,8 @@ Den publika nyckeln (`sb_publishable_…`) får därför ligga i appen. Den heml
 2. **Ställ in adresserna:** *Authentication* → *URL Configuration*. Sätt *Site URL* till adressen
    där appen ligger (t.ex. `https://augustnerpin.github.io/privatekonomi2/`), så att länken i
    bekräftelsemejlet öppnar appen.
-3. **Anslut appen:** Inställningar → *Databas (Supabase)*. Klistra in *Project URL*
-   (`https://xxxx.supabase.co`); nyckeln är redan ifylld. Tryck *Spara projekt*.
+3. **Anslut appen:** projektets URL och nyckel är redan inlagda i koden. Ett annat projekt kan
+   anges under Inställningar → *Databas (Supabase)*.
 4. **Skapa konto** med e-post och lösenord, bekräfta via mejlet och logga sedan in.
    Första synken laddar upp all befintlig data från enheten.
 5. **På nästa enhet:** logga in med samma konto. All data hämtas ner, och molnets

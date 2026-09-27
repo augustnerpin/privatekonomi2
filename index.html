@@ -3888,9 +3888,10 @@ function renderSyncSettings(){
 // ("skuggan" = fingeravtryck av det som senast synkats) och hämtar det som ändrats i molnet
 // sedan förra hämtningen. Borttagna rader markeras deleted=true så att andra enheter också tar bort dem.
 // ═══════════════════════════════════════════
+const SB_DEF_URL='https://qchasvatuhndtswxlucr.supabase.co';
 const SB_DEF_KEY='sb_publishable_LWG9VW6d9slSZ96FsCACmw_CAnBAXa4'; // publik nyckel — skyddas av inloggning + RLS
 const SB_STATE_KEYS=[...SYNC_KEYS].filter(k=>k!=='txs'&&k!=='nws');
-function sbCfg(){return{url:String(ld('sb_url','')||'').trim().replace(/\/+$/,''),key:String(ld('sb_key','')||SB_DEF_KEY).trim()}}
+function sbCfg(){return{url:String(ld('sb_url','')||SB_DEF_URL).trim().replace(/\/+$/,''),key:String(ld('sb_key','')||SB_DEF_KEY).trim()}}
 let _sb=null,_sbP=null,_sbUser=null,_sbBusy=false,_sbAgain=false,_sbTimer=null;
 function loadSbLib(){
   if(window.supabase?.createClient)return Promise.resolve(window.supabase);
