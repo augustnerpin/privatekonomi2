@@ -1046,7 +1046,7 @@ body{height:auto}
   .home-story{font-size:34px}
   .home-stats{max-width:760px}
   .feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:0;align-items:start}
-  .home-ask{position:sticky;left:auto;transform:none;bottom:22px;width:100%;max-width:760px;margin:30px auto 0}
+  .home-ask{position:sticky;left:auto;transform:none;bottom:22px;width:100%;max-width:760px;margin:30px 0 0}
   .home-ask::before{left:-40px;right:-40px;top:-36px;bottom:-40px}
 
   /* ── Hovring med mus ── */
@@ -1069,6 +1069,10 @@ body{height:auto}
   body.light #slide-scrim{background:rgba(0,0,0,.18)}
   #slide-scrim.on{opacity:1;pointer-events:auto}
   .imp-bar{position:sticky;max-width:none;margin:0}
+  /* Panelerna kommer från höger: stäng med × i stället för mobilens bakåtpil */
+  .slide-hd .back-btn{font-size:0;width:36px;height:36px;border-radius:18px}
+  .slide-hd .back-btn::before{content:'×';font-size:22px;line-height:1}
+  #ai-back{display:none}
 
   /* ── Dialoger i mitten ── */
   .overlay{align-items:center;justify-content:center;padding:24px}
@@ -1080,6 +1084,15 @@ body{height:auto}
 @media (min-width:1500px){
   .feed{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+/* Mus och styrplatta: ingen haptik att ställa in */
+@media (hover:hover) and (pointer:fine){
+  #haptics-row{display:none}
+}
+/* Dra filer var som helst i fönstret → import */
+#drop-veil{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;padding:32px;background:rgba(0,0,0,.45)}
+body.light #drop-veil{background:rgba(242,242,247,.8)}
+#drop-veil.on{display:flex}
+#drop-veil>div{pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;height:100%;max-width:900px;max-height:560px;border:2px dashed var(--acc);border-radius:28px;background:var(--bg0);box-shadow:0 24px 80px rgba(0,0,0,.3);color:var(--text);text-align:center}
 </style>
 </head>
 <body>
@@ -1170,7 +1183,7 @@ body{height:auto}
   <div class="ai-hdr">
     <div style="display:flex;align-items:flex-start;justify-content:space-between">
       <div style="display:flex;gap:10px;align-items:flex-start">
-      <button class="back-btn" style="flex-shrink:0;margin-top:2px" onclick="showScreen('home')" aria-label="Tillbaka">‹</button>
+      <button class="back-btn" id="ai-back" style="flex-shrink:0;margin-top:2px" onclick="showScreen('home')" aria-label="Tillbaka">‹</button>
       <div>
         <div class="hdr-label">AI-assistent</div>
         <div class="ai-hdr-t">Ekonomicoach</div>
@@ -1183,7 +1196,7 @@ body{height:auto}
       </div>
     </div>
   </div>
-  <div class="ai-key-note" id="ai-key-note" onclick="openSettings()">🔑 Ingen API-nyckel — tryck här för att ange</div>
+  <div class="ai-key-note" id="ai-key-note" onclick="openSettings()">🔑 Ingen API-nyckel — ange den i inställningar ›</div>
   <div class="ai-ctx-card" id="ai-ctx-card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div class="ai-ctx-label">Kontext från dashboard</div>
@@ -1272,6 +1285,11 @@ body{height:auto}
   </div>
 </nav>
 <button class="fab" id="fab" onclick="openAdd()" style="display:none">+</button>
+<div id="drop-veil"><div>
+  <div class="imp-drop-ic" style="margin:0">⇪</div>
+  <div style="font-size:18px;font-weight:600">Släpp för att importera</div>
+  <div style="font-size:13px;color:var(--sub)">CSV, Excel, PDF eller skärmdump</div>
+</div></div>
 
 <!-- ═══ ONBOARDING ═══ -->
 <div class="overlay" id="onboard-modal" style="align-items:center">
@@ -1279,7 +1297,7 @@ body{height:auto}
     <div style="text-align:center;padding:8px 0 4px">
       <div style="width:64px;height:64px;margin:0 auto 14px;border-radius:20px;background:linear-gradient(160deg,#4f8ef7,#22b07d);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 24px rgba(34,176,125,.3)"><svg viewBox="0 0 24 24" width="32" height="32" style="stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round"><path d="M3.5 17.5L9 11.5l4 4 7-8"/><path d="M15.5 7.5H20v4.5"/></svg></div>
       <div style="font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px">Välkommen till Ekonomi</div>
-      <div style="font-size:13px;color:var(--sub);line-height:1.55;margin-bottom:20px">Din privata budget- och förmögenhetsapp. Importera kontoutdrag från banken och kreditkortet — AI kategoriserar allt åt dig. Data sparas lokalt på din enhet; bara det du skickar till AI:n lämnar telefonen.</div>
+      <div style="font-size:13px;color:var(--sub);line-height:1.55;margin-bottom:20px">Din privata budget- och förmögenhetsapp. Importera kontoutdrag från banken och kreditkortet — AI kategoriserar allt åt dig. Data sparas lokalt på din enhet; bara det du skickar till AI:n lämnar enheten.</div>
     </div>
     <div class="field"><label>Förmögenhetsmål (kr)</label><input type="number" id="ob-goal" placeholder="t.ex. 700 000" inputmode="numeric"></div>
     <div class="field"><label>Ditt namn (som på kontoutdragen)</label><input type="text" id="ob-name" placeholder="FÖRNAMN EFTERNAMN" autocapitalize="characters" autocomplete="name"></div>
@@ -1536,10 +1554,10 @@ body{height:auto}
     <div class="s-lbl">Utseende</div>
     <div class="s-card">
       <div class="s-row">
-        <div><div class="s-row-lbl">Utseende</div><div class="s-row-sub">Auto följer telefonens läge</div></div>
+        <div><div class="s-row-lbl">Utseende</div><div class="s-row-sub">Auto följer enhetens läge</div></div>
         <div class="ai-seg" id="theme-seg"><button data-t="auto" onclick="setTheme('auto')">Auto</button><button data-t="light" onclick="setTheme('light')">Ljust</button><button data-t="dark" onclick="setTheme('dark')">Mörkt</button></div>
       </div>
-      <div class="s-row">
+      <div class="s-row" id="haptics-row">
         <div><div class="s-row-lbl">Haptisk feedback</div><div class="s-row-sub">Känn tryck, val och bekräftelser</div></div>
         <label class="toggle"><input type="checkbox" id="haptics-toggle" onchange="sv('haptics',this.checked);if(this.checked)haptic('success')"><span class="tsl"></span></label>
       </div>
@@ -1932,6 +1950,9 @@ let state={screen:'home',month:currentPayPeriod(),txType:'expense',editId:null};
 // ═══════════════════════════════════════════
 // NAV
 // ═══════════════════════════════════════════
+// Mus/styrplatta → "klicka", pekskärm → "tryck"
+const fineMouse=()=>matchMedia('(hover:hover) and (pointer:fine)').matches;
+const tap=cap=>fineMouse()?(cap?'Klicka':'klicka'):(cap?'Tryck':'tryck');
 // Skärmar utan egen flik markerar närmaste flik: årsvyn hör till Månad, chatten till Hem
 const NAV_OF={home:'home',budget:'budget',nw:'nw',year:'budget',ai:'home'};
 // Dator: sidomenyn har egna knappar för År och AI-coach
@@ -2350,7 +2371,7 @@ function renderBudget(){
       return`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6">
         ⇄ ${moved>0?'Flyttat till':'Hämtat från'} egna konton: <b style="color:var(--text)">${fmt(Math.abs(moved))} kr</b> — räknas inte som utgift.
         ${moved>0?`<br>Inklusive detta: <b style="color:${balance+moved>=0?'var(--green)':'var(--red)'}">${fmtSigned(balance+moved)} kr</b> kvar av månadens pengar.`:''}
-        ${moved>0?`<br><span style="color:var(--sub2)">Är något av det sparande? Tryck på raden och välj Sparande — appen minns det.</span>`:''}
+        ${moved>0?`<br><span style="color:var(--sub2)">Är något av det sparande? ${tap(1)} på raden och välj Sparande — appen minns det.</span>`:''}
       </div>`;
     })()}
   </div></div>`;
@@ -2362,7 +2383,7 @@ function renderBudget(){
   // Donut
   if(sortedCats.length){
     html+=`<div class="card"><div class="card-inner">
-      <div class="card-lbl" style="margin-bottom:12px">Utgifter per kategori <span style="text-transform:none;letter-spacing:0;color:var(--sub2)">— tryck för att filtrera</span></div>
+      <div class="card-lbl" style="margin-bottom:12px">Utgifter per kategori <span style="text-transform:none;letter-spacing:0;color:var(--sub2)">— ${tap()} för att filtrera</span></div>
       <div style="display:flex;align-items:center;gap:16px">
         <div class="donut" style="width:120px;height:120px">
           <svg viewBox="0 0 140 140" width="120" height="120">${makeDonut(slices,donutTotal)}</svg>
@@ -2380,7 +2401,7 @@ function renderBudget(){
   }
 
   if(txs.length===0){
-    html+=`<div class="empty"><div class="empty-i">📭</div><div class="empty-t">Inga transaktioner denna period.<br>Importera ett kontoutdrag eller tryck +.</div></div>`;
+    html+=`<div class="empty"><div class="empty-i">📭</div><div class="empty-t">Inga transaktioner denna period.<br>Importera ett kontoutdrag eller ${tap()} på +.</div></div>`;
     document.getElementById('bgt-content').innerHTML=html;groupBlocks(document.getElementById('bgt-content'),'cols2');
     return;
   }
@@ -2751,7 +2772,7 @@ function renderHome(){
   // Fasta kostnader
   const rec=detectRecurring(month);
   rec.filter(r=>r.status==='dyrare').forEach(r=>add(2.5,fcHtml({icon:'up',tone:'warn',title:`${esc(r.name)} blev dyrare`,text:`${fmt(r.current)} kr denna månad, brukar vara ${fmt(r.typical)} kr.`})));
-  if(rec.length)add(8,`<details class="fc"><summary style="list-style:none;cursor:pointer"><div class="fc-hd"><div class="fc-ic" style="background:var(--purple);color:#fff">${fcIcon('repeat')}</div><div style="flex:1"><div class="fc-t">Fasta kostnader: ${fmt(rec.reduce((s,r)=>s+r.typical,0))} kr/mån</div><div class="fc-x">${rec.length} st · ${fmt(rec.reduce((s,r)=>s+r.typical,0)*12)} kr/år · tryck för lista</div></div></div></summary>
+  if(rec.length)add(8,`<details class="fc"><summary style="list-style:none;cursor:pointer"><div class="fc-hd"><div class="fc-ic" style="background:var(--purple);color:#fff">${fcIcon('repeat')}</div><div style="flex:1"><div class="fc-t">Fasta kostnader: ${fmt(rec.reduce((s,r)=>s+r.typical,0))} kr/mån</div><div class="fc-x">${rec.length} st · ${fmt(rec.reduce((s,r)=>s+r.typical,0)*12)} kr/år · ${tap()} för lista</div></div></div></summary>
     <div style="padding:8px 0 0 40px">${rec.map(r=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:4px 0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(r.name)}</span><span style="font-family:var(--mono)">${fmt(r.typical)}</span></div>`).join('')}</div></details>`);
   // Sparmål
   const nws=getNWs();const ln=nws[nws.length-1];const goal=getGoal();
@@ -2823,7 +2844,7 @@ function makeNWChart(nws){
   _lcNWs=nws;
   const dataPoints=nws.map(n=>({label:n.period.slice(2).replace('-','/'),value:n.total}));
   return`<div class="card"><div class="card-inner">
-    <div class="card-lbl" style="margin-bottom:6px">Total förmögenhet — svep för detaljer</div>
+    <div class="card-lbl" style="margin-bottom:6px">Total förmögenhet — ${fineMouse()?'håll musen över grafen':'svep'} för detaljer</div>
     <defs-holder style="display:none">
       <svg style="width:0;height:0;position:absolute"><defs>
         <linearGradient id="lgrad" x1="0" y1="0" x2="1" y2="0">
@@ -2866,7 +2887,7 @@ function renderNetWorth(){
     <div class="scard"><div class="scard-lbl">Snitt/månad</div><div class="scard-val" style="color:${avgMonthly>=0?'var(--green)':'var(--red)'}">${avgMonthly!==null?(avgMonthly>=0?'+':'')+fmt(avgMonthly):'—'}</div></div>`;
 
   if(!latest){
-    document.getElementById('nw-content').innerHTML=`<div class="empty"><div class="empty-i">📈</div><div class="empty-t">Registrera din första snapshot.<br>Tryck + för att starta.</div></div>`;
+    document.getElementById('nw-content').innerHTML=`<div class="empty"><div class="empty-i">📈</div><div class="empty-t">Registrera din första snapshot.<br>${tap(1)} på + för att starta.</div></div>`;
     return;
   }
 
@@ -2933,7 +2954,7 @@ function renderNetWorth(){
   </div></div>`;
 
   // ── 4. TILLGÅNGAR (klickbara) ──
-  html+=`<div class="sec"><span class="sec-t">Tillgångar</span><span class="sec-sub">tryck för historik</span></div><div class="txl">`;
+  html+=`<div class="sec"><span class="sec-t">Tillgångar</span><span class="sec-sub">${tap()} för historik</span></div><div class="txl">`;
   assetDefs.forEach((a,i)=>{
     const p=latest.total>0?Math.round(latest[a.key]/latest.total*100):0;
     const prevVal=prev?prev[a.key]:null;
@@ -3402,7 +3423,7 @@ function renderYear(){
     const pct=Math.min(latest.total/goal*100,100);
     html+=`<div class="card" style="cursor:pointer" onclick="showScreen('nw')"><div class="card-inner">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-        <div class="card-lbl">Förmögenhetsmål ${year} — tryck för detaljer</div>
+        <div class="card-lbl">Förmögenhetsmål ${year} — ${tap()} för detaljer</div>
         <span style="font-family:var(--mono);font-size:12px;color:var(--acc)">${pct.toFixed(0)}%</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
@@ -3453,7 +3474,7 @@ function renderYear(){
   </div></div>`;
 
   // ── 3. Per månad (klickbar)
-  html+=`<div class="sec"><span class="sec-t">Per månad</span><span class="sec-sub">tryck för detaljer</span></div>
+  html+=`<div class="sec"><span class="sec-t">Per månad</span><span class="sec-sub">${tap()} för detaljer</span></div>
   <div class="txl">
     <div class="ytrow ythd" style="grid-template-columns:1.2fr 1.6fr 1.6fr 1.6fr"><span>Månad</span><span>Inkomst</span><span>Utgifter</span><span>Kvar</span></div>`;
   months.forEach(m=>{
@@ -3477,7 +3498,7 @@ function renderYear(){
   txs.filter(t=>t.type==='expense').forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
   const allCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
   if(allCats.length){
-    html+=`<div class="sec"><span class="sec-t">Utgiftskategorier</span><span class="sec-sub">${allCats.length} st · tryck för historik</span></div><div class="txl">`;
+    html+=`<div class="sec"><span class="sec-t">Utgiftskategorier</span><span class="sec-sub">${allCats.length} st · ${tap()} för historik</span></div><div class="txl">`;
     allCats.forEach(([cat,amt],i)=>{
       const p=totExp>0?Math.round(amt/totExp*100):0;
       const color=COLORS[i%COLORS.length];
@@ -3782,7 +3803,7 @@ function renderGroupList(){
   const groups=getGroups();
   const el=document.getElementById('grp-list');
   if(!groups.length){
-    el.innerHTML=`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga grupper ännu. Tryck "Ny grupp" för att skapa.</div>`;
+    el.innerHTML=`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga grupper ännu. ${tap(1)} på "Ny grupp" för att skapa.</div>`;
     return;
   }
   el.innerHTML=groups.map((g,i)=>`
@@ -4714,7 +4735,7 @@ function renderImpFiles(body,bar,sub){
   const accOpts=v=>accs.map(a=>`<option value="${esc(a.id)}"${a.id===v?' selected':''}>${esc(a.name)}</option>`).join('');
   let html=`<label class="imp-drop" id="imp-drop">
       <div class="imp-drop-ic">⇪</div>
-      <div style="font-size:15px;font-weight:600">Välj kontoutdrag</div>
+      <div style="font-size:15px;font-weight:600">${fineMouse()?'Dra hit kontoutdrag eller klicka för att välja':'Välj kontoutdrag'}</div>
       <div style="font-size:12px;color:var(--sub);line-height:1.5">CSV eller Excel från internetbanken, AMEX-export,<br>PDF-utdrag eller skärmdump. Flera filer går bra.</div>
       <input type="file" multiple accept=".csv,.txt,.tsv,.xlsx,.xls,.ods,.pdf,image/*" style="display:none" onchange="addImportFiles(this.files);this.value=''">
     </label>`;
@@ -4781,11 +4802,7 @@ function renderImpFiles(body,bar,sub){
       ${key?`Nya butiker kategoriseras av Claude ${esc(getAiModel().name)}. Butiker du redan kategoriserat känns igen direkt.`:'⚠️ Utan API-nyckel kategoriseras bara butiker appen redan lärt sig — resten hamnar i Övrigt. PDF och bilder kräver API-nyckel.'}
       Transaktioner som redan importerats hoppas över automatiskt.</div>`;
   body.innerHTML=html;
-  // Dra-och-släpp
-  const drop=document.getElementById('imp-drop');
-  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over')});
-  drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
-  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');addImportFiles(e.dataTransfer.files)});
+  // Dra-och-släpp hanteras för hela fönstret (se DRA OCH SLÄPP längre ner)
   const ready=_imp.files.filter(f=>f.status==='ready');
   bar.innerHTML=!ready.length?'':!owner
     ?`<button class="btn-p" style="opacity:.45" onclick="toast('Registrera ditt namn i inställningar först','warn')">Registrera ditt namn för att fortsätta</button>`
@@ -5150,7 +5167,7 @@ function renderImpReview(body,bar,sub){
   };
   html+=section('Behöver granskas',G.filter(g=>g.conf==='low'),'low');
   html+=section('Kategoriserade',G.filter(g=>g.conf!=='low'),'high');
-  html+=`<div style="margin:4px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">● blå = känd butik eller säker regel · grön = AI · gul = osäker. Tryck på en butik för att se raderna. Dina val sparas och används automatiskt nästa gång.</div>`;
+  html+=`<div style="margin:4px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">● blå = känd butik eller säker regel · grön = AI · gul = osäker. ${tap(1)} på en butik för att se raderna. Dina val sparas och används automatiskt nästa gång.</div>`;
   body.innerHTML=html;
   bar.innerHTML=`<button class="btn-p" onclick="saveImport()">Spara ${nTx} transaktioner</button>`;
 }
@@ -5837,6 +5854,33 @@ setTimeout(()=>{
     const t=topSlide();if(t)closers[t.id]?.();
   });
   matchMedia('(min-width:900px)').addEventListener?.('change',()=>{updateNav();movePill(NAV_OF[state.screen])});
+})();
+
+// ═══════════════════════════════════════════
+// DRA OCH SLÄPP — filer som släpps var som helst i fönstret går till importen
+// (utan detta öppnade webbläsaren filen och lämnade appen om man missade rutan)
+// ═══════════════════════════════════════════
+(function(){
+  const veil=document.getElementById('drop-veil');
+  const IMP_EXT=/\.(csv|txt|tsv|xlsx|xls|xlsm|ods|pdf|jpe?g|png|webp|gif)$/i;
+  const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes('Files');
+  let depth=0;
+  const hide=()=>{depth=0;veil.classList.remove('on')};
+  window.addEventListener('dragenter',e=>{if(!hasFiles(e))return;e.preventDefault();depth++;veil.classList.add('on')});
+  window.addEventListener('dragover',e=>{if(!hasFiles(e))return;e.preventDefault();e.dataTransfer.dropEffect='copy'});
+  window.addEventListener('dragleave',e=>{if(!hasFiles(e))return;if(--depth<=0)hide()});
+  window.addEventListener('drop',e=>{
+    if(!hasFiles(e))return;
+    e.preventDefault();hide();
+    const all=[...e.dataTransfer.files];
+    const files=all.filter(f=>IMP_EXT.test(f.name)||f.type.startsWith('image/')||f.type==='application/pdf');
+    if(!files.length){toast(all.some(f=>/\.json$/i.test(f.name))?'Säkerhetskopior återställs under Inställningar':'Filtypen stöds inte — använd CSV, Excel, PDF eller bild','warn');return}
+    if(files.length<all.length)toast(`${all.length-files.length} fil${all.length-files.length>1?'er':''} hoppades över (fel filtyp)`,'warn');
+    if(_imp&&(_imp.busy||_imp.step==='review')){toast('Gör klart pågående import först','warn');document.getElementById('import-screen').classList.add('open');return}
+    openImport();
+    addImportFiles(files);
+  });
+  window.addEventListener('dragend',hide);
 })();
 
 // ═══════════════════════════════════════════
