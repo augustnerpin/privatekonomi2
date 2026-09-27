@@ -854,6 +854,13 @@ body.light .field input,body.light .field select,body.light .imp-sel,body.light 
 .field input,.field select{font-size:17px;padding:14px 16px}
 .field input:focus,.field select:focus,.tag-add input:focus,#s-apikey:focus{box-shadow:0 0 0 2px var(--acc2)}
 .bgt-search{background-color:var(--fill)!important;font-size:17px;padding:9px 14px}
+/* Supabase-inställningar */
+.sb-inp{width:100%;background:var(--surf2);border:none;border-radius:12px;padding:12px 14px;color:var(--text);font-family:var(--sans);font-size:15px;outline:none}
+body.light .sb-inp{background:var(--fill)}
+.sb-inp:focus{box-shadow:0 0 0 2px var(--acc2)}
+.sb-btn{padding:12px;border-radius:12px;background:var(--acc);border:none;color:#fff;font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer}
+.sb-btn2{background:var(--fill);color:var(--text)}
+.sb-btn:disabled{opacity:.5}
 
 /* ── iOS-reglage (51×31) ── */
 .toggle{width:51px;height:31px}
@@ -1316,7 +1323,45 @@ img,svg{-webkit-user-drag:none}
   </div>
 
   <div class="s-sec">
-    <div class="s-lbl">☁️ Molnsynk (Firebase)</div>
+    <div class="s-lbl">🗄️ Databas (Supabase) <span style="font-size:10px;color:var(--sub2);font-weight:400">— inloggning, synk mellan enheter</span></div>
+    <div class="s-card">
+      <div class="s-row" style="flex-direction:column;align-items:stretch;gap:4px">
+        <div class="s-row-lbl">Status</div>
+        <div class="s-row-sub" id="sb-status">Inte konfigurerad</div>
+      </div>
+      <div class="s-row" id="sb-cfg-row" style="flex-direction:column;align-items:stretch;gap:8px">
+        <div><div class="s-row-lbl">Projekt</div><div class="s-row-sub">Project URL och publishable key från Supabase → Project Settings → API.</div></div>
+        <input type="url" id="sb-url" placeholder="https://xxxx.supabase.co" autocapitalize="off" autocomplete="off" class="sb-inp">
+        <input type="text" id="sb-key" placeholder="sb_publishable_…" autocapitalize="off" autocomplete="off" class="sb-inp">
+        <button class="sb-btn" onclick="sbSaveCfg()">Spara projekt</button>
+      </div>
+      <div class="s-row" id="sb-login-row" style="flex-direction:column;align-items:stretch;gap:8px;display:none">
+        <div><div class="s-row-lbl">Logga in</div><div class="s-row-sub">Samma konto på alla enheter = samma data. Bara du kan läsa den.</div></div>
+        <input type="email" id="sb-email" placeholder="E-post" autocapitalize="off" autocomplete="username" class="sb-inp">
+        <input type="password" id="sb-pass" placeholder="Lösenord (minst 6 tecken)" autocomplete="current-password" class="sb-inp" onkeydown="if(event.key==='Enter')sbSignIn()">
+        <div style="display:flex;gap:8px">
+          <button class="sb-btn" style="flex:1" onclick="sbSignIn()">Logga in</button>
+          <button class="sb-btn sb-btn2" style="flex:1" onclick="sbSignUp()">Skapa konto</button>
+        </div>
+      </div>
+      <div id="sb-user-rows" style="display:none">
+        <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
+          <button class="sb-btn" onclick="sbSync()">⇅ Synka nu</button>
+        </div>
+        <div class="s-row">
+          <div><div class="s-row-lbl">Auto-synk</div><div class="s-row-sub">Vid ändringar och när appen öppnas</div></div>
+          <label class="toggle"><input type="checkbox" id="sb-auto" onchange="localStorage.setItem('sb_auto',JSON.stringify(this.checked));if(this.checked)sbSync({silent:true})"><span class="tsl"></span></label>
+        </div>
+        <div class="s-row">
+          <div style="min-width:0"><div class="s-row-lbl">Inloggad</div><div class="s-row-sub" id="sb-who" style="overflow:hidden;text-overflow:ellipsis"></div></div>
+          <button onclick="sbSignOut()" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;flex-shrink:0">Logga ut</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="s-sec">
+    <div class="s-lbl">☁️ Molnsynk (Firebase, äldre) <span style="font-size:10px;color:var(--sub2);font-weight:400">— ersätts av Supabase ovan</span></div>
     <div class="s-card">
       <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
         <div>
@@ -3819,6 +3864,7 @@ function toggleAutoSync(on){
 
 // Auto-synk: pusha (debouncat) när synkad data ändras
 function scheduleAutoSync(k){
+  if(typeof sbSchedule==='function')sbSchedule(k);
   if(_syncApplying||!SYNC_KEYS.has(k)||!ld('auto_sync',false))return;
   clearTimeout(_autoSyncTimer);
   _autoSyncTimer=setTimeout(()=>syncToCloud(true),2500);
@@ -3833,7 +3879,213 @@ function renderSyncSettings(){
   document.getElementById('auto-sync-toggle').checked=!!ld('auto_sync',false);
   const st=document.getElementById('sync-status');
   if(st)st.textContent=cfg?ld('sync_status','Ansluten till '+cfg.projectId):'Inte konfigurerad';
+  renderSbSettings();
 }
+
+// ═══════════════════════════════════════════
+// DATABAS (Supabase) — se supabase/schema.sql
+// Appen fungerar lokalt först; synken skickar bara det som ändrats sedan förra gången
+// ("skuggan" = fingeravtryck av det som senast synkats) och hämtar det som ändrats i molnet
+// sedan förra hämtningen. Borttagna rader markeras deleted=true så att andra enheter också tar bort dem.
+// ═══════════════════════════════════════════
+const SB_DEF_KEY='sb_publishable_LWG9VW6d9slSZ96FsCACmw_CAnBAXa4'; // publik nyckel — skyddas av inloggning + RLS
+const SB_STATE_KEYS=[...SYNC_KEYS].filter(k=>k!=='txs'&&k!=='nws');
+function sbCfg(){return{url:String(ld('sb_url','')||'').trim().replace(/\/+$/,''),key:String(ld('sb_key','')||SB_DEF_KEY).trim()}}
+let _sb=null,_sbP=null,_sbUser=null,_sbBusy=false,_sbAgain=false,_sbTimer=null;
+function loadSbLib(){
+  if(window.supabase?.createClient)return Promise.resolve(window.supabase);
+  if(!_sbP)_sbP=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    s.onload=()=>res(window.supabase);
+    s.onerror=()=>{_sbP=null;rej(new Error('Kunde inte ladda Supabase — kontrollera nätet'))};
+    document.head.appendChild(s);
+  });
+  return _sbP;
+}
+async function sbClient(){
+  const{url,key}=sbCfg();if(!url)return null;
+  if(_sb&&_sb._pkCfg===url+'|'+key)return _sb;
+  const lib=await loadSbLib();
+  _sb=lib.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  _sb._pkCfg=url+'|'+key;
+  _sb.auth.onAuthStateChange((ev,session)=>{_sbUser=session?.user||null;renderSbSettings()});
+  const{data}=await _sb.auth.getSession();_sbUser=data.session?.user||null;
+  return _sb;
+}
+function sbStatus(t){localStorage.setItem('sb_status',JSON.stringify(t));const el=document.getElementById('sb-status');if(el)el.textContent=t}
+function renderSbSettings(){
+  const{url,key}=sbCfg();
+  const u=document.getElementById('sb-url'),k=document.getElementById('sb-key');if(!u)return;
+  if(document.activeElement!==u)u.value=url;if(document.activeElement!==k)k.value=key;
+  document.getElementById('sb-login-row').style.display=url&&!_sbUser?'flex':'none';
+  document.getElementById('sb-user-rows').style.display=_sbUser?'block':'none';
+  document.getElementById('sb-cfg-row').style.display=_sbUser?'none':'flex';
+  document.getElementById('sb-who').textContent=_sbUser?.email||'';
+  document.getElementById('sb-auto').checked=ld('sb_auto',true)!==false;
+  document.getElementById('sb-status').textContent=!url?'Inte konfigurerad — ange projektets URL':!_sbUser?'Inte inloggad':ld('sb_status','Inloggad');
+}
+async function sbSaveCfg(){
+  const url=document.getElementById('sb-url').value.trim().replace(/\/+$/,'');
+  const key=document.getElementById('sb-key').value.trim();
+  if(!/^https:\/\/[^/\s]+$/.test(url)){toast('Ange projektets URL, t.ex. https://xxxx.supabase.co','warn');return}
+  if(!/^(sb_publishable_|eyJ)/.test(key)){toast('Ange den publika nyckeln (sb_publishable_…)','warn');return}
+  if(/^sb_secret_/.test(key)){toast('Använd inte den hemliga nyckeln i appen','err');return}
+  localStorage.setItem('sb_url',JSON.stringify(url));localStorage.setItem('sb_key',JSON.stringify(key));
+  _sb=null;_sbUser=null;
+  try{await sbClient();toast('Supabase-projekt sparat ✓')}catch(e){toast(e.message,'err')}
+  renderSbSettings();
+}
+function sbCreds(){
+  const email=document.getElementById('sb-email').value.trim(),password=document.getElementById('sb-pass').value;
+  if(!email||password.length<6){toast('Ange e-post och ett lösenord på minst 6 tecken','warn');return null}
+  return{email,password};
+}
+async function sbSignIn(){
+  const c=sbCreds();if(!c)return;
+  try{
+    const sb=await sbClient();
+    const{data,error}=await sb.auth.signInWithPassword(c);if(error)throw error;
+    _sbUser=data.user;document.getElementById('sb-pass').value='';
+    toast('Inloggad ✓');renderSbSettings();sbSync();
+  }catch(e){toast('Inloggningen misslyckades: '+(e.message==='Invalid login credentials'?'fel e-post eller lösenord':e.message),'err')}
+}
+async function sbSignUp(){
+  const c=sbCreds();if(!c)return;
+  try{
+    const sb=await sbClient();
+    const{data,error}=await sb.auth.signUp({...c,options:{emailRedirectTo:location.href.split('#')[0]}});if(error)throw error;
+    if(data.session){_sbUser=data.user;toast('Konto skapat ✓');renderSbSettings();sbSync()}
+    else toast('Konto skapat — bekräfta via mejlet och logga sedan in');
+  }catch(e){toast('Kunde inte skapa konto: '+e.message,'err')}
+}
+async function sbSignOut(){
+  if(!confirm('Logga ut från Supabase? Datan finns kvar på enheten.'))return;
+  try{await (await sbClient())?.auth.signOut()}catch{}
+  _sbUser=null;localStorage.removeItem('sb_shadow');sbStatus('Utloggad');renderSbSettings();
+}
+
+// Fingeravtryck av en rad (för att se vad som ändrats sedan förra synken)
+function sbFp(o){const s=JSON.stringify(o);let h=5381;for(let i=0;i<s.length;i++)h=(Math.imul(h,33)^s.charCodeAt(i))>>>0;return h.toString(36)+'.'+s.length.toString(36)}
+const SB_TX_FIELDS=['id','type','amount','desc','cat','date','month','account','source','importId','hash','mkey'];
+const SB_TABLES=[
+  {name:'transactions',sk:'tx',pk:'id',conflict:'user_id,id',
+    list:()=>getTxs(),key:t=>String(t.id),pkVal:k=>Number(k),
+    valid:t=>isFinite(t.id)&&['expense','income','savings','transfer'].includes(t.type)&&isFinite(t.amount)&&/^\d{4}-\d{2}-\d{2}$/.test(t.date||'')&&/^\d{4}-\d{2}$/.test(t.month||''),
+    toRow:(t,uid)=>{const extra={};for(const k in t)if(!SB_TX_FIELDS.includes(k))extra[k]=t[k];
+      return{user_id:uid,id:t.id,type:t.type,amount:t.amount,description:t.desc||'',category:t.cat||'',tx_date:t.date,month:t.month,
+        account:t.account||null,source:t.source||null,import_id:t.importId||null,hash:t.hash||null,mkey:t.mkey||null,extra,deleted:false}},
+    fromRow:r=>{const t={...(r.extra||{}),id:Number(r.id),type:r.type,amount:Number(r.amount),desc:r.description,cat:r.category,date:r.tx_date,month:r.month};
+      if(r.account)t.account=r.account;if(r.source)t.source=r.source;if(r.import_id)t.importId=r.import_id;if(r.hash)t.hash=r.hash;if(r.mkey)t.mkey=r.mkey;return t},
+    rowKey:r=>String(r.id),
+    save:arr=>localStorage.setItem('txs',JSON.stringify(arr))},
+  {name:'net_worth_snapshots',sk:'nw',pk:'period',conflict:'user_id,period',
+    list:()=>getNWs(),key:n=>n.period,pkVal:k=>k,
+    valid:n=>/^\d{4}-\d{2}$/.test(n.period||''),
+    toRow:(n,uid)=>{const amounts={};for(const k in n)if(k!=='period'&&k!=='total')amounts[k]=n[k];return{user_id:uid,period:n.period,total:+n.total||0,amounts,deleted:false}},
+    fromRow:r=>({period:r.period,...(r.amounts||{}),total:Number(r.total)}),
+    rowKey:r=>r.period,
+    save:arr=>localStorage.setItem('nws',JSON.stringify(arr.sort((a,b)=>a.period.localeCompare(b.period))))},
+  {name:'user_state',sk:'st',pk:'key',conflict:'user_id,key',
+    list:()=>SB_STATE_KEYS.filter(k=>localStorage.getItem(k)!==null).map(k=>({key:k,value:ld(k,null)})),key:o=>o.key,pkVal:k=>k,
+    toRow:(o,uid)=>({user_id:uid,key:o.key,value:o.value,deleted:false}),
+    fromRow:r=>({key:r.key,value:r.value}),rowKey:r=>r.key,
+    // Inställningar sparas per nyckel direkt i localStorage (inte som en lista)
+    applyState:true},
+];
+async function sbPush(sb,T,sh,uid){
+  const seen=new Set(),up=[];let bad=0;
+  for(const o of T.list()){
+    const k=T.key(o);seen.add(k);const f=sbFp(o);
+    if(sh[T.sk][k]===f)continue;
+    if(T.valid&&!T.valid(o)){bad++;continue}
+    up.push([k,f,T.toRow(o,uid)]);
+  }
+  // Rader som fanns vid förra synken men inte längre lokalt = borttagna
+  const del=Object.keys(sh[T.sk]).filter(k=>!seen.has(k));
+  for(let i=0;i<up.length;i+=500){
+    const part=up.slice(i,i+500);
+    const{error}=await sb.from(T.name).upsert(part.map(x=>x[2]),{onConflict:T.conflict});if(error)throw error;
+    part.forEach(([k,f])=>sh[T.sk][k]=f);
+  }
+  for(let i=0;i<del.length;i+=200){
+    const part=del.slice(i,i+200);
+    const{error}=await sb.from(T.name).update({deleted:true}).in(T.pk,part.map(T.pkVal));if(error)throw error;
+    part.forEach(k=>delete sh[T.sk][k]);
+  }
+  return{up:up.length,del:del.length,bad};
+}
+function sbApply(T,rows,sh){
+  if(T.applyState){
+    rows.forEach(r=>{
+      if(r.deleted){localStorage.removeItem(r.key);delete sh.st[r.key]}
+      else{localStorage.setItem(r.key,JSON.stringify(r.value));sh.st[r.key]=sbFp(T.fromRow(r))}
+    });
+    return;
+  }
+  const arr=T.list();const idx=new Map(arr.map((o,i)=>[T.key(o),i]));const gone=new Set();
+  rows.forEach(r=>{
+    const k=T.rowKey(r);
+    if(r.deleted){if(idx.has(k))gone.add(k);delete sh[T.sk][k];return}
+    const o=T.fromRow(r);gone.delete(k);
+    if(idx.has(k))arr[idx.get(k)]=o;else{arr.push(o);idx.set(k,arr.length-1)}
+    sh[T.sk][k]=sbFp(o);
+  });
+  T.save(gone.size?arr.filter(o=>!gone.has(T.key(o))):arr);
+}
+async function sbPull(sb,T,sh){
+  const PAGE=1000;let n=0;
+  for(;;){
+    let q=sb.from(T.name).select('*').order('updated_at',{ascending:true}).order(T.pk,{ascending:true}).limit(PAGE);
+    if(sh.cursor[T.sk])q=q.gt('updated_at',sh.cursor[T.sk]);
+    const{data,error}=await q;if(error)throw error;
+    if(!data.length)break;
+    sbApply(T,data,sh);n+=data.length;
+    sh.cursor[T.sk]=data[data.length-1].updated_at;
+    if(data.length<PAGE)break;
+  }
+  return n;
+}
+async function sbSync(opts={}){
+  if(_sbBusy){_sbAgain=true;return}
+  let sb;
+  try{sb=await sbClient()}catch(e){sbStatus('Fel: '+e.message);return}
+  if(!sb){if(!opts.silent)toast('Ange Supabase-projektet i inställningar','warn');return}
+  if(!_sbUser){if(!opts.silent)toast('Logga in på Supabase först','warn');return}
+  _sbBusy=true;clearTimeout(_sbTimer);sbStatus('Synkar…');
+  try{
+    const uid=_sbUser.id;
+    let sh=ld('sb_shadow',null);
+    const first=!sh||sh.uid!==uid;
+    if(first)sh={uid,tx:{},nw:{},st:{},cursor:{}};
+    const save=()=>localStorage.setItem('sb_shadow',JSON.stringify(sh));
+    let pulled=0,pushed=0,bad=0;
+    // Första synken på en enhet: molnets inställningar vinner (en ny telefon ska inte skriva över dem)
+    if(first)pulled+=await sbPull(sb,SB_TABLES[2],sh);
+    for(const T of SB_TABLES){const r=await sbPush(sb,T,sh,uid);pushed+=r.up+r.del;bad+=r.bad;save()}
+    for(const T of SB_TABLES){pulled+=await sbPull(sb,T,sh);save()}
+    const when=new Date().toLocaleString('sv-SE',{dateStyle:'short',timeStyle:'short'});
+    sbStatus(`Synkad ${when} · ${getTxs().length} transaktioner i databasen`+(bad?` · ${bad} ogiltiga rader hoppades över`:''));
+    if(!opts.silent)toast(`Synkat ✓ (${pushed} upp, ${pulled} ner)`);
+    if(pulled){render();if(document.getElementById('settings-screen').classList.contains('open'))renderSettings()}
+  }catch(e){
+    sbStatus('Fel: '+(e.message||e));
+    if(!opts.silent)toast('Synken misslyckades: '+(e.message||e),'err');
+  }finally{
+    _sbBusy=false;
+    if(_sbAgain){_sbAgain=false;sbSchedule()}
+  }
+}
+function sbSchedule(k){
+  if(k&&!SYNC_KEYS.has(k))return;
+  if(!_sbUser||!sbCfg().url||ld('sb_auto',true)===false)return;
+  clearTimeout(_sbTimer);_sbTimer=setTimeout(()=>sbSync({silent:true}),3000);
+}
+// Synka när appen öppnas och när den kommer tillbaka i förgrunden
+if(sbCfg().url){
+  sbClient().then(()=>{if(_sbUser&&ld('sb_auto',true)!==false)sbSync({silent:true})}).catch(e=>sbStatus('Fel: '+e.message));
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')sbSchedule()});
 
 // ═══════════════════════════════════════════
 // AI
