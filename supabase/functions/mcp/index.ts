@@ -62,7 +62,7 @@ function swedishHolidays(y: number) {
   const D = (mo: number, da: number) => new Date(y, mo - 1, da);
   const mid = new Date(y, 5, 19); while (mid.getDay() !== 5) mid.setDate(mid.getDate() + 1);
   const allS = new Date(y, 9, 31); while (allS.getDay() !== 6) allS.setDate(allS.getDate() + 1);
-  return new Set([D(1, 1), D(1, 6), D(5, 1), D(6, 6), D(12, 24), D(12, 25), D(12, 26), D(12, 31), off(-3), off(1), off(39), off(49), off(50), mid, allS].map(ymd));
+  return new Set([D(1, 1), D(1, 6), D(5, 1), D(6, 6), D(12, 24), D(12, 25), D(12, 26), D(12, 31), off(-2), off(1), off(39), mid, allS].map(ymd));
 }
 // Lönen den 25:e (eller närmaste vardag före) startar nästa månads period
 function suggestedPayDate(y: number, m0: number) {
@@ -388,7 +388,8 @@ export const TOOLS: Tool[] = [
       const r = rows[0]; if (!r) throw new UserError(`Hittar ingen transaktion med id ${a.id}`);
       const next: Obj = { type: a.type ?? r.type, category: a.category ?? r.category, amount: a.amount ?? Number(r.amount), date: a.date ?? r.tx_date };
       if (a.type && !a.category && a.type !== r.type) throw new UserError('Ange även category när du byter typ');
-      checkTx(s, next);
+      // Oförändrad kategori godtas även om den tagits bort ur listan (som i appen)
+      checkTx(s, next, next.type === r.type && next.category === r.category);
       const patch: Obj = { type: next.type, category: next.category, amount: next.amount, tx_date: next.date };
       if (a.date) patch.month = periodForDate(a.date, s.pay_periods);
       if (a.description != null) patch.description = String(a.description).trim();
@@ -457,7 +458,8 @@ export const TOOLS: Tool[] = [
         if (typeof v !== 'number' || !isFinite(v)) throw new UserError(`Ogiltigt belopp för "${k}"`);
         amounts[cat.key] = v;
       }
-      const total = Object.values(amounts).reduce((x: number, v: any) => x + (+v || 0), 0);
+      // Bara nuvarande kategorier räknas (som saveNW i appen); borttagna kategorier kan ligga kvar i gamla månader
+      const total = s.cats_nw.reduce((x: number, cat: Obj) => x + (+amounts[cat.key] || 0), 0);
       await must(c.db.from('net_worth_snapshots').upsert({ user_id: c.uid, period: a.period, total, amounts, deleted: false }, { onConflict: 'user_id,period' }));
       return { period: a.period, total, amounts };
     },
@@ -465,12 +467,12 @@ export const TOOLS: Tool[] = [
 ];
 
 class UserError extends Error {}
-function checkTx(s: Obj, t: Obj) {
+function checkTx(s: Obj, t: Obj, keepCat = false) {
   if (!TYPES.includes(t.type)) throw new UserError(`Ogiltig typ "${t.type}"`);
   if (typeof t.amount !== 'number' || !isFinite(t.amount) || t.amount === 0) throw new UserError('Ange ett belopp skilt från 0');
   if (!validDate(t.date)) throw new UserError(`Ogiltigt datum "${t.date}" (YYYY-MM-DD)`);
   const cats = s[CAT_KEY[t.type]];
-  if (!cats.includes(t.category)) throw new UserError(`Kategorin "${t.category}" finns inte för ${TYPE_LABEL[t.type].toLowerCase()}. Finns: ${cats.join(', ')}`);
+  if (!keepCat && !cats.includes(t.category)) throw new UserError(`Kategorin "${t.category}" finns inte för ${TYPE_LABEL[t.type].toLowerCase()}. Finns: ${cats.join(', ')}`);
 }
 
 // Enkel kontroll av argument mot schemat (typer, enum, mönster, obligatoriska fält)
@@ -606,6 +608,7 @@ export function createHandler(db: Db) {
     try { body = await req.json(); } catch { return json(rpcErr(null, -32700, 'Parse error'), 400); }
     const touch = Promise.resolve(db.from('mcp_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', tok.id)).catch(() => {});
     const ctx: Ctx = { db, uid: tok.user_id, scope: tok.scope === 'write' ? 'write' : 'read' };
+    if (Array.isArray(body) && !body.length) return json(rpcErr(null, -32600, 'Invalid Request'), 400);
     const msgs = Array.isArray(body) ? body : [body];
     const out = (await Promise.all(msgs.map((m) => handleRpc(m, ctx)))).filter(Boolean);
     await touch;

@@ -1,6 +1,6 @@
 // Service worker: gör appen installerbar och startbar utan nät.
 // - Själva appen (index.html): nätet först, så att nya versioner kommer direkt; sparad kopia utan nät.
-// - Ikoner och manifest: sparad kopia först.
+// - Ikoner och manifest: sparad kopia direkt, uppdateras i bakgrunden (så att nya ikoner kommer fram).
 // - Bibliotek och typsnitt från CDN: sparad kopia direkt, uppdateras i bakgrunden.
 // - AI (Anthropic), Supabase och Firebase går alltid direkt till nätet och sparas aldrig.
 const VERSION = 'ekonomi-v1';
@@ -36,10 +36,12 @@ self.addEventListener('fetch', e => {
 
   // Ikoner, manifest m.m. från samma webbplats
   if (url.origin === location.origin) {
-    e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+    const net = fetch(req).then(async res => {
+      if (res.ok) { const c = await caches.open(VERSION); await c.put(req, res.clone()); }
       return res;
-    })));
+    });
+    e.waitUntil(net.catch(() => {}));
+    e.respondWith(caches.match(req).then(hit => hit || net));
     return;
   }
 

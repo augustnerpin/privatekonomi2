@@ -1870,7 +1870,8 @@ function swedishHolidays(y){
   const fixed=[D(1,1),D(1,6),D(5,1),D(6,6),D(12,24),D(12,25),D(12,26),D(12,31)];
   let mid=new Date(y,5,19);while(mid.getDay()!==5)mid.setDate(mid.getDate()+1);
   let allS=new Date(y,9,31);while(allS.getDay()!==6)allS.setDate(allS.getDate()+1);
-  const moving=[off(-3),off(1),off(39),off(49),off(50),mid,allS];
+  // Långfredag, annandag påsk, Kristi himmelsfärd, midsommarafton, alla helgons dag
+  const moving=[off(-2),off(1),off(39),mid,allS];
   const key=d=>d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
   return new Set([...fixed,...moving].map(key));
 }
@@ -2233,10 +2234,10 @@ function openNWModal(){
   const prevValues=latest||{};
   document.getElementById('nwm-fields').innerHTML=helpHtml+cats.map(c=>{
     const prev=prevValues[c.key];
-    const prevStr=prev>0?` (förra: ${fmt(prev)} kr)`:'';
+    const prevStr=prev?` (förra: ${fmt(prev)} kr)`:'';
     return`<div class="field">
       <label>${esc(c.label)}<span style="color:var(--sub2);font-size:10px;font-family:var(--mono);font-weight:400">${prevStr}</span></label>
-      <input type="number" id="nwm-${c.key}" placeholder="${prev>0?prev:0}" inputmode="decimal" value="${prev>0?prev:''}">
+      <input type="number" id="nwm-${c.key}" placeholder="${prev||0}" inputmode="decimal" value="${prev||''}">
     </div>`;
   }).join('');
 
@@ -2267,7 +2268,7 @@ function makeDonut(slices,total,cx=70,cy=70,r=54,sw=9){
   let out='';let off=0;const circ=2*Math.PI*r;
   slices.forEach(s=>{
     const dash=(s.val/total)*circ;
-    out+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(circ-dash).toFixed(2)}" stroke-dashoffset="${(circ/4).toFixed(2)}" style="transform-origin:${cx}px ${cy}px;transform:rotate(${(off/total*360-90).toFixed(2)}deg)"/>`;
+    out+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(circ-dash).toFixed(2)}" stroke-dashoffset="${(circ/4).toFixed(2)}" style="transform-origin:${cx}px ${cy}px;transform:rotate(${(off/total*360).toFixed(2)}deg)"/>`;
     off+=s.val;
   });
   return out;
@@ -2370,7 +2371,7 @@ function renderBudget(){
       if(Math.abs(moved)<1)return'';
       return`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6">
         ⇄ ${moved>0?'Flyttat till':'Hämtat från'} egna konton: <b style="color:var(--text)">${fmt(Math.abs(moved))} kr</b> — räknas inte som utgift.
-        ${moved>0?`<br>Inklusive detta: <b style="color:${balance+moved>=0?'var(--green)':'var(--red)'}">${fmtSigned(balance+moved)} kr</b> kvar av månadens pengar.`:''}
+        ${moved>0?`<br>Kvar efter flytten: <b style="color:${balance-moved>=0?'var(--green)':'var(--red)'}">${fmtSigned(balance-moved)} kr</b> av månadens pengar.`:''}
         ${moved>0?`<br><span style="color:var(--sub2)">Är något av det sparande? ${tap(1)} på raden och välj Sparande — appen minns det.</span>`:''}
       </div>`;
     })()}
@@ -2704,7 +2705,6 @@ function renderHome(){
   document.getElementById('home-month').textContent=mLabel(month);
   const sum=ty=>txs.filter(t=>t.type===ty).reduce((s,t)=>s+t.amount,0);
   const inc=sum('income'),exp=sum('expense'),sav=sum('savings');
-  const moved=-txs.filter(t=>t.type==='transfer'&&t.cat!=='Kreditkortsbetalning').reduce((s,t)=>s+t.amount,0);
   const isCur=month===currentPayPeriod();
   const ins=getInsights()[month];
   const busy=window._analysing?.[month];
@@ -2733,7 +2733,7 @@ function renderHome(){
     ${txs.length?`<div class="home-stats">
       <div>Utgifter<b>${fmt(exp)}</b></div>
       <div>Sparat<b>${fmt(sav)}</b></div>
-      <div>Kvar<b style="color:${inc-exp-sav+Math.max(moved,0)>=0?'var(--green)':'var(--red)'}">${fmtSigned(inc-exp-sav+Math.max(moved,0))}</b></div>
+      <div>Kvar<b style="color:${inc-exp-sav>=0?'var(--green)':'var(--red)'}">${fmtSigned(inc-exp-sav)}</b></div>
       ${inc>0?`<div>Sparkvot<b>${Math.round(sav/inc*100)}%</b></div>`:''}
     </div>`:''}
   </div>`;
@@ -2893,6 +2893,7 @@ function renderNetWorth(){
 
   const assetDefs=getNWCats().filter(a=>latest[a.key]>0);
   const slices=assetDefs.map((a,i)=>({val:latest[a.key],color:COLORS[i%COLORS.length],label:a.label}));
+  const slicesTotal=slices.reduce((s,x)=>s+x.val,0); // skulder (negativa värden) ingår inte i fördelningen
   let html='';
 
   // ── 1. FÖRMÖGENHETSUTVECKLING ──
@@ -2940,14 +2941,14 @@ function renderNetWorth(){
   <div class="card"><div class="card-inner">
     <div style="display:flex;align-items:center;gap:16px">
       <div class="donut" style="width:120px;height:120px;flex-shrink:0">
-        <svg viewBox="0 0 140 140" width="120" height="120">${makeDonut(slices,latest.total)}</svg>
+        <svg viewBox="0 0 140 140" width="120" height="120">${makeDonut(slices,slicesTotal)}</svg>
         <div class="donut-c"><div class="donut-v">${fmt(latest.total)}</div><div class="donut-l">totalt</div></div>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;gap:6px">
         ${slices.map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px">
           <span style="width:8px;height:8px;border-radius:2px;background:${s.color};flex-shrink:0"></span>
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(s.label)}</span>
-          <span style="font-family:var(--mono);font-size:11px">${Math.round(s.val/latest.total*100)}%</span>
+          <span style="font-family:var(--mono);font-size:11px">${Math.round(s.val/slicesTotal*100)}%</span>
         </div>`).join('')}
       </div>
     </div>
@@ -2957,7 +2958,7 @@ function renderNetWorth(){
   html+=`<div class="sec"><span class="sec-t">Tillgångar</span><span class="sec-sub">${tap()} för historik</span></div><div class="txl">`;
   assetDefs.forEach((a,i)=>{
     const p=latest.total>0?Math.round(latest[a.key]/latest.total*100):0;
-    const prevVal=prev?prev[a.key]:null;
+    const prevVal=prev&&prev[a.key]!=null?+prev[a.key]:null;
     const diff=prevVal!==null?latest[a.key]-prevVal:null;
     html+=`<div class="txi" onclick="openAssetDetail(${jsArg(a.key)},${jsArg(a.label)},${i})">
       <div class="txav" style="background:${COLORS[i%COLORS.length]}18;color:${COLORS[i%COLORS.length]};font-size:11px;font-weight:600;font-family:var(--mono)">${p}%</div>
@@ -3035,12 +3036,13 @@ function renderNetWorth(){
       </div>
       <div>
         <div class="card-lbl">Buffer (månader)</div>
-        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:${liquidityMonths>=3?'var(--green)':liquidityMonths>=1?'var(--amber)':'var(--red)'}">${liquidityMonths||'—'}</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:${liquidityMonths===null?'var(--sub)':liquidityMonths>=3?'var(--green)':liquidityMonths>=1?'var(--amber)':'var(--red)'}">${liquidityMonths||'—'}</div>
         <div style="font-size:11px;color:var(--sub2);margin-top:2px">vs snitt utgifter</div>
       </div>
     </div>
     <div style="font-size:12px;color:var(--sub);line-height:1.6;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">
-      ${liquidityMonths>=6?'✅ Utmärkt buffert — över 6 månaders utgifter':
+      ${liquidityMonths===null?'Importera eller lägg in utgifter så räknas bufferten ut':
+        liquidityMonths>=6?'✅ Utmärkt buffert — över 6 månaders utgifter':
         liquidityMonths>=3?'✓ God buffert — 3–6 månaders utgifter':
         liquidityMonths>=1?'⚠️ Låg buffert — under 3 månader rekommenderas':
         '🔴 Kritisk buffert — bygg upp likvida medel'}
@@ -3392,7 +3394,7 @@ function changeYear(d){
 function renderYear(){
   const year=+state.month.slice(0,4);
   document.getElementById('yr-title').textContent=year+'';
-  const nx=document.getElementById('yr-next');if(nx)nx.style.visibility=year>=new Date().getFullYear()?'hidden':'';
+  const nx=document.getElementById('yr-next');if(nx)nx.style.visibility=year>=+currentPayPeriod().slice(0,4)?'hidden':'';
   const txs=getTxs().filter(t=>t.month.startsWith(year.toString()));
   let totInc=0,totExp=0,totSav=0;
   txs.forEach(t=>{
@@ -3952,13 +3954,13 @@ function confirmImport(){
 function applyBackup(d){
   svTxs(d.txs);svNWs(d.nws);
   if(d.settings){
-    if(d.settings.goal)sv('goal',d.settings.goal);
-    if(d.settings.salary)sv('salary',d.settings.salary);
+    if(d.settings.goal!=null)sv('goal',d.settings.goal);
+    if(d.settings.salary!=null)sv('salary',d.settings.salary);
     if(d.settings.theme)sv('theme',d.settings.theme);
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names'].forEach(k=>{if(d.settings[k])sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -4080,7 +4082,7 @@ const SB_DEF_URL='https://qchasvatuhndtswxlucr.supabase.co';
 const SB_DEF_KEY='sb_publishable_LWG9VW6d9slSZ96FsCACmw_CAnBAXa4'; // publik nyckel — skyddas av inloggning + RLS
 const SB_STATE_KEYS=[...SYNC_KEYS].filter(k=>k!=='txs'&&k!=='nws');
 function sbCfg(){return{url:String(ld('sb_url','')||SB_DEF_URL).trim().replace(/\/+$/,''),key:String(ld('sb_key','')||SB_DEF_KEY).trim()}}
-let _sb=null,_sbP=null,_sbUser=null,_sbBusy=false,_sbAgain=false,_sbTimer=null;
+let _sb=null,_sbP=null,_sbInit=null,_sbUser=null,_sbBusy=false,_sbAgain=false,_sbTimer=null;
 function loadSbLib(){
   if(window.supabase?.createClient)return Promise.resolve(window.supabase);
   if(!_sbP)_sbP=new Promise((res,rej)=>{
@@ -4094,13 +4096,21 @@ function loadSbLib(){
 }
 async function sbClient(){
   const{url,key}=sbCfg();if(!url)return null;
-  if(_sb&&_sb._pkCfg===url+'|'+key)return _sb;
-  const lib=await loadSbLib();
-  _sb=lib.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  _sb._pkCfg=url+'|'+key;
-  _sb.auth.onAuthStateChange((ev,session)=>{_sbUser=session?.user||null;renderSbSettings()});
-  const{data}=await _sb.auth.getSession();_sbUser=data.session?.user||null;
-  return _sb;
+  const cfg=url+'|'+key;
+  if(_sb&&_sb._pkCfg===cfg)return _sb;
+  // Samtidiga anrop delar på samma klient (två klienter förnyar inloggningen var för sig och kan logga ut)
+  if(_sbInit?.cfg!==cfg){
+    const p=(async()=>{
+      const lib=await loadSbLib();
+      const c=lib.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      c._pkCfg=cfg;
+      c.auth.onAuthStateChange((ev,session)=>{_sbUser=session?.user||null;renderSbSettings()});
+      const{data}=await c.auth.getSession();_sbUser=data.session?.user||null;
+      _sb=c;return c;
+    })();
+    p.cfg=cfg;_sbInit=p;p.catch(()=>{if(_sbInit===p)_sbInit=null});
+  }
+  return _sbInit;
 }
 function sbStatus(t){localStorage.setItem('sb_status',JSON.stringify(t));const el=document.getElementById('sb-status');if(el)el.textContent=t}
 function renderSbSettings(){
@@ -4175,7 +4185,7 @@ async function sbSaveCfg(){
   if(!/^(sb_publishable_|eyJ)/.test(key)){toast('Ange den publika nyckeln (sb_publishable_…)','warn');return}
   if(/^sb_secret_/.test(key)){toast('Använd inte den hemliga nyckeln i appen','err');return}
   localStorage.setItem('sb_url',JSON.stringify(url));localStorage.setItem('sb_key',JSON.stringify(key));
-  _sb=null;_sbUser=null;
+  _sb=null;_sbInit=null;_sbUser=null;
   try{await sbClient();toast('Supabase-projekt sparat ✓')}catch(e){toast(e.message,'err')}
   renderSbSettings();
 }
@@ -4262,7 +4272,11 @@ function sbApply(T,rows,sh){
   if(T.applyState){
     rows.forEach(r=>{
       if(r.deleted){localStorage.removeItem(r.key);delete sh.st[r.key]}
-      else{localStorage.setItem(r.key,JSON.stringify(r.value));sh.st[r.key]=sbFp(T.fromRow(r))}
+      else{
+        // Ändrad lokalt sedan förra synken (t.ex. under pågående synk): behåll, nästa push vinner
+        if(r.key in sh.st&&localStorage.getItem(r.key)!==null&&sbFp({key:r.key,value:ld(r.key,null)})!==sh.st[r.key])return;
+        localStorage.setItem(r.key,JSON.stringify(r.value));sh.st[r.key]=sbFp(T.fromRow(r));
+      }
     });
     return;
   }
@@ -4271,20 +4285,27 @@ function sbApply(T,rows,sh){
     const k=T.rowKey(r);
     if(r.deleted){if(idx.has(k))gone.add(k);delete sh[T.sk][k];return}
     const o=T.fromRow(r);gone.delete(k);
-    if(idx.has(k))arr[idx.get(k)]=o;else{arr.push(o);idx.set(k,arr.length-1)}
+    if(idx.has(k)){
+      // Ändrad lokalt sedan förra synken: behåll, nästa push vinner
+      if(k in sh[T.sk]&&sbFp(arr[idx.get(k)])!==sh[T.sk][k])return;
+      arr[idx.get(k)]=o;
+    }else{arr.push(o);idx.set(k,arr.length-1)}
     sh[T.sk][k]=sbFp(o);
   });
   T.save(gone.size?arr.filter(o=>!gone.has(T.key(o))):arr);
 }
 async function sbPull(sb,T,sh){
   const PAGE=1000;let n=0;
+  // Lite överlapp: en annan enhet som sparar samtidigt kan få en tidigare tidsstämpel än den senast hämtade
+  let cur=sh.cursor[T.sk];
+  if(cur){const t=Date.parse(cur);if(!isNaN(t))cur=new Date(t-120e3).toISOString()}
   for(;;){
     let q=sb.from(T.name).select('*').order('updated_at',{ascending:true}).order(T.pk,{ascending:true}).limit(PAGE);
-    if(sh.cursor[T.sk])q=q.gt('updated_at',sh.cursor[T.sk]);
+    if(cur)q=q.gt('updated_at',cur);
     const{data,error}=await q;if(error)throw error;
     if(!data.length)break;
     sbApply(T,data,sh);n+=data.length;
-    sh.cursor[T.sk]=data[data.length-1].updated_at;
+    cur=sh.cursor[T.sk]=data[data.length-1].updated_at;
     if(data.length<PAGE)break;
   }
   return n;
@@ -4303,8 +4324,9 @@ async function sbSync(opts={}){
     if(first)sh={uid,tx:{},nw:{},st:{},cursor:{}};
     const save=()=>localStorage.setItem('sb_shadow',JSON.stringify(sh));
     let pulled=0,pushed=0,bad=0;
-    // Första synken på en enhet: molnets inställningar vinner (en ny telefon ska inte skriva över dem)
-    if(first)pulled+=await sbPull(sb,SB_TABLES[2],sh);
+    // Första synken på en enhet (även efter utloggning): molnet vinner. Allt hämtas innan något skickas,
+    // så att gamla lokala rader inte skriver över nyare ändringar eller väcker borttagna rader till liv.
+    if(first)for(const T of SB_TABLES)pulled+=await sbPull(sb,T,sh);
     for(const T of SB_TABLES){const r=await sbPush(sb,T,sh,uid);pushed+=r.up+r.del;bad+=r.bad;save()}
     for(const T of SB_TABLES){pulled+=await sbPull(sb,T,sh);save()}
     const when=new Date().toLocaleString('sv-SE',{dateStyle:'short',timeStyle:'short'});
@@ -4459,6 +4481,10 @@ function parseDateStr(v,order){
   const s=String(v??'').trim();if(!s)return null;
   let m=s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);if(m)return ymd(+m[1],+m[2],+m[3]);
   m=s.match(/^(\d{4})(\d{2})(\d{2})$/);if(m)return ymd(+m[1],+m[2],+m[3]);
+  // ÅÅ-MM-DD (svensk kortform) mot DD-MM-ÅÅ: välj tolkningen vars år ligger närmast i tid
+  m=s.match(/^(\d{2})-(\d{2})-(\d{2})\b/);
+  if(m){const now=new Date().getFullYear(),ya=2000+ +m[1],yc=2000+ +m[3];
+    if(Math.abs(ya-now)<Math.abs(yc-now)){const r=ymd(ya,+m[2],+m[3]);if(r)return r}}
   m=s.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})\b/);
   if(m){let a=+m[1],b=+m[2],y=+m[3];if(y<100)y+=2000;
     return order==='mdy'?(ymd(y,a,b)||ymd(y,b,a)):(ymd(y,b,a)||ymd(y,a,b))}
@@ -4675,7 +4701,8 @@ async function addImportFiles(fileList){
         else raw=parseCSV(decodeText(buf));
         const t=detectTable(raw);
         f.kind='table';f.table=t;
-        const saved=ld('import_maps',{})[t.header.join('|')];
+        // Filer utan rubrikrad har ingen nyckel att känna igen formatet på
+        const saved=t.header.length?ld('import_maps',{})[t.header.join('|')]:null;
         f.map=saved?{...t.map,...saved.map}:{...t.map};
         f.account=saved&&getAccounts().some(a=>a.id===saved.account)?saved.account:guessAccount(file.name,t.pre+' '+t.header.join(' '));
         f.invert=saved?!!saved.invert:autoInvert(f);
@@ -5025,21 +5052,24 @@ async function processImport(){
       else{
         rows=fileRows(f);
         // Kom ihåg kolumnval för samma bankformat
-        const maps=ld('import_maps',{});maps[f.table.header.join('|')]={map:f.map,invert:f.invert,account:f.account};sv('import_maps',maps);
+        if(f.table.header.length){const maps=ld('import_maps',{});maps[f.table.header.join('|')]={map:f.map,invert:f.invert,account:f.account};sv('import_maps',maps)}
       }
       // Bara rader i den valda månaden (löneperioden)
-      rows.forEach(r=>{if(periodOf(r.date)===_imp.month)all.push({...r,account:f.account,file:f.name})});
+      rows.forEach(r=>{if(periodOf(r.date)===_imp.month)all.push({...r,account:f.account,file:f.name,fid:f.id})});
     }
     if(!all.length){_imp.busy=null;renderImport();toast(`Inga transaktioner i ${mLabel(_imp.month)} i filerna`,'warn');return}
     // 2. Dubbletter (mot tidigare importer och inom filerna)
     setBusy('Letar dubbletter…');
     const existing=new Set(getTxs().filter(t=>t.hash).map(t=>t.hash));
-    const seen={};let dups=0;const fresh=[];
+    // Löpnumret räknas per fil: två likadana köp samma dag i en fil blir #1 och #2, men samma rad i två
+    // överlappande filer (eller samma fil två gånger) får samma nyckel och tas bara med en gång
+    const seen={},taken=new Set();let dups=0;const fresh=[];
     all.forEach(r=>{
       const base=`${r.account}|${r.date}|${r.amount.toFixed(2)}|${merchantBase(r.desc)}`;
-      seen[base]=(seen[base]||0)+1;
-      r.hash=base+'#'+seen[base];
-      if(existing.has(r.hash))dups++;else fresh.push(r);
+      const fk=r.fid+'|'+base;
+      seen[fk]=(seen[fk]||0)+1;
+      r.hash=base+'#'+seen[fk];
+      if(existing.has(r.hash)||taken.has(r.hash))dups++;else{taken.add(r.hash);fresh.push(r)}
     });
     // 3. Gruppera per butik och applicera inlärda regler
     const rules=getRules();const gmap={};
@@ -5177,10 +5207,11 @@ function saveImport(){
   const impId='imp'+Date.now();
   let txs=getTxs();
   // Ta bort manuella transaktioner som ersätts
-  let removed=0;
+  let removed=0;const removedTxs=[];
   Object.entries(_imp.overlap||{}).forEach(([acc,o])=>{
     if(!_imp.replaceManual[acc])return;
-    const ids=new Set(o.ids);const before=txs.length;txs=txs.filter(t=>!ids.has(t.id));removed+=before-txs.length;
+    const ids=new Set(o.ids);removedTxs.push(...txs.filter(t=>ids.has(t.id)));
+    const before=txs.length;txs=txs.filter(t=>!ids.has(t.id));removed+=before-txs.length;
   });
   let n=0;const base=nextTxId(txs);
   on.forEach(g=>{
@@ -5200,7 +5231,7 @@ function saveImport(){
     svAccounts(accs);
   }
   const imps=getImports();
-  imps.push({id:impId,date:new Date().toISOString(),month:_imp.month,count:n,files:_imp.files.filter(f=>f.status==='ready').map(f=>f.name),removed});
+  imps.push({id:impId,date:new Date().toISOString(),month:_imp.month,count:n,files:_imp.files.filter(f=>f.status==='ready').map(f=>f.name),removed,removedTxs});
   svImports(imps.slice(-50));
   _imp.step='done';
   document.getElementById('import-screen').classList.remove('open');
@@ -5218,8 +5249,11 @@ function saveImport(){
 function undoImport(id){
   const imp=getImports().find(i=>i.id===id);if(!imp)return;
   const n=getTxs().filter(t=>t.importId===id).length;
-  if(!confirm(`Ångra importen från ${imp.date.slice(0,10)}? ${n} transaktioner tas bort.`))return;
-  svTxs(getTxs().filter(t=>t.importId!==id));
+  // Manuella transaktioner som importen ersatte läggs tillbaka
+  const back=imp.removedTxs||[];
+  if(!confirm(`Ångra importen från ${imp.date.slice(0,10)}? ${n} transaktioner tas bort.${back.length?` ${back.length} manuella som ersattes läggs tillbaka.`:''}`))return;
+  const rest=getTxs().filter(t=>t.importId!==id);const have=new Set(rest.map(t=>t.id));
+  svTxs([...rest,...back.filter(t=>!have.has(t.id))]);
   svImports(getImports().filter(i=>i.id!==id));
   renderSettings();render();toast('Importen ångrad');
 }
@@ -5571,6 +5605,7 @@ function sendChip(txt){
 }
 
 async function sendAi(){
+  if(document.getElementById('ai-send').disabled)return; // ett svar i taget (Enter och förslag går annars förbi knappen)
   const inp=document.getElementById('ai-inp');
   const txt=inp.value.trim();if(!txt)return;
   const key=getApiKey();
