@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Förmögenhet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=DM+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg0:    #07070d;
@@ -623,6 +623,34 @@ body.light .imp-sel,body.light .field input,body.light .field select{background:
 .acc-tag{font-size:9px;padding:1px 6px;border-radius:8px;font-family:var(--mono);background:var(--bg3);color:var(--sub);margin-left:4px;vertical-align:1px}
 .txi.trf .txi-name,.txi.trf .txi-amt{opacity:.55}
 
+/* ── HEM: AI-FLÖDE ── */
+#screen-home{padding-bottom:calc(190px + var(--safe-b))}
+.home-month{font-size:13px;font-weight:500;padding:5px 11px;border-radius:14px;background:var(--acc2);color:var(--acc);min-width:64px;text-align:center}
+.home-hero{padding:6px 20px 14px}
+.home-story{font-family:'Newsreader',Georgia,serif;font-size:23px;line-height:1.35;letter-spacing:-.005em;font-weight:400}
+.home-story-sub{font-size:14px;color:var(--sub);line-height:1.6;margin-top:10px}
+.home-stats{display:flex;gap:18px;margin-top:16px;font-size:12px;color:var(--sub)}
+.home-stats b{display:block;font-size:17px;color:var(--text);font-weight:600;font-family:var(--mono);margin-top:1px}
+.feed{display:flex;flex-direction:column;gap:10px;padding:0 16px}
+.fc{background:linear-gradient(150deg,var(--glass-strong) 0%,var(--glass) 55%);border:1px solid var(--glass-border);border-radius:20px;padding:13px 15px;box-shadow:inset 0 1px 0 var(--specular);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.fc-hd{display:flex;gap:10px;align-items:flex-start}
+.fc-ic{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.fc-t{font-size:14px;font-weight:600;line-height:1.35}
+.fc-x{font-size:12.5px;color:var(--sub);line-height:1.55;margin-top:2px}
+.fc-act{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:40px}
+.fc-act .chip{font-size:12px}
+.fc.click{cursor:pointer}
+.fc.click:active{transform:scale(.985)}
+.home-ask{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(calc(var(--safe-b) - 6px),10px) + 68px);width:calc(100% - 32px);max-width:398px;z-index:95}
+.home-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:8px}
+.home-chips::-webkit-scrollbar{display:none}
+.home-chips .chip{background:rgba(20,20,28,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+body.light .home-chips .chip{background:rgba(255,255,255,.9)}
+.home-ask-bar{display:flex;gap:8px;align-items:center;background:rgba(24,24,30,.94);border:1px solid rgba(255,255,255,.14);border-radius:22px;padding:5px 5px 5px 16px;backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+body.light .home-ask-bar{background:rgba(255,255,255,.96);border-color:rgba(0,0,0,.1);box-shadow:0 8px 24px rgba(20,30,60,.12)}
+.home-ask-bar input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:15px}
+.home-ask-bar button{width:36px;height:36px;border-radius:50%;border:none;background:var(--acc);color:#06241a;font-size:17px;cursor:pointer;flex-shrink:0}
+
 /* Modell- & effort-väljare */
 .ai-opts{display:flex;gap:6px;align-items:center;margin-bottom:8px}
 .ai-seg{display:flex;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:2px;flex-shrink:0}
@@ -684,15 +712,43 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
 </head>
 <body>
 
-<!-- ═══ BUDGET SCREEN ═══ -->
-<div class="screen active" id="screen-budget">
+<!-- ═══ HEM: AI-FLÖDE ═══ -->
+<div class="screen active" id="screen-home">
+  <div class="hdr" style="padding-bottom:6px">
+    <div class="hdr-row" style="align-items:center">
+      <div class="hdr-label" id="home-hello" style="margin:0;font-size:13px;letter-spacing:.02em;text-transform:none">Hej</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="mnav-b" style="width:30px;height:30px;font-size:15px" onclick="changeMonth(-1)" aria-label="Föregående månad">‹</button>
+        <span class="home-month" id="home-month">Sep</span>
+        <button class="mnav-b" style="width:30px;height:30px;font-size:15px" onclick="changeMonth(1)" aria-label="Nästa månad">›</button>
+        <button class="ibtn" style="margin-left:4px" onclick="openSettings()" aria-label="Inställningar">⚙</button>
+      </div>
+    </div>
+  </div>
+  <div id="home-content"></div>
+  <div class="home-ask" id="home-ask">
+    <div class="home-chips">
+      <span class="chip" onclick="homeAsk('Vad drog iväg den här månaden jämfört med mitt snitt, och vad kan jag göra nästa månad?')">Vad drog iväg?</span>
+      <span class="chip" onclick="homeAsk('Gå igenom mina prenumerationer och fasta kostnader. Vad kan jag säga upp?')">Prenumerationer</span>
+      <span class="chip" onclick="homeAsk('Hur går mitt sparande och när når jag mitt förmögenhetsmål?')">Sparandet</span>
+    </div>
+    <form class="home-ask-bar" onsubmit="event.preventDefault();homeAsk(document.getElementById('home-q').value)">
+      <input id="home-q" type="text" placeholder="Fråga om din ekonomi…" autocomplete="off">
+      <button type="submit" aria-label="Skicka">↑</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══ MÅNAD (transaktioner + budget) ═══ -->
+<div class="screen" id="screen-budget">
   <div class="hdr">
     <div class="hdr-row">
       <div>
-        <div class="hdr-label">Månadsbudget</div>
+        <div class="hdr-label">Månad</div>
         <div class="hdr-amount" id="bgt-month-t">Maj 2026</div>
       </div>
-      <div class="hdr-right">
+      <div class="hdr-right" style="flex-direction:row;align-items:center">
+        <button class="chip" onclick="showScreen('year')">År ›</button>
         <button class="ibtn" onclick="openSettings()">⚙</button>
       </div>
     </div>
@@ -725,7 +781,10 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
         <div class="hdr-label">Årsöversikt</div>
         <div class="hdr-amount" id="yr-title">2026</div>
       </div>
-      <button class="ibtn" onclick="openSettings()">⚙</button>
+      <div class="hdr-right" style="flex-direction:row;align-items:center">
+        <button class="chip" onclick="showScreen('budget')">‹ Månad</button>
+        <button class="ibtn" onclick="openSettings()">⚙</button>
+      </div>
     </div>
   </div>
   <div class="sgrid sg3" id="yr-pills"></div>
@@ -736,10 +795,13 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
 <div class="screen" id="screen-ai">
   <div class="ai-hdr">
     <div style="display:flex;align-items:flex-start;justify-content:space-between">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+      <button class="back-btn" style="flex-shrink:0;margin-top:2px" onclick="showScreen('home')" aria-label="Tillbaka">‹</button>
       <div>
         <div class="hdr-label">AI-assistent</div>
         <div class="ai-hdr-t">Ekonomicoach</div>
         <div class="ai-hdr-s" id="ai-status">Ange din API-nyckel i inställningar</div>
+      </div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="ibtn" onclick="clearAiMemory()" title="Rensa minne">🧠</button>
@@ -790,24 +852,19 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
 <nav class="nav">
   <div class="nav-dock">
     <div class="nav-pill" id="nav-pill"></div>
-    <button class="nb active" onclick="showScreen('budget')" id="nav-budget" aria-label="Budget">
+    <button class="nb active" onclick="showScreen('home')" id="nav-home" aria-label="Hem">
       <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+      </div>
+    </button>
+    <button class="nb" onclick="showScreen('budget')" id="nav-budget" aria-label="Månad">
+      <div class="nb-icon">
+        <svg viewBox="0 0 24 24"><path d="M8 6h12"/><path d="M8 12h12"/><path d="M8 18h12"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
       </div>
     </button>
     <button class="nb" onclick="showScreen('nw')" id="nav-nw" aria-label="Förmögenhet">
       <div class="nb-icon">
         <svg viewBox="0 0 24 24"><path d="M3.5 17.5L9 11.5l4 4 7-8"/><path d="M15.5 7.5H20v4.5"/></svg>
-      </div>
-    </button>
-    <button class="nb" onclick="showScreen('year')" id="nav-year" aria-label="Årsöversikt">
-      <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>
-      </div>
-    </button>
-    <button class="nb" onclick="showScreen('ai')" id="nav-ai" aria-label="AI-assistent">
-      <div class="nb-icon">
-        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
       </div>
     </button>
   </div>
@@ -1404,11 +1461,13 @@ function payPeriodLabel(ym){
 function todayLocal(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function currentPayPeriod(){return periodForDate(todayLocal())}
 
-let state={screen:'budget',month:currentPayPeriod(),txType:'expense',editId:null};
+let state={screen:'home',month:currentPayPeriod(),txType:'expense',editId:null};
 
 // ═══════════════════════════════════════════
 // NAV
 // ═══════════════════════════════════════════
+// Skärmar utan egen flik markerar närmaste flik: årsvyn hör till Månad, chatten till Hem
+const NAV_OF={home:'home',budget:'budget',nw:'nw',year:'budget',ai:'home'};
 function showScreen(name){
   haptic(8);
   state.screen=name;
@@ -1416,9 +1475,10 @@ function showScreen(name){
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
   const scr=document.getElementById('screen-'+name);
   scr.classList.add('active');
-  document.getElementById('nav-'+name).classList.add('active');
-  document.getElementById('fab').style.display=(name==='year'||name==='ai')?'none':'flex';
-  movePill(name);
+  document.getElementById('nav-'+NAV_OF[name]).classList.add('active');
+  document.getElementById('fab').style.display=(name==='year'||name==='ai'||name==='home')?'none':'flex';
+  window.scrollTo(0,0);
+  movePill(NAV_OF[name]);
   if(name==='ai'){initAi();}
   render();
 }
@@ -1771,8 +1831,7 @@ function renderBudget(){
     })()}
   </div></div>`;
 
-  // AI-analys + återkommande kostnader
-  html+=insightCardHtml(month);
+  // (AI-analysen och återkommande kostnader visas på Hem)
   // Budget per kategori
   html+=budgetCardHtml(month,byCat);
 
@@ -2053,6 +2112,114 @@ function insightCardHtml(month){
   h+=recHtml+`<div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:8px">${modelNameForId(ins.model)} · ${new Date(ins.t).toLocaleDateString('sv-SE')}</div></div></div>`;
   return h;
 }
+// ═══════════════════════════════════════════
+// HEM — AI-flöde: månadens berättelse + händelsekort sorterade efter vikt
+// ═══════════════════════════════════════════
+function homeAsk(q){
+  q=String(q||'').trim();if(!q)return;
+  if(!getApiKey()){toast('Ange API-nyckel i inställningar','warn');openSettings();return}
+  document.getElementById('home-q').value='';
+  showScreen('ai');
+  document.getElementById('ai-inp').value=q;
+  sendAi();
+}
+function fcHtml({icon,tone='acc',title,text,actions='',onclick}){
+  const bg={acc:'var(--acc2)',warn:'var(--amber2)',bad:'var(--red2)',good:'var(--green2)',info:'var(--blue2)',pro:'var(--purple2)'}[tone];
+  const fg={acc:'var(--acc)',warn:'var(--amber)',bad:'var(--red)',good:'var(--green)',info:'var(--blue)',pro:'var(--purple)'}[tone];
+  return`<div class="fc${onclick?' click':''}"${onclick?` onclick="${onclick}"`:''}>
+    <div class="fc-hd"><div class="fc-ic" style="background:${bg};color:${fg}">${icon}</div>
+      <div style="min-width:0;flex:1"><div class="fc-t">${title}</div>${text?`<div class="fc-x">${text}</div>`:''}</div></div>
+    ${actions?`<div class="fc-act" onclick="event.stopPropagation()">${actions}</div>`:''}
+  </div>`;
+}
+function renderHome(){
+  const month=state.month;
+  const all=getTxs();
+  const txs=all.filter(t=>t.month===month);
+  const first=(getOwnerName().split(' ')[0]||'');
+  document.getElementById('home-hello').textContent=first?`Hej ${first.charAt(0)+first.slice(1).toLowerCase()}`:'Hej';
+  document.getElementById('home-month').textContent=mLabel(month);
+  const sum=ty=>txs.filter(t=>t.type===ty).reduce((s,t)=>s+t.amount,0);
+  const inc=sum('income'),exp=sum('expense'),sav=sum('savings');
+  const moved=-txs.filter(t=>t.type==='transfer'&&t.cat!=='Kreditkortsbetalning').reduce((s,t)=>s+t.amount,0);
+  const isCur=month===currentPayPeriod();
+  const ins=getInsights()[month];
+  const busy=window._analysing?.[month];
+  const key=!!getApiKey();
+
+  // ── Berättelsen ──
+  let story,storySub='';
+  if(!txs.length){
+    story=isCur?`${mLabel(month)} har precis börjat.`:`Inga transaktioner i ${mLabel(month)} än.`;
+    storySub='Importera kontoutdrag från banken och kortet så berättar AI:n hur månaden gick.';
+  }else if(busy){
+    story='AI:n läser igenom månaden…';storySub=`${txs.length} transaktioner i ${mLabel(month)}.`;
+  }else if(ins){
+    story=esc(ins.d.headline);storySub=esc(ins.d.summary)+(ins.txCount!==txs.length?` <span style="color:var(--amber);cursor:pointer" onclick="runMonthAnalysis('${month}')">Ny data — uppdatera ›</span>`:'');
+  }else{
+    const{avg,months}=catAverages(month);
+    const avgTot=Object.values(avg).reduce((s,v)=>s+v,0);
+    story=`${mLabel(month)}: ${fmt(exp)} kr i utgifter${months&&avgTot?`, ${exp>avgTot?fmt(exp-avgTot)+' kr mer':fmt(avgTot-exp)+' kr mindre'} än ditt snitt`:''}.`;
+    storySub=key?`<span style="color:var(--acc);cursor:pointer" onclick="runMonthAnalysis('${month}')">✨ Låt AI:n analysera månaden ›</span>`:'Lägg in en API-nyckel i inställningar så får du en AI-analys av varje månad.';
+  }
+  let html=`<div class="home-hero">
+    <div class="home-story">${story}</div>
+    ${storySub?`<div class="home-story-sub">${storySub}</div>`:''}
+    ${txs.length?`<div class="home-stats">
+      <div>Utgifter<b>${fmt(exp)}</b></div>
+      <div>Sparat<b style="color:var(--blue)">${fmt(sav)}</b></div>
+      <div>Kvar<b style="color:${inc-exp-sav+Math.max(moved,0)>=0?'var(--green)':'var(--red)'}">${fmtSigned(inc-exp-sav+Math.max(moved,0))}</b></div>
+      ${inc>0?`<div>Sparkvot<b>${Math.round(sav/inc*100)}%</b></div>`:''}
+    </div>`:''}
+  </div>`;
+
+  // ── Händelsekort (prio: lägre = högre upp) ──
+  const cards=[];
+  const add=(prio,h)=>cards.push({prio,h});
+  // Import
+  const prevP=periodShift(currentPayPeriod(),-1);
+  if(!all.some(t=>t.month===prevP&&t.source==='import')&&(month===prevP||isCur))
+    add(0,fcHtml({icon:'⇪',tone:'acc',title:`Dags att importera ${mLabel(prevP)}`,text:`Löneperioden ${payPeriodLabel(prevP).replace('Löneperiod ','')} är slut. Ladda upp bank + kort.`,onclick:`openImport('${prevP}')`}));
+  else if(!txs.length&&!isCur)
+    add(0,fcHtml({icon:'⇪',tone:'acc',title:`Importera ${mLabel(month)}`,text:'Ladda upp kontoutdrag för månaden.',onclick:`openImport('${month}')`}));
+  else if(isCur)
+    add(9,fcHtml({icon:'📅',tone:'info',title:`${mLabel(month)} pågår`,text:`Importera när perioden är slut (${payPeriodLabel(periodShift(month,1)).replace('Löneperiod ','').split(' – ')[0]}).`}));
+
+  if(ins&&!busy){
+    const d=ins.d;
+    (d.highlights||[]).forEach(x=>add(x.kind==='warn'?1:x.kind==='info'?4:5,fcHtml({icon:x.kind==='warn'?'⚠︎':x.kind==='good'?'✓':'💡',tone:x.kind==='warn'?'warn':x.kind==='good'?'good':'pro',title:esc(x.title),text:esc(x.text)})));
+    (d.anomalies||[]).forEach(a=>{const t=all.find(x=>x.id===a.ids?.[0]);
+      add(1.5,fcHtml({icon:'🔎',tone:'warn',title:esc(a.title),text:esc(a.reason)+(t?`<br><span style="color:var(--sub2)">${esc(displayDesc(t.desc))} · ${t.date} · ${fmt(t.amount)} kr</span>`:''),actions:t?`<span class="chip" onclick="openEdit(${t.id})">Visa</span>`:''}))});
+    const B=getBudgets();
+    (d.budget_suggestions||[]).filter(b=>B[b.category]!==b.amount).forEach(b=>add(6,fcHtml({icon:'🎯',tone:'pro',title:`Budget för ${esc(b.category)}: ${fmt(b.amount)} kr`,text:esc(b.reason)+(B[b.category]?` (nu ${fmt(B[b.category])} kr)`:''),actions:`<span class="chip on" onclick="applyBudgetSuggestion(${jsArg(b.category)},${Math.round(b.amount)})">Använd</span>`})));
+    (d.new_categories||[]).forEach((c,i)=>add(6.5,fcHtml({icon:'🏷',tone:'pro',title:`Ny kategori: ${esc(c.name)}`,text:`${esc(c.reason)} · ${c.keys.length} butik${c.keys.length>1?'er':''}`,actions:`<span class="chip on" onclick="applyNewCategory('${month}',${i})">Skapa och flytta</span>`})));
+  }
+  // Budget: kategorier över eller nära taket (i takt med perioden om den pågår)
+  const B=getBudgets();
+  let elapsed=1;
+  if(isCur){const s=parseLocalDate(getPeriodStart(month)),e=parseLocalDate(getPeriodStart(periodShift(month,1)));elapsed=Math.min(1,Math.max(0,(Date.now()-s)/(e-s)))}
+  const spent={};txs.filter(t=>t.type==='expense').forEach(t=>spent[t.cat]=(spent[t.cat]||0)+t.amount);
+  const hot=Object.entries(B).filter(([c,b])=>b>0&&(spent[c]||0)>=b*Math.max(elapsed,0.9)).sort((a,b)=>(spent[b[0]]/b[1])-(spent[a[0]]/a[1]));
+  hot.slice(0,3).forEach(([c,b])=>{const s=spent[c]||0;const over=s>b;
+    add(over?2:3,fcHtml({icon:over?'!':'◔',tone:over?'bad':'warn',title:`${esc(c)}: ${fmt(s)} av ${fmt(b)} kr`,text:over?`${fmt(s-b)} kr över budget${isCur?' — och perioden är inte slut':''}.`:`${Math.round(s/b*100)} % av budgeten${isCur?` efter ${Math.round(elapsed*100)} % av perioden`:''}.`,onclick:`showScreen('budget');setBgtCat(${jsArg(c)})`}))});
+  if(!Object.keys(B).length&&txs.length)
+    add(7,fcHtml({icon:'🎯',tone:'pro',title:'Sätt en budget',text:'Tak per kategori, förifyllt från ditt snitt.',onclick:'openBudgetModal()'}));
+  // Fasta kostnader
+  const rec=detectRecurring(month);
+  rec.filter(r=>r.status==='dyrare').forEach(r=>add(2.5,fcHtml({icon:'↑',tone:'warn',title:`${esc(r.name)} blev dyrare`,text:`${fmt(r.current)} kr denna månad, brukar vara ${fmt(r.typical)} kr.`})));
+  if(rec.length)add(8,`<details class="fc"><summary style="list-style:none;cursor:pointer"><div class="fc-hd"><div class="fc-ic" style="background:var(--purple2);color:var(--purple)">🔁</div><div style="flex:1"><div class="fc-t">Fasta kostnader: ${fmt(rec.reduce((s,r)=>s+r.typical,0))} kr/mån</div><div class="fc-x">${rec.length} st · ${fmt(rec.reduce((s,r)=>s+r.typical,0)*12)} kr/år · tryck för lista</div></div></div></summary>
+    <div style="padding:8px 0 0 40px">${rec.map(r=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:4px 0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(r.name)}</span><span style="font-family:var(--mono)">${fmt(r.typical)}</span></div>`).join('')}</div></details>`);
+  // Sparmål
+  const nws=getNWs();const ln=nws[nws.length-1];const goal=getGoal();
+  if(ln)add(7.5,fcHtml({icon:'◎',tone:'good',title:`Förmögenhet: ${fmt(ln.total)} kr`,text:`${Math.round(ln.total/goal*100)} % av målet ${fmt(goal)} kr · senast ${mLabel(ln.period)}`,onclick:"showScreen('nw')"}));
+  else if(txs.length)add(7.5,fcHtml({icon:'◎',tone:'good',title:'Registrera din förmögenhet',text:'Lägg in saldon en gång i månaden för att följa utvecklingen mot målet.',onclick:"showScreen('nw');setTimeout(openNWModal,300)"}));
+  // Genväg till transaktionerna
+  if(txs.length)add(9.5,fcHtml({icon:'☰',tone:'info',title:`Alla ${txs.length} transaktioner i ${mLabel(month)}`,text:'Kategorier, budget och sök.',onclick:"showScreen('budget')"}));
+
+  html+=`<div class="feed">${cards.sort((a,b)=>a.prio-b.prio).map(c=>c.h).join('')}</div>`;
+  document.getElementById('home-content').innerHTML=html;
+}
+
 function applyBudgetSuggestion(cat,amount){
   const B=getBudgets();B[cat]=amount;sv('cat_budgets',B);toast(`Budget för ${cat}: ${fmt(amount)} kr ✓`);render();
 }
@@ -4180,7 +4347,8 @@ function saveImport(){
   // Visa perioden med flest nya transaktioner
   const perMonth={};txs.filter(t=>t.importId===impId).forEach(t=>perMonth[t.month]=(perMonth[t.month]||0)+1);
   const latest=Object.entries(perMonth).sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0]))[0]?.[0];
-  if(latest){state.month=latest;if(state.screen!=='budget')showScreen('budget');else render()}
+  // Tillbaka till Hem, där AI-analysen av månaden dyker upp när den är klar
+  if(latest){state.month=latest;if(state.screen!=='home')showScreen('home');else render()}
   toast(`${n} transaktioner importerade ✓${removed?` · ${removed} manuella ersatta`:''}`);
   // Analysera månaden direkt i bakgrunden
   if(latest&&getApiKey())setTimeout(()=>runMonthAnalysis(latest,true),600);
@@ -4742,7 +4910,8 @@ function addAiMsg(txt,cls,id=''){
 // MASTER RENDER
 // ═══════════════════════════════════════════
 function render(){
-  if(state.screen==='budget')renderBudget();
+  if(state.screen==='home')renderHome();
+  else if(state.screen==='budget')renderBudget();
   else if(state.screen==='nw')renderNetWorth();
   else if(state.screen==='year')renderYear();
 }
@@ -4819,8 +4988,8 @@ setTimeout(()=>{
 
 // ── Initiera nav-pill + dra-stöd ─────────────
 (function(){
-  const screens=['budget','nw','year','ai'];
-  function initPill(){if(typeof movePill==='function')movePill(state.screen);}
+  const screens=['home','budget','nw'];
+  function initPill(){if(typeof movePill==='function')movePill(NAV_OF[state.screen]);}
   setTimeout(initPill,80);
   window.addEventListener('resize',initPill);
 
@@ -4864,7 +5033,7 @@ setTimeout(()=>{
     pill.style.transition='';
     const name=tabAtX(e.changedTouches[0].clientX);
     if(name&&screens.includes(name))showScreen(name);
-    else movePill(state.screen);
+    else movePill(NAV_OF[state.screen]);
   },{passive:true});
 })();
 
