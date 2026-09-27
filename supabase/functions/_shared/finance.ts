@@ -58,6 +58,11 @@ export function periodForDate(date: string, payPeriods: Obj[] = []) {
   let r = all[0].period; for (const p of all) { if (date >= p.start) r = p.period; else break; }
   return r;
 }
+// Löneperiodens första och sista dag
+export function periodRange(ym: string, payPeriods: Obj[] = []) {
+  const [y, m, d] = periodStart(periodShift(ym, 1), payPeriods).split('-').map(Number);
+  return { start: periodStart(ym, payPeriods), end: ymd(new Date(y, m - 1, d - 1)) };
+}
 
 // ── Butiksnycklar (samma som appens inlärda regler) ────────────────────
 export function descNumber(desc: string) { const s = String(desc || '').trim(); return /^\+?\d[\d\s-]{5,}$/.test(s) ? s.replace(/\D/g, '') : null; }

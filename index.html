@@ -1500,6 +1500,10 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
           <label class="toggle"><input type="checkbox" id="sb-auto" onchange="localStorage.setItem('sb_auto',JSON.stringify(this.checked));if(this.checked)sbSync({silent:true})"><span class="tsl"></span></label>
         </div>
         <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
+          <div><div class="s-row-lbl">🔔 Notiser</div><div class="s-row-sub">En sammanfattning på morgonen när något hänt: lönen, stora köp, budgettakten och BankID-samtycket.</div><div class="s-row-sub" id="push-status" style="margin-top:4px"></div></div>
+          <div id="push-btns" style="display:flex;gap:8px"></div>
+        </div>
+        <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
           <div><div class="s-row-lbl">🏦 Bankkoppling</div><div class="s-row-sub">Hämtar saldon och nya transaktioner från SEB automatiskt, från och med den 1:a i månaden du kopplar. Äldre transaktioner och det du registrerat själv ändras aldrig, och rader som redan finns dubbleras inte. Du godkänner med BankID, och samtycket förnyas var 180:e dag.</div></div>
           <div id="bank-list"></div>
           <div style="display:flex;gap:8px"><button class="sb-btn sb-btn2" style="flex:1" onclick="bankConnect('SEB')">Koppla SEB med BankID</button><button class="sb-btn sb-btn2" id="bank-sync-btn" onclick="bankSync()">Hämta nu</button></div>
@@ -4131,7 +4135,49 @@ function renderSbSettings(){
   document.getElementById('sb-who').textContent=_sbUser?.email||'';
   document.getElementById('sb-auto').checked=ld('sb_auto',true)!==false;
   document.getElementById('sb-status').textContent=!url?'Inte konfigurerad — ange projektets URL':!_sbUser?'Inte inloggad':ld('sb_status','Inloggad');
-  if(_sbUser){mcpList();bankList()}
+  if(_sbUser){mcpList();bankList();pushStatus()}
+}
+
+// ── Notiser (Web Push) — servern skickar, se supabase/functions/_shared/push.ts ──
+const VAPID_PUBLIC='BFRry1FhFrj1rXIoac5RmYOQzKj7xys2_-E5GxDOmmHHqEja9qb2dz8GYK9imEu4fG4WFbEnWITOmaBQkYrvfmM';
+const pushSupported=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+async function pushSub(){try{return await (await navigator.serviceWorker.ready).pushManager.getSubscription()}catch{return null}}
+async function pushStatus(){
+  const st=document.getElementById('push-status'),bt=document.getElementById('push-btns');if(!st||!bt)return;
+  if(!pushSupported()){
+    st.textContent=/iPhone|iPad/.test(navigator.userAgent)&&!isStandalone()?'Öppna appen från hemskärmen för att kunna slå på notiser.':'Notiser stöds inte i den här webbläsaren.';
+    bt.innerHTML='';return;
+  }
+  const sub=await pushSub(),perm=Notification.permission;
+  st.textContent=sub?'På för den här enheten.':perm==='denied'?'Blockerade. Slå på dem i telefonens inställningar → Notiser → Ekonomi.':'Av på den här enheten.';
+  bt.innerHTML=sub?`<button class="sb-btn sb-btn2" style="flex:1" onclick="pushTest()">Skicka testnotis</button><button class="sb-btn sb-btn2" onclick="pushDisable()">Stäng av</button>`
+    :perm==='denied'?'':`<button class="sb-btn" style="flex:1" onclick="pushEnable()">Slå på notiser</button>`;
+}
+function b64uBytes(s){const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+async function pushEnable(){
+  try{
+    // Frågan måste ställas direkt vid trycket (iOS kräver det)
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('Notiser nekades','warn');pushStatus();return}
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uBytes(VAPID_PUBLIC)});
+    const j=sub.toJSON();
+    const sb=await sbClient();
+    const{error}=await sb.from('push_subscriptions').upsert({endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,device:navigator.userAgent.slice(0,120)},{onConflict:'endpoint'});
+    if(error)throw error;
+    toast('Notiser på ✓');await pushTest();
+  }catch(e){toast('Kunde inte slå på notiser: '+(e.message||e),'err')}
+  pushStatus();
+}
+async function pushDisable(){
+  const sub=await pushSub();
+  try{if(sub){const sb=await sbClient();await sb.from('push_subscriptions').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}toast('Notiser av')}
+  catch(e){toast(e.message||String(e),'err')}
+  pushStatus();
+}
+async function pushTest(){
+  try{const r=await bankCall('push-test');toast(r.sent?'Testnotis skickad ✓':'Ingen enhet fick notisen'+(r.error?': '+r.error:''),r.sent?'ok':'warn')}
+  catch(e){toast(e.message,'err')}
 }
 
 // ── Bankkoppling (Enable Banking) — se supabase/functions/bank ──

@@ -7,7 +7,9 @@
 // Driftsätt: npx supabase functions deploy bank --no-verify-jwt   (inloggningen kontrolleras här)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays } from '../_shared/finance.ts';
+import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, periodForDate, periodRange } from '../_shared/finance.ts';
+import { sendPush } from '../_shared/push.ts';
+import { buildDigest } from './notify.ts';
 import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
@@ -49,7 +51,7 @@ async function eb(method: string, path: string, body?: Obj) {
 }
 
 // ── Användarens inställningar ──────────────────────────────────────────
-const STATE_KEYS = ['accounts', 'merchant_rules', 'pay_periods', 'owner_name', 'contact_names', 'ai_memory', 'ai_import_notes', ...Object.values(CAT_KEY) as string[]];
+const STATE_KEYS = ['accounts', 'merchant_rules', 'pay_periods', 'owner_name', 'contact_names', 'ai_memory', 'ai_import_notes', 'cat_budgets', ...Object.values(CAT_KEY) as string[]];
 async function loadState(uid: string) {
   const rows = await must<Obj[]>(db.from('user_state').select('key,value').eq('user_id', uid).eq('deleted', false).in('key', STATE_KEYS));
   const s: Obj = {};
@@ -155,7 +157,7 @@ export async function syncUser(uid: string) {
     }
   }
   // Kategorisera och spara nya rader
-  let added = 0, review = 0;
+  let added = 0, review = 0, saved: Obj[] = [];
   if (newRows.length) {
     const accOf = (id: string) => s.accounts.find((x: Obj) => x.id === id);
     const groups = await categorize(s, newRows, accOf, (g) => aiCategorize(s, g));
@@ -163,11 +165,51 @@ export async function syncUser(uid: string) {
     const rows = toRows(uid, groups, s, Math.max((top[0]?.id || 0) + 1, Date.now()));
     markSavingsWithdrawals(s, rows, accOf);
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
-    added = rows.length; review = rows.filter((r) => r.extra.review).length;
+    added = rows.length; review = rows.filter((r) => r.extra.review).length; saved = rows;
     const rules = learnRules(s, groups); if (rules) await saveState(uid, 'merchant_rules', rules);
   }
   if (accountsChanged) await saveState(uid, 'accounts', s.accounts);
-  return { added, review, accounts: summary };
+  return { added, review, accounts: summary, rows: saved, state: s };
+}
+const pub = (r: Obj) => ({ added: r.added, review: r.review, accounts: r.accounts });
+
+// ── Notiser (Web Push) ─────────────────────────────────────────────────
+function vapid() {
+  const jwk = Deno.env.get('VAPID_PRIVATE_JWK'), pub = Deno.env.get('VAPID_PUBLIC');
+  return jwk && pub ? { jwk: JSON.parse(jwk), pub, subject: APP_URL } : null;
+}
+// Skickar till användarens enheter; borttagna prenumerationer (404/410) rensas
+async function pushTo(uid: string, msg: Obj) {
+  const v = vapid(); if (!v) return { sent: 0, error: 'VAPID-nycklar saknas på servern' };
+  const subs = await must<Obj[]>(db.from('push_subscriptions').select('*').eq('user_id', uid));
+  let sent = 0; const errors: string[] = [];
+  for (const sub of subs) {
+    try {
+      const r = await sendPush(sub, msg, v);
+      if (r.status === 404 || r.status === 410) await must(db.from('push_subscriptions').delete().eq('id', sub.id));
+      else if (r.status >= 200 && r.status < 300) { sent++; await must(db.from('push_subscriptions').update({ last_ok: new Date().toISOString() }).eq('id', sub.id)); }
+      else errors.push(`${r.status} ${r.text}`);
+    } catch (e) { errors.push((e as Error).message); }
+  }
+  return { sent, devices: subs.length, ...(errors.length ? { error: errors.join('; ') } : {}) };
+}
+// Nattens sammanfattning efter hämtningen
+async function notify(uid: string, r: Obj) {
+  const s = r.state, day = today();
+  const pid = periodForDate(day, s.pay_periods || []), range = periodRange(pid, s.pay_periods || []);
+  const exp: Obj[] = [];
+  for (let i = 0; ; i += 1000) {
+    const part = await must<Obj[]>(db.from('transactions').select('category,amount').eq('user_id', uid).eq('month', pid).eq('type', 'expense').eq('deleted', false).range(i, i + 999));
+    exp.push(...part); if (part.length < 1000) break;
+  }
+  const spent: Obj = {}; for (const x of exp) spent[x.category] = (spent[x.category] || 0) + Number(x.amount);
+  const conns = await must<Obj[]>(db.from('bank_connections').select('id,aspsp,valid_until,status').eq('user_id', uid).in('status', ['active', 'expired']));
+  const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).gte('sent_at', addDays(day, -200)))).map((x) => x.key));
+  const d = buildDigest({ newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, sent });
+  if (!d) return { sent: 0 };
+  const out = await pushTo(uid, { title: d.title, body: d.body, url: APP_URL, tag: 'digest-' + day });
+  if (out.sent) await must(db.from('notifications').upsert(d.keys.map((key) => ({ user_id: uid, key, title: d.title, body: d.body })), { onConflict: 'user_id,key' }));
+  return out;
 }
 
 // ── Rutter ─────────────────────────────────────────────────────────────
@@ -203,7 +245,11 @@ Deno.serve(async (req) => {
       const secret = Deno.env.get('CRON_SECRET');
       if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'Unauthorized' }, 401);
       const users = [...new Set((await must<Obj[]>(db.from('bank_connections').select('user_id').eq('status', 'active'))).map((r) => r.user_id))];
-      const out: Obj = {}; for (const u of users) { try { out[u] = await syncUser(u); } catch (e) { out[u] = { error: (e as Error).message }; } }
+      const out: Obj = {};
+      for (const u of users) {
+        try { const r = await syncUser(u); out[u] = { ...pub(r), push: await notify(u, r).catch((e) => ({ error: (e as Error).message })) }; }
+        catch (e) { out[u] = { error: (e as Error).message }; }
+      }
       return json({ users: users.length, results: out });
     }
     const uid = await userFrom(req);
@@ -220,7 +266,8 @@ Deno.serve(async (req) => {
       const r = await eb('POST', '/auth', { access: { valid_until: new Date(Date.now() + secs * 1000 - 60e3).toISOString() }, aspsp: { name: bank.name, country: 'SE' }, state, redirect_url: Deno.env.get('SUPABASE_URL') + '/functions/v1/bank/callback', psu_type: 'personal' });
       return json({ url: r.url });
     }
-    if (route === 'sync') return json(await syncUser(uid));
+    if (route === 'sync') return json(pub(await syncUser(uid)));
+    if (route === 'push-test') return json(await pushTo(uid, { title: 'Notiser är på ✓', body: 'Här hör appen av sig när lönen kommit, vid stora köp och när budgeten börjar ta slut.', url: APP_URL, tag: 'test' }));
     return json({ error: 'Okänd väg' }, 404);
   } catch (e) {
     console.error(e);
