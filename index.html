@@ -1500,7 +1500,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
           <label class="toggle"><input type="checkbox" id="sb-auto" onchange="localStorage.setItem('sb_auto',JSON.stringify(this.checked));if(this.checked)sbSync({silent:true})"><span class="tsl"></span></label>
         </div>
         <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
-          <div><div class="s-row-lbl">🏦 Bankkoppling</div><div class="s-row-sub">Hämtar saldon och transaktioner från SEB automatiskt. Du godkänner med BankID, och samtycket förnyas var 180:e dag. Kontoutdrag som redan importerats dubbleras inte.</div></div>
+          <div><div class="s-row-lbl">🏦 Bankkoppling</div><div class="s-row-sub">Hämtar saldon och nya transaktioner från SEB automatiskt, från och med den 1:a i månaden du kopplar. Äldre transaktioner och det du registrerat själv ändras aldrig, och rader som redan finns dubbleras inte. Du godkänner med BankID, och samtycket förnyas var 180:e dag.</div></div>
           <div id="bank-list"></div>
           <div style="display:flex;gap:8px"><button class="sb-btn sb-btn2" style="flex:1" onclick="bankConnect('SEB')">Koppla SEB med BankID</button><button class="sb-btn sb-btn2" id="bank-sync-btn" onclick="bankSync()">Hämta nu</button></div>
         </div>
@@ -4157,13 +4157,13 @@ async function bankList(){
   const el=document.getElementById('bank-list');if(!el)return;
   try{
     const sb=await sbClient();
-    const{data,error}=await sb.from('bank_connections').select('id,aspsp,valid_until,accounts,status,last_sync,last_error').in('status',['active','expired']).order('created_at',{ascending:false});
+    const{data,error}=await sb.from('bank_connections').select('id,aspsp,valid_until,accounts,status,last_sync,last_error,start_date').in('status',['active','expired']).order('created_at',{ascending:false});
     if(error)throw error;
     const d=s=>s?new Date(s).toLocaleString('sv-SE',{dateStyle:'short',timeStyle:'short'}):'aldrig';
     el.innerHTML=data.length?data.map(c=>{
       const days=Math.floor((Date.parse(c.valid_until)-Date.now())/864e5),ok=c.status==='active'&&days>=0;
       return`<div style="padding:6px 0;border-top:1px solid var(--line)"><div style="font-size:14px">${esc(c.aspsp)} <span style="font-size:11px;color:${ok&&days>14?'var(--green)':'var(--red)'}">${ok?`samtycke ${days} dagar till`:'förnya med BankID'}</span></div>
-        <div class="s-row-sub">${(c.accounts||[]).map(a=>esc(a.app_account?accountName(a.app_account):(a.name||'konto'))).join(', ')||'Inga konton'} · hämtat ${d(c.last_sync)}${c.last_error?` · ⚠️ ${esc(c.last_error)}`:''}</div></div>`}).join(''):'<div class="s-row-sub">Ingen bank kopplad än.</div>';
+        <div class="s-row-sub">${(c.accounts||[]).map(a=>esc(a.app_account?accountName(a.app_account):(a.name||'konto'))).join(', ')||'Inga konton'}${c.start_date?` · från ${esc(c.start_date)}`:''} · hämtat ${d(c.last_sync)}${c.last_error?` · ⚠️ ${esc(c.last_error)}`:''}</div></div>`}).join(''):'<div class="s-row-sub">Ingen bank kopplad än.</div>';
   }catch(e){el.innerHTML=`<div class="s-row-sub">${/bank_connections/.test(e.message||'')?'Kör supabase/schema.sql igen för att aktivera.':'Kunde inte hämta: '+esc(e.message||e)}</div>`}
 }
 

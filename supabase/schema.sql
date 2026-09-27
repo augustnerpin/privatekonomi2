@@ -213,7 +213,9 @@ drop policy if exists "own rows read" on public.bank_connections;
 create policy "own rows read" on public.bank_connections for select to authenticated
   using ((select auth.uid()) = user_id);
 revoke all on public.bank_connections from anon, authenticated;
-grant select (id, aspsp, country, valid_until, accounts, status, last_sync, last_error, created_at, user_id)
+-- start_date: transaktioner före detta datum hämtas aldrig (äldre data i appen rörs inte)
+alter table public.bank_connections add column if not exists start_date date;
+grant select (id, aspsp, country, valid_until, accounts, status, last_sync, last_error, created_at, user_id, start_date)
   on public.bank_connections to authenticated;
 
 -- Pågående BankID-inloggningar (state → användare). Bara servern läser och skriver.

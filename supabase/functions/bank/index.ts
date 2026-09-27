@@ -7,7 +7,7 @@
 // Driftsätt: npx supabase functions deploy bank --no-verify-jwt   (inloggningen kontrolleras här)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { type Obj, CAT_KEY, DEF, numberKind, descNumber } from '../_shared/finance.ts';
+import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today } from '../_shared/finance.ts';
 import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
@@ -118,8 +118,9 @@ export async function syncUser(uid: string) {
     if (Date.parse(c.valid_until) < Date.now()) { await must(db.from('bank_connections').update({ status: 'expired' }).eq('id', c.id)); summary.push({ bank: c.aspsp, expired: true }); continue; }
     try {
       for (const a of c.accounts as Obj[]) {
-        const from = fetchFrom(a.last_date);
-        const fetched = (await fetchAllTx(a.uid, from)).map(mapTx).filter(Boolean) as Obj[];
+        // Aldrig före kopplingens startdatum: äldre transaktioner i appen (manuella och importerade) rörs inte
+        const from = a.last_date ? fetchFrom(a.last_date) : (c.start_date || fetchFrom());
+        const fetched = ((await fetchAllTx(a.uid, from)).map(mapTx).filter(Boolean) as Obj[]).filter((t) => !c.start_date || t.date >= c.start_date);
         // Första gången: vilket konto i appen hör bankkontot till? Det med flest redan importerade rader.
         if (!a.app_account) {
           let best: Obj | null = null;
@@ -185,10 +186,12 @@ Deno.serve(async (req) => {
       const ses = await eb('POST', '/sessions', { code });
       const accounts = (ses.accounts || []).map((a: Obj) => ({ uid: a.uid, name: a.name || null, product: a.product || null, iban: a.account_id?.iban || null, other: a.account_id?.other?.identification || null, currency: a.currency, cash_account_type: a.cash_account_type || null, hash: a.identification_hash || null, app_account: null }));
       // Behåll kontomappningen från en tidigare koppling till samma konton
-      const prev = await must<Obj[]>(db.from('bank_connections').select('id,accounts').eq('user_id', st.user_id).eq('aspsp', st.aspsp));
+      const prev = await must<Obj[]>(db.from('bank_connections').select('id,accounts,start_date').eq('user_id', st.user_id).eq('aspsp', st.aspsp));
       for (const a of accounts) { const old = prev.flatMap((p) => p.accounts).find((x: Obj) => x.hash && x.hash === a.hash); if (old) { a.app_account = old.app_account; a.last_date = old.last_date; } }
       if (prev.length) await must(db.from('bank_connections').update({ status: 'replaced' }).in('id', prev.map((p) => p.id)));
-      await must(db.from('bank_connections').insert({ user_id: st.user_id, aspsp: st.aspsp, session_id: ses.session_id, valid_until: ses.access?.valid_until || new Date(Date.now() + 90 * 864e5).toISOString(), accounts }));
+      // Hämta från den 1:a i innevarande månad (eller från samma dag som en tidigare koppling)
+      const start_date = prev.map((p) => p.start_date).filter(Boolean).sort()[0] || today().slice(0, 8) + '01';
+      await must(db.from('bank_connections').insert({ user_id: st.user_id, aspsp: st.aspsp, session_id: ses.session_id, start_date, valid_until: ses.access?.valid_until || new Date(Date.now() + 90 * 864e5).toISOString(), accounts }));
       const r = await syncUser(st.user_id);
       return back(st.return_to, { bank: 'ok', added: r.added });
     }
