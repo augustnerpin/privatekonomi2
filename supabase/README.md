@@ -64,8 +64,9 @@ och, om du vill, lägga till och ändra saker. Ändringarna syns i appen vid nä
    npx supabase functions deploy mcp --no-verify-jwt
    ```
    Du kan också använda panelen: *Edge Functions* → *Deploy a new function* → *Via Editor*.
-   Döp funktionen till `mcp`, lägg in `index.ts` och `mcp.ts` och stäng av
-   *Enforce JWT verification* under funktionens *Details*.
+   Döp funktionen till `mcp`, ersätt allt i `index.ts` med [`functions/mcp/index.ts`](functions/mcp/index.ts)
+   (hela servern är en fil) och tryck *Deploy*. Stäng sedan av *Enforce JWT verification* under
+   funktionens *Details*.
    Funktionen hittar själv projektets URL och hemliga nyckel. Du behöver inte lägga in några secrets.
 3. **Skapa en nyckel** i appen under Inställningar → *Databas (Supabase)* → *AI-koppling (MCP)*.
    Du får en adress som `https://qchasvatuhndtswxlucr.supabase.co/functions/v1/mcp/pkm_…`.
@@ -90,4 +91,4 @@ Mat (Ute) per månad i år?"* eller *"Lägg till 129 kr på Gym idag"*.
   den kommer i fel händer. Välj *bara läsa* om AI:n inte behöver ändra något.
 - Databasen sparar bara SHA-256-hashen av nyckeln.
 - Funktionen använder projektets hemliga nyckel på servern, som kringgår RLS. Varje fråga i
-  `mcp.ts` filtreras därför på nyckelns `user_id`. Den hemliga nyckeln lämnar aldrig Supabase.
+  `index.ts` filtreras därför på nyckelns `user_id`. Den hemliga nyckeln lämnar aldrig Supabase.
