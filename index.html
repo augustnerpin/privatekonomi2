@@ -937,6 +937,8 @@ body.light .home-ask::before{background:linear-gradient(180deg,rgba(242,242,247,
 .home-ask-bar button,.ai-send{background:var(--acc);color:#fff;font-weight:600}
 
 /* ── Chatt (iMessage-bubblor) ── */
+/* Chatten slutar ovanför den flytande flikraden (annars låg textfältet delvis bakom den) */
+#screen-ai{height:calc(100dvh - 78px - max(calc(var(--safe-b) - 6px),10px));max-height:none}
 .ai-msg{font-size:17px;line-height:1.35;border-radius:20px;padding:9px 14px;letter-spacing:-.022em}
 .ai-msg.user{background:var(--acc);color:#fff;font-weight:400;border-bottom-right-radius:6px}
 .ai-msg.bot{background:#262628;border:none;border-bottom-left-radius:6px}
@@ -1041,7 +1043,9 @@ img,svg{-webkit-user-drag:none}
         <div class="hdr-amount" id="yr-title">2026</div>
       </div>
       <div class="hdr-right" style="flex-direction:row;align-items:center">
-        <button class="chip" onclick="showScreen('budget')">‹ Månad</button>
+        <button class="mnav-b" onclick="changeYear(-1)" aria-label="Föregående år">‹</button>
+        <button class="mnav-b" id="yr-next" onclick="changeYear(1)" aria-label="Nästa år">›</button>
+        <button class="chip" onclick="showScreen('budget')">Månad</button>
         <button class="ibtn" onclick="openSettings()">⚙</button>
       </div>
     </div>
@@ -1353,6 +1357,10 @@ img,svg{-webkit-user-drag:none}
         <div><div class="s-row-lbl">Utseende</div><div class="s-row-sub">Auto följer telefonens läge</div></div>
         <div class="ai-seg" id="theme-seg"><button data-t="auto" onclick="setTheme('auto')">Auto</button><button data-t="light" onclick="setTheme('light')">Ljust</button><button data-t="dark" onclick="setTheme('dark')">Mörkt</button></div>
       </div>
+      <div class="s-row">
+        <div><div class="s-row-lbl">Haptisk feedback</div><div class="s-row-sub">Känn tryck, val och bekräftelser</div></div>
+        <label class="toggle"><input type="checkbox" id="haptics-toggle" onchange="sv('haptics',this.checked);if(this.checked)haptic('success')"><span class="tsl"></span></label>
+      </div>
     </div>
   </div>
 
@@ -1526,7 +1534,8 @@ const getTxs=()=>ld('txs',[]);
 const svTxs=v=>sv('txs',v);
 const getNWs=()=>ld('nws',[]);
 const svNWs=v=>sv('nws',v);
-const getGoal=()=>ld('goal',700000);
+// Målet används som nämnare överallt — 0 eller tomt skulle ge "Infinity %"
+const getGoal=()=>{const g=+ld('goal',700000);return g>0?g:700000};
 const getExpCats=()=>ld('cats_exp',DEF_EXP);
 const getSavCats=()=>ld('cats_sav',DEF_SAV);
 const getIncCats=()=>ld('cats_inc',DEF_INC);
@@ -1731,7 +1740,6 @@ let state={screen:'home',month:currentPayPeriod(),txType:'expense',editId:null};
 // Skärmar utan egen flik markerar närmaste flik: årsvyn hör till Månad, chatten till Hem
 const NAV_OF={home:'home',budget:'budget',nw:'nw',year:'budget',ai:'home'};
 function showScreen(name){
-  haptic(8);
   state.screen=name;
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
@@ -1759,24 +1767,64 @@ function movePill(name){
 // ═══════════════════════════════════════════
 // OVERLAYS/MODALS
 // ═══════════════════════════════════════════
-// ── Toast + haptics (iOS-känsla) ──────────
-function haptic(ms=12){if(navigator.vibrate)navigator.vibrate(ms)}
+// ── Haptik ────────────────────────────────
+// iOS Safari saknar navigator.vibrate, men att växla en dold <input type="checkbox" switch>
+// ger systemets haptiska klick (iOS 18+, även i hemskärmsappen). Android använder vibrate().
+const IS_IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+let _hapLabel=null;
+function hapLabel(){
+  if(_hapLabel)return _hapLabel;
+  const l=document.createElement('label');l.setAttribute('aria-hidden','true');l.dataset.haptic='1';
+  l.style.cssText='position:fixed;left:-200px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none';
+  const i=document.createElement('input');i.type='checkbox';i.setAttribute('switch','');i.tabIndex=-1;
+  l.appendChild(i);document.body.appendChild(l);return _hapLabel=l;
+}
+// Mönster i ms (vibrera, paus, vibrera…) — på iOS blir varje vibration ett systemklick
+const HAPTICS={selection:[6],light:[10],medium:[18],heavy:[30],success:[10,70,16],warning:[18,90,18],error:[22,60,22,60,22]};
+function haptic(kind='light'){
+  if(ld('haptics',true)===false)return;
+  const pat=HAPTICS[kind]||HAPTICS.light;
+  if(IS_IOS){
+    // Klicket får inte flytta fokus från ett textfält (då skulle tangentbordet stängas)
+    const tap=()=>{const ae=document.activeElement;hapLabel().click();if(ae&&ae!==document.activeElement&&ae.focus)ae.focus({preventScroll:true})};
+    const taps=Math.ceil(pat.length/2);
+    tap(); // första klicket synkront, inom användarens gest
+    let t=0;for(let k=1;k<taps;k++){t+=pat[2*k-2]+pat[2*k-1];setTimeout(tap,t)}
+    return;
+  }
+  if(!navigator.vibrate||(navigator.userActivation&&!navigator.userActivation.hasBeenActive))return;
+  try{navigator.vibrate(pat)}catch{}
+}
+// Haptik på tryck, som i iOS: val (flikar, segment, chips), lätta tryck (knappar, rader, kort)
+document.addEventListener('click',e=>{
+  const el=e.target.closest?.('button,.chip,.txi[onclick],.fc.click,.ytrow[onclick],.toggle,.imp-grp-info,.s-row[onclick],summary,.ai-chip,label.imp-drop');
+  if(!el||el.closest('[data-haptic]')||el.disabled)return;
+  // Etiketter skickar ett andra klick till sitt fält — reagera bara på det, så det inte blir dubbelt
+  if(el.tagName==='LABEL'&&e.target.tagName!=='INPUT')return;
+  if(el.matches('.nb,.chip,.ai-chip,.ai-seg button,.tbtn,.mnav-b'))haptic('selection');
+  else if(el.matches('.fab'))haptic('medium');
+  else if(el.matches('.toggle'))haptic('light');
+  else if(el.matches('.btn-p,.btn-del'))return; // resultatet (sparat/fel) ger egen haptik via toast
+  else haptic('light');
+},true);
+// Bekräftelsedialoger (ta bort, ångra…) föregås av en varningshaptik
+{const _confirm=window.confirm.bind(window);window.confirm=m=>{haptic('warning');return _confirm(m)}}
 function toast(msg,type='ok'){
   const old=document.getElementById('app-toast');if(old)old.remove();
   const t=document.createElement('div');
   t.id='app-toast';
   const col=type==='err'?'var(--red)':type==='warn'?'var(--amber)':'var(--green)';
-  t.style.cssText=`position:fixed;top:calc(var(--safe-t) + 14px);left:50%;transform:translateX(-50%) translateY(-8px);
-    background:rgba(255,255,255,0.06);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
-    border:0.5px solid rgba(255,255,255,0.22);border-radius:20px;padding:11px 18px;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,0.25),0 10px 32px rgba(0,0,0,.4);
-    color:var(--text);font-family:var(--sans);font-size:13px;font-weight:500;
+  t.style.cssText=`position:fixed;top:calc(var(--safe-t) + 12px);left:50%;transform:translateX(-50%) translateY(-8px);
+    background:var(--mat);backdrop-filter:var(--mat-blur);-webkit-backdrop-filter:var(--mat-blur);
+    border:.5px solid var(--mat-border);border-radius:999px;padding:11px 18px;
+    box-shadow:var(--mat-shadow);
+    color:var(--text);font-family:var(--sans);font-size:15px;font-weight:500;letter-spacing:-.015em;
     display:flex;align-items:center;gap:8px;z-index:600;opacity:0;
-    transition:opacity .28s,transform .34s var(--spring);max-width:86%;`;
-  t.innerHTML=`<span style="width:7px;height:7px;border-radius:50%;background:${col};flex-shrink:0"></span><span>${msg}</span>`;
+    transition:opacity .28s,transform .34s var(--spring);max-width:90%;`;
+  t.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></span><span>${msg}</span>`;
   document.body.appendChild(t);
   requestAnimationFrame(()=>{t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)'});
-  haptic();
+  haptic(type==='err'?'error':type==='warn'?'warning':'success');
   setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(-8px)';setTimeout(()=>t.remove(),320)},2400);
 }
 
@@ -1852,7 +1900,7 @@ function setType(type){
 function saveTx(){
   const amt=parseFloat(document.getElementById('tx-amt').value);
   // Negativt belopp tillåts (t.ex. en retur som minskar en utgiftskategori)
-  if(!amt){toast('Ange ett belopp','warn');haptic(30);return}
+  if(!amt){toast('Ange ett belopp','warn');return}
   const dateVal=document.getElementById('tx-date').value;
   if(!dateVal){toast('Välj datum','warn');return}
   let txs=getTxs();
@@ -1952,7 +2000,7 @@ function openNWModal(){
     const prev=prevValues[c.key];
     const prevStr=prev>0?` (förra: ${fmt(prev)} kr)`:'';
     return`<div class="field">
-      <label>${c.label}<span style="color:var(--sub2);font-size:10px;font-family:var(--mono);font-weight:400">${prevStr}</span></label>
+      <label>${esc(c.label)}<span style="color:var(--sub2);font-size:10px;font-family:var(--mono);font-weight:400">${prevStr}</span></label>
       <input type="number" id="nwm-${c.key}" placeholder="${prev>0?prev:0}" inputmode="decimal" value="${prev>0?prev:''}">
     </div>`;
   }).join('');
@@ -2483,7 +2531,7 @@ function renderHome(){
   const spent={};txs.filter(t=>t.type==='expense').forEach(t=>spent[t.cat]=(spent[t.cat]||0)+t.amount);
   const hot=Object.entries(B).filter(([c,b])=>b>0&&(spent[c]||0)>=b*Math.max(elapsed,0.9)).sort((a,b)=>(spent[b[0]]/b[1])-(spent[a[0]]/a[1]));
   hot.slice(0,3).forEach(([c,b])=>{const s=spent[c]||0;const over=s>b;
-    add(over?2:3,fcHtml({icon:over?'over':'gauge',tone:over?'bad':'warn',title:`${esc(c)}: ${fmt(s)} av ${fmt(b)} kr`,text:over?`${fmt(s-b)} kr över budget${isCur?' — och perioden är inte slut':''}.`:`${Math.round(s/b*100)} % av budgeten${isCur?` efter ${Math.round(elapsed*100)} % av perioden`:''}.`,onclick:`showScreen('budget');setBgtCat(${jsArg(c)})`}))});
+    add(over?2:3,fcHtml({icon:over?'over':'gauge',tone:over?'bad':'warn',title:`${esc(c)}: ${fmt(s)} av ${fmt(b)} kr`,text:over?`${fmt(s-b)} kr över budget${isCur?' — och perioden är inte slut':''}.`:`${Math.round(s/b*100)} % av budgeten${isCur?` efter ${Math.round(elapsed*100)} % av perioden`:''}.`,onclick:`openBgtCat(${jsArg(c)})`}))});
   if(!Object.keys(B).length&&txs.length)
     add(7,fcHtml({icon:'target',tone:'pro',title:'Sätt en budget',text:'Tak per kategori, förifyllt från ditt snitt.',onclick:'openBudgetModal()'}));
   // Fasta kostnader
@@ -2520,6 +2568,8 @@ function applyNewCategory(month,i){
 }
 
 function setBgtCat(c){_bgt.cat=_bgt.cat===c?null:c;_bgt.showAll=false;renderBudget()}
+// Från Hem: visa alltid kategorin (setBgtCat växlar, och stängde filtret om det redan var valt)
+function openBgtCat(c){_bgt.cat=c;_bgt.q='';_bgt.showAll=false;showScreen('budget');setTimeout(()=>document.getElementById('bgt-list')?.scrollIntoView({behavior:'smooth',block:'start'}),120)}
 
 function renderBgtList(){
   const el=document.getElementById('bgt-list');if(!el)return;
@@ -2661,7 +2711,7 @@ function renderNetWorth(){
       <div style="flex:1;display:flex;flex-direction:column;gap:6px">
         ${slices.map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px">
           <span style="width:8px;height:8px;border-radius:2px;background:${s.color};flex-shrink:0"></span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${s.label}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(s.label)}</span>
           <span style="font-family:var(--mono);font-size:11px">${Math.round(s.val/latest.total*100)}%</span>
         </div>`).join('')}
       </div>
@@ -2677,7 +2727,7 @@ function renderNetWorth(){
     html+=`<div class="txi" onclick="openAssetDetail(${jsArg(a.key)},${jsArg(a.label)},${i})">
       <div class="txav" style="background:${COLORS[i]}18;color:${COLORS[i]};font-size:11px;font-weight:600;font-family:var(--mono)">${p}%</div>
       <div class="txi-info">
-        <div class="txi-name">${a.label}</div>
+        <div class="txi-name">${esc(a.label)}</div>
         <div class="txi-meta">${diff!==null?(diff>=0?'↑':'↓')+' '+fmt(Math.abs(diff))+' kr':'Första snapshot'}</div>
       </div>
       <div style="text-align:right">
@@ -2718,7 +2768,7 @@ function renderNetWorth(){
       </div>
       <div>
         <div class="card-lbl">Sämsta månaden</div>
-        <div style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red)">${fmt(worst.change)}</div>
+        <div style="font-size:18px;font-weight:600;font-family:var(--mono);color:${worst.change<0?'var(--red)':'var(--green)'}">${fmtSigned(worst.change)}</div>
         <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:2px">${mLabel(worst.period)}</div>
       </div>
     </div></div>`;
@@ -2887,24 +2937,26 @@ function initInteractiveCharts(){
     const dot=fresh.querySelector(`#icd_${id}`);
     const tip=fresh.querySelector(`#ict_${id}`);
     const svg=fresh.querySelector('svg');
-    const H=110, padB=24;
+    // Samma geometri som makeInteractiveChart
+    const W=400, H=110, padL=8, padR=8, padT=12, padB=24;
+    let lastIdx=-1;
 
     function update(clientX){
       const rect=fresh.getBoundingClientRect();
-      const x=Math.max(0,Math.min(clientX-rect.left,rect.width));
-      const frac=x/rect.width;
-      const idx=Math.round(frac*(data.length-1));
-      const i=Math.max(0,Math.min(idx,data.length-1));
+      const svgRect=svg.getBoundingClientRect();
+      const sx=svgRect.width/W, sy=svgRect.height/H;
+      // Närmaste datapunkt, och markören låses till punkten (inte fingret)
+      const vx=(clientX-svgRect.left)/sx;
+      const i=Math.max(0,Math.min(Math.round((vx-padL)/((W-padL-padR)/(data.length-1))),data.length-1));
       const d=data[i];
       const prev=data[i-1];
       const diff=prev?d.value-prev.value:null;
+      if(i!==lastIdx){if(lastIdx>=0)haptic('selection');lastIdx=i}
 
       const vals=data.map(p=>p.value);
       const minV=Math.min(...vals),maxV=Math.max(...vals),rng=maxV-minV||1;
-      const svgH=H-padB;
-      const yFrac=1-(d.value-minV)/rng;
-      const svgRect=svg.getBoundingClientRect();
-      const dotY=yFrac*svgRect.height;
+      const x=(padL+i*(W-padL-padR)/(data.length-1))*sx+(svgRect.left-rect.left);
+      const dotY=(H-padB-(d.value-minV)/rng*(H-padT-padB))*sy+(svgRect.top-rect.top);
 
       vline.style.display='block';vline.style.left=x+'px';
       dot.style.display='block';dot.style.left=x+'px';dot.style.top=dotY+'px';
@@ -2921,6 +2973,7 @@ function initInteractiveCharts(){
     }
 
     function hide(){
+      lastIdx=-1;
       vline.style.display='none';
       dot.style.display='none';
       tip.style.display='none';
@@ -2928,7 +2981,7 @@ function initInteractiveCharts(){
 
     fresh.addEventListener('mousemove',e=>update(e.clientX));
     fresh.addEventListener('mouseleave',hide);
-    fresh.addEventListener('touchstart',e=>{e.preventDefault();update(e.touches[0].clientX)},{passive:false});
+    fresh.addEventListener('touchstart',e=>{e.preventDefault();haptic('light');update(e.touches[0].clientX)},{passive:false});
     fresh.addEventListener('touchmove',e=>{e.preventDefault();update(e.touches[0].clientX)},{passive:false});
     fresh.addEventListener('touchend',hide);
   });
@@ -3029,7 +3082,7 @@ function openMonthDetail(m){
         <div style="flex:1;display:flex;flex-direction:column;gap:6px">
           ${slices.map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px">
             <span style="width:8px;height:8px;border-radius:2px;background:${s.color};flex-shrink:0"></span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${s.label}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(s.label)}</span>
             <span style="font-family:var(--mono)">${fmt(s.val)}</span>
           </div>`).join('')}
         </div>
@@ -3044,7 +3097,7 @@ function openMonthDetail(m){
       html+=`<div class="txi" style="cursor:default">
         <div class="txav" style="background:${color}18;color:${color};font-size:11px;font-weight:600;font-family:var(--mono)">${pct}%</div>
         <div class="txi-info">
-          <div class="txi-name">${cat}</div>
+          <div class="txi-name">${esc(cat)}</div>
           <div style="margin-top:4px;height:3px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden">
             <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
           </div>
@@ -3064,7 +3117,7 @@ function openMonthDetail(m){
     savCats.forEach(([cat,amt])=>{
       html+=`<div class="txi" style="cursor:default">
         <div class="txav" style="background:var(--blue2);color:var(--blue)">${catIcon(cat)}</div>
-        <div class="txi-info"><div class="txi-name">${cat}</div></div>
+        <div class="txi-info"><div class="txi-name">${esc(cat)}</div></div>
         <div class="txi-amt" style="color:var(--blue)">${fmt(amt)} kr</div>
       </div>`;
     });
@@ -3089,9 +3142,17 @@ function closeMonthDetail(){document.getElementById('month-detail').classList.re
 // ═══════════════════════════════════════════
 // RENDER YEAR
 // ═══════════════════════════════════════════
+// Året följer vald månad (löneperioden), så att t.ex. januari inte visar ett tomt år
+function changeYear(d){
+  const y=+state.month.slice(0,4)+d;
+  const has=getTxs().filter(t=>t.month.startsWith(y+'')).map(t=>t.month).sort().pop();
+  state.month=has||(y+state.month.slice(4));
+  render();
+}
 function renderYear(){
-  const year=new Date().getFullYear();
+  const year=+state.month.slice(0,4);
   document.getElementById('yr-title').textContent=year+'';
+  const nx=document.getElementById('yr-next');if(nx)nx.style.visibility=year>=new Date().getFullYear()?'hidden':'';
   const txs=getTxs().filter(t=>t.month.startsWith(year.toString()));
   let totInc=0,totExp=0,totSav=0;
   txs.forEach(t=>{
@@ -3167,7 +3228,7 @@ function renderYear(){
     </div>
     <div>
       <div class="card-lbl">Sämsta månaden</div>
-      <div style="font-size:16px;font-weight:600;font-family:var(--mono);color:var(--red)">${worstMonth.m&&worstMonth.kvar<Infinity?fmt(worstMonth.kvar)+' kr':'—'}</div>
+      <div style="font-size:16px;font-weight:600;font-family:var(--mono);color:${worstMonth.kvar<0?'var(--red)':'var(--green)'}">${worstMonth.m&&worstMonth.kvar<Infinity?fmtSigned(worstMonth.kvar)+' kr':'—'}</div>
       <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-top:2px">${worstMonth.m?mLabel(worstMonth.m):''}</div>
     </div>
   </div></div>`;
@@ -3204,7 +3265,7 @@ function renderYear(){
       html+=`<div class="txi" onclick="openCatDetail(${jsArg(cat)},${year})">
         <div class="txav" style="background:${color}18;color:${color};font-size:11px;font-weight:600;font-family:var(--mono)">${p}%</div>
         <div class="txi-info">
-          <div class="txi-name">${cat}</div>
+          <div class="txi-name">${esc(cat)}</div>
           <div style="margin-top:4px;height:3px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden">
             <div style="width:${p}%;height:100%;background:${color};border-radius:3px"></div>
           </div>
@@ -3226,7 +3287,7 @@ function renderYear(){
       html+=`<div class="txi" style="cursor:default">
         <div class="txav" style="background:var(--blue2);color:var(--blue)">${catIcon(cat)}</div>
         <div class="txi-info">
-          <div class="txi-name">${cat}</div>
+          <div class="txi-name">${esc(cat)}</div>
           <div style="margin-top:4px;height:3px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden">
             <div style="width:${p}%;height:100%;background:var(--blue);border-radius:3px"></div>
           </div>
@@ -3283,7 +3344,7 @@ function openCatDetail(cat,year){
     html+=`<div class="txi" style="cursor:default">
       <div class="txav" style="background:var(--red2)">${ICONS[tx.cat]||'○'}</div>
       <div class="txi-info">
-        <div class="txi-name">${esc(tx.desc||tx.cat)}</div>
+        <div class="txi-name">${esc(displayDesc(tx.desc)||tx.cat)}</div>
         <div class="txi-meta">${mLabel(tx.month)} · ${tx.date.slice(5)}</div>
       </div>
       <div class="txi-amt" style="color:${tx.amount<0?'var(--green)':'var(--sub)'}">${tx.amount<0?'+':'−'}${fmt(Math.abs(tx.amount))} kr</div>
@@ -3336,6 +3397,7 @@ function saveOwnerName(v){
 function renderSettings(){
   document.getElementById('s-owner').value=getOwnerName();
   applyThemePref();
+  document.getElementById('haptics-toggle').checked=ld('haptics',true)!==false;
   document.getElementById('s-goal').value=ld('goal',700000)||'';
   document.getElementById('s-apikey').value=getApiKey();
   renderFontPicker();
@@ -3477,7 +3539,7 @@ function renderNWCatList(){
   const cats=getNWCats();
   const el=document.getElementById('nw-cats-list');
   el.innerHTML=`<div class="tag-list">${cats.map((c,i)=>
-    `<div class="tag-item"><span>${c.label}</span><button class="tag-rm" onclick="removeNWCat(${i})">×</button></div>`
+    `<div class="tag-item"><span>${esc(c.label)}</span><button class="tag-rm" onclick="removeNWCat(${i})">×</button></div>`
   ).join('')}</div>`;
 }
 function addNWCat(){
@@ -3505,8 +3567,8 @@ function renderGroupList(){
   el.innerHTML=groups.map((g,i)=>`
     <div class="s-row" style="cursor:pointer" onclick="openEditGroupModal(${i})">
       <div>
-        <div class="s-row-lbl">${g.name}</div>
-        <div class="s-row-sub">${g.cats.join(', ')}</div>
+        <div class="s-row-lbl">${esc(g.name)}</div>
+        <div class="s-row-sub">${esc(g.cats.join(', '))}</div>
       </div>
       <span style="color:var(--sub2);font-size:18px">›</span>
     </div>`).join('');
@@ -3544,7 +3606,7 @@ function renderGroupCatChecks(selected){
         border:1px solid ${sel.has(c)?'var(--acc)':'var(--line2)'};
         border-radius:var(--rsm);cursor:pointer;transition:all .15s"
       data-selected="${sel.has(c)?'1':'0'}">
-      <span style="font-size:14px;color:${sel.has(c)?'var(--acc)':'var(--text)'}">${c}</span>
+      <span style="font-size:14px;color:${sel.has(c)?'var(--acc)':'var(--text)'}">${esc(c)}</span>
       <span style="font-size:18px;color:${sel.has(c)?'var(--acc)':'var(--sub2)'}">${sel.has(c)?'✓':'○'}</span>
     </div>`).join('');
 }
@@ -3633,7 +3695,7 @@ function importData(e){
       const data=JSON.parse(ev.target.result);
       if(!data.txs||!data.nws)throw new Error();
       pendingImport=data;
-      document.getElementById('import-info').innerHTML=`Fil: <b>${file.name}</b><br>Transaktioner: ${data.txs.length} st<br>NW-snapshots: ${data.nws.length} st<br><br>Befintlig data skrivs över.`;
+      document.getElementById('import-info').innerHTML=`Fil: <b>${esc(file.name)}</b><br>Transaktioner: ${data.txs.length} st<br>NW-snapshots: ${data.nws.length} st<br><br>Befintlig data skrivs över.`;
       closeOverlay('import-modal');
       document.getElementById('import-modal').classList.add('open');
     }catch{toast('Ogiltig fil','err')}
@@ -4762,7 +4824,7 @@ const AI_EFFORTS=[
 function getAiModelKey(){const k=ld('ai_model','opus');return AI_MODELS[k]?k:'opus'}
 function getAiModel(){return AI_MODELS[getAiModelKey()]}
 function getAiEffort(){const e=ld('ai_effort','high');return AI_EFFORTS.some(x=>x.id===e)?e:'high'}
-function setAiModel(k){if(!AI_MODELS[k])return;sv('ai_model',k);haptic(8);renderAiOpts();updateAiStatus()}
+function setAiModel(k){if(!AI_MODELS[k])return;sv('ai_model',k);renderAiOpts();updateAiStatus()}
 function setAiEffort(e){sv('ai_effort',e);renderAiOpts();updateAiStatus()}
 function modelNameForId(id){const m=Object.values(AI_MODELS).find(m=>m.id===id);return m?m.name:(id||'').replace(/^claude-/,'').replace(/-/g,' ')}
 function renderAiOpts(){
@@ -5120,21 +5182,21 @@ function renderWidget(tag){
       const data=JSON.parse(tag.match(/data='([^']+)'/)?.[1]||'[]');
       return`<div style="display:grid;grid-template-columns:repeat(${Math.min(data.length,3)},1fr);gap:8px;margin:6px 0">
         ${data.map(d=>{const col=d.color==='green'?'var(--green)':d.color==='red'?'var(--red)':d.color==='blue'?'var(--blue)':'var(--text)';
-          return`<div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:10px 12px">
-            <div style="font-size:9px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:4px">${d.label}</div>
-            <div style="font-size:13px;font-weight:600;font-family:var(--mono);color:${col};word-break:break-all">${d.value}</div></div>`;
+          return`<div style="background:var(--surf2);border:none;border-radius:14px;padding:10px 12px">
+            <div style="font-size:9px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:4px">${esc(d.label)}</div>
+            <div style="font-size:13px;font-weight:600;font-family:var(--mono);color:${col};word-break:break-all">${esc(d.value)}</div></div>`;
         }).join('')}</div>`;
     }
     if(type==='bars'){
       const data=JSON.parse(tag.match(/data='([^']+)'/)?.[1]||'[]');
       const title=tag.match(/title="([^"]+)"/)?.[1]||'';
       const maxVal=Math.max(...data.map(d=>d.max||d.value));
-      return`<div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:12px 14px;margin:6px 0">
-        ${title?`<div style="font-size:10px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:10px">${title}</div>`:''}
+      return`<div style="background:var(--surf2);border:none;border-radius:14px;padding:12px 14px;margin:6px 0">
+        ${title?`<div style="font-size:10px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:10px">${esc(title)}</div>`:''}
         ${data.map(d=>{const pct=Math.round(d.value/(d.max||maxVal)*100);
           return`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
-            <span style="color:var(--sub)">${d.label}</span>
-            <span style="font-family:var(--mono);color:var(--text)">${typeof d.value==='number'?fmt(d.value)+' kr':d.value}</span></div>
+            <span style="color:var(--sub)">${esc(d.label)}</span>
+            <span style="font-family:var(--mono);color:var(--text)">${typeof d.value==='number'?fmt(d.value)+' kr':esc(d.value)}</span></div>
             <div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
               <div style="width:${pct}%;height:100%;background:var(--acc);border-radius:3px"></div></div></div>`;
         }).join('')}</div>`;
@@ -5142,12 +5204,12 @@ function renderWidget(tag){
     if(type==='table'){
       const headers=JSON.parse(tag.match(/headers='([^']+)'/)?.[1]||'[]');
       const rows=JSON.parse(tag.match(/rows='([^']+)'/)?.[1]||'[]');
-      return`<div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:12px;overflow:hidden;margin:6px 0">
+      return`<div style="background:var(--surf2);border:none;border-radius:14px;overflow:hidden;margin:6px 0">
         <div style="display:grid;grid-template-columns:repeat(${headers.length},1fr);padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.08)">
-          ${headers.map(h=>`<span style="font-size:9px;color:var(--sub2);text-transform:uppercase;letter-spacing:.06em;font-family:var(--mono)">${h}</span>`).join('')}</div>
+          ${headers.map(h=>`<span style="font-size:9px;color:var(--sub2);text-transform:uppercase;letter-spacing:.06em;font-family:var(--mono)">${esc(h)}</span>`).join('')}</div>
         ${rows.map(row=>`<div style="display:grid;grid-template-columns:repeat(${headers.length},1fr);padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05)">
           ${row.map(cell=>{const col=String(cell).startsWith('+')?'var(--green)':String(cell).startsWith('-')&&cell!=='-'?'var(--red)':'var(--text)';
-            return`<span style="font-size:11px;font-family:var(--mono);color:${col}">${cell}</span>`;}).join('')}</div>`).join('')}</div>`;
+            return`<span style="font-size:11px;font-family:var(--mono);color:${col}">${esc(cell)}</span>`;}).join('')}</div>`).join('')}</div>`;
     }
     if(type==='progress'){
       const label=tag.match(/label="([^"]+)"/)?.[1]||'';
@@ -5155,8 +5217,8 @@ function renderWidget(tag){
       const max=parseFloat(tag.match(/max="([^"]+)"/)?.[1]||100);
       const col=tag.match(/color="([^"]+)"/)?.[1]==='red'?'var(--red)':tag.match(/color="([^"]+)"/)?.[1]==='blue'?'var(--blue)':'var(--green)';
       const pct=Math.min(value/max*100,100);
-      return`<div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:12px 14px;margin:6px 0">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12px;color:var(--sub)">${label}</span>
+      return`<div style="background:var(--surf2);border:none;border-radius:14px;padding:12px 14px;margin:6px 0">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:12px;color:var(--sub)">${esc(label)}</span>
         <span style="font-family:var(--mono);font-size:12px;color:${col}">${pct.toFixed(0)}%</span></div>
         <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-bottom:4px">
           <div style="width:${pct.toFixed(1)}%;height:100%;background:${col};border-radius:3px"></div></div>
@@ -5167,10 +5229,10 @@ function renderWidget(tag){
       const icon=tag.match(/icon="([^"]+)"/)?.[1]||'💡';
       const title=tag.match(/title="([^"]+)"/)?.[1]||'';
       const text=tag.match(/text="([^"]+)"/)?.[1]||'';
-      return`<div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:12px 14px;margin:6px 0;display:flex;gap:10px;align-items:flex-start">
-        <span style="font-size:18px;flex-shrink:0;line-height:1.3">${icon}</span>
-        <div>${title?`<div style="font-size:12px;font-weight:600;color:var(--acc);margin-bottom:3px">${title}</div>`:''}
-        <div style="font-size:12px;color:var(--sub);line-height:1.5">${text}</div></div></div>`;
+      return`<div style="background:var(--acc2);border:none;border-radius:14px;padding:12px 14px;margin:6px 0;display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px;flex-shrink:0;line-height:1.3">${esc(icon)}</span>
+        <div>${title?`<div style="font-size:12px;font-weight:600;color:var(--acc);margin-bottom:3px">${esc(title)}</div>`:''}
+        <div style="font-size:12px;color:var(--sub);line-height:1.5">${esc(text)}</div></div></div>`;
     }
   }catch(e){}
   return'';
@@ -5230,7 +5292,8 @@ document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault
 // ═══════════════════════════════════════════
 function initSwipeToClose(el,closeFn){
   let sx=0,sy=0,tracking=false;
-  el.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;tracking=true;},{passive:true});
+  // Inte när fingret börjar i en graf eller ett fält — annars stängde ett svep i grafen hela vyn
+  el.addEventListener('touchstart',e=>{if(e.target.closest('.ichart-wrap,input,textarea,select'))return;sx=e.touches[0].clientX;sy=e.touches[0].clientY;tracking=true;},{passive:true});
   el.addEventListener('touchmove',e=>{
     if(!tracking)return;
     const dx=e.touches[0].clientX-sx;
@@ -5247,6 +5310,7 @@ function initSwipeToClose(el,closeFn){
     const dx=e.changedTouches[0].clientX-sx;
     el.style.transition='transform .25s cubic-bezier(.4,0,.2,1),opacity .2s';
     if(dx>80){
+      haptic('light');
       el.style.transform='translateX(100%)';el.style.opacity='0';
       setTimeout(()=>{closeFn();el.style.cssText='';},250);
     } else {
@@ -5298,7 +5362,7 @@ setTimeout(()=>{
   const dock=document.querySelector('.nav-dock');
   const pill=document.getElementById('nav-pill');
   if(!dock||!pill)return;
-  let dragging=false;
+  let dragging=false,dragTab=null;
 
   function tabAtX(clientX){
     const btns=[...dock.querySelectorAll('.nb')];
@@ -5319,11 +5383,13 @@ setTimeout(()=>{
     x=Math.max(0,Math.min(x,dockRect.width-w));
     pill.style.transition='none';
     pill.style.transform=`translateX(${x}px)`;
+    // Haptiskt klick när pillret passerar en ny flik
+    const t=tabAtX(clientX);if(t&&t!==dragTab){if(dragTab)haptic('selection');dragTab=t}
   }
   dock.addEventListener('touchstart',e=>{
     const t=e.touches[0];
     const pr=pill.getBoundingClientRect();
-    if(t.clientX>=pr.left-14&&t.clientX<=pr.right+14)dragging=true;
+    if(t.clientX>=pr.left-14&&t.clientX<=pr.right+14){dragging=true;dragTab=tabAtX(t.clientX)}
   },{passive:true});
   dock.addEventListener('touchmove',e=>{
     if(!dragging)return;
@@ -5347,7 +5413,7 @@ function finishOnboarding(){
   if(nm.trim())saveOwnerName(nm);
   localStorage.setItem('onboarded','1');
   closeOverlay('onboard-modal');
-  toast('Välkommen! Tryck + för att importera ditt första kontoutdrag');
+  toast('Välkommen! Importera ditt första kontoutdrag från kortet på Hem');
   render();
 }
 function skipOnboarding(){
