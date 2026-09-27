@@ -1352,6 +1352,14 @@ img,svg{-webkit-user-drag:none}
           <div><div class="s-row-lbl">Auto-synk</div><div class="s-row-sub">Vid ändringar och när appen öppnas</div></div>
           <label class="toggle"><input type="checkbox" id="sb-auto" onchange="localStorage.setItem('sb_auto',JSON.stringify(this.checked));if(this.checked)sbSync({silent:true})"><span class="tsl"></span></label>
         </div>
+        <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
+          <div><div class="s-row-lbl">🤖 AI-koppling (MCP)</div><div class="s-row-sub">Låt Claude, ChatGPT m.fl. läsa din ekonomi. Varje nyckel kan återkallas. Se supabase/README.md.</div></div>
+          <div id="mcp-new" style="display:none"></div>
+          <div id="mcp-list"></div>
+          <input type="text" id="mcp-name" placeholder="Namn, t.ex. Claude" autocapitalize="off" autocomplete="off" class="sb-inp">
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--sub)"><input type="checkbox" id="mcp-write"> Får även ändra (lägga till, ändra, ta bort)</label>
+          <button class="sb-btn sb-btn2" onclick="mcpCreate()">Skapa nyckel</button>
+        </div>
         <div class="s-row">
           <div style="min-width:0"><div class="s-row-lbl">Inloggad</div><div class="s-row-sub" id="sb-who" style="overflow:hidden;text-overflow:ellipsis"></div></div>
           <button onclick="sbSignOut()" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;flex-shrink:0">Logga ut</button>
@@ -3925,6 +3933,60 @@ function renderSbSettings(){
   document.getElementById('sb-who').textContent=_sbUser?.email||'';
   document.getElementById('sb-auto').checked=ld('sb_auto',true)!==false;
   document.getElementById('sb-status').textContent=!url?'Inte konfigurerad — ange projektets URL':!_sbUser?'Inte inloggad':ld('sb_status','Inloggad');
+  if(_sbUser)mcpList();
+}
+
+// ── AI-koppling (MCP) — se supabase/functions/mcp ──
+// Nyckeln visas bara en gång; databasen sparar bara SHA-256-hashen.
+function mcpUrl(tok){return sbCfg().url+'/functions/v1/mcp/'+tok}
+let _mcpBusy=false;
+async function mcpList(){
+  const el=document.getElementById('mcp-list');if(!el||_mcpBusy)return;
+  _mcpBusy=true;
+  try{
+    const sb=await sbClient();
+    const{data,error}=await sb.from('mcp_tokens').select('id,name,scope,created_at,last_used_at').order('created_at',{ascending:false});
+    if(error)throw error;
+    const d=s=>s?new Date(s).toLocaleDateString('sv-SE'):'aldrig';
+    el.innerHTML=data.map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div style="font-size:14px">${esc(t.name)} <span style="font-size:11px;color:var(--sub2)">${t.scope==='write'?'läsa + ändra':'bara läsa'}</span></div>
+      <div class="s-row-sub">Skapad ${d(t.created_at)} · använd ${d(t.last_used_at)}</div></div>
+      <button onclick="mcpRevoke(${jsArg(t.id)})" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;flex-shrink:0">Återkalla</button></div>`).join('');
+  }catch(e){
+    // Tabellen saknas tills schema.sql körts igen
+    el.innerHTML=`<div class="s-row-sub">${/mcp_tokens/.test(e.message||'')?'Kör supabase/schema.sql igen för att aktivera.':'Kunde inte hämta nycklar: '+esc(e.message||e)}</div>`;
+  }finally{_mcpBusy=false}
+}
+async function mcpCreate(){
+  const name=document.getElementById('mcp-name').value.trim()||'MCP';
+  const write=document.getElementById('mcp-write').checked;
+  if(write&&!confirm('Nyckeln får lägga till, ändra och ta bort transaktioner. Fortsätt?'))return;
+  const b=crypto.getRandomValues(new Uint8Array(32));
+  const tok='pkm_'+btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(tok)))].map(x=>x.toString(16).padStart(2,'0')).join('');
+  try{
+    const sb=await sbClient();
+    const{error}=await sb.from('mcp_tokens').insert({name,scope:write?'write':'read',token_hash:hash});if(error)throw error;
+  }catch(e){toast('Kunde inte skapa nyckel: '+(e.message||e),'err');return}
+  document.getElementById('mcp-name').value='';document.getElementById('mcp-write').checked=false;
+  const box=document.getElementById('mcp-new');box.style.display='block';
+  box.innerHTML=`<div style="background:var(--green2);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.5">
+    <b>Nyckeln ”${esc(name)}” är skapad.</b> Kopiera adressen nu — den visas bara en gång.<br>
+    Claude: Inställningar → Connectors → Add custom connector → klistra in adressen.
+    <input readonly id="mcp-url" class="sb-inp" style="margin-top:8px;font-family:var(--mono);font-size:12px" value="${esc(mcpUrl(tok))}" onclick="this.select()">
+    <button class="sb-btn" style="margin-top:8px;width:100%" onclick="mcpCopy()">Kopiera adress</button></div>`;
+  mcpList();
+}
+function mcpCopy(){
+  const el=document.getElementById('mcp-url');el.select();
+  (navigator.clipboard?navigator.clipboard.writeText(el.value):Promise.reject()).then(()=>toast('Adressen kopierad ✓'),()=>{document.execCommand('copy');toast('Adressen kopierad ✓')});
+}
+async function mcpRevoke(id){
+  if(!confirm('Återkalla nyckeln? AI-appar som använder den tappar åtkomsten direkt.'))return;
+  try{const sb=await sbClient();const{error}=await sb.from('mcp_tokens').delete().eq('id',id);if(error)throw error;toast('Nyckeln återkallad')}
+  catch(e){toast('Kunde inte återkalla: '+(e.message||e),'err')}
+  document.getElementById('mcp-new').style.display='none';
+  mcpList();
 }
 async function sbSaveCfg(){
   const url=document.getElementById('sb-url').value.trim().replace(/\/+$/,'');

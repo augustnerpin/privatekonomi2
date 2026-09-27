@@ -37,3 +37,57 @@ Tips: När du har skapat ditt konto kan du stänga av nya registreringar under
 - Transaktioner utan giltigt datum eller giltig månad hoppas över vid synk. Statusraden i
   inställningarna visar hur många.
 - Firebase-synken finns kvar under inställningar som "äldre" och kan tas bort när Supabase fungerar.
+
+## AI-koppling (MCP)
+
+[`functions/mcp`](functions/mcp) är en MCP-server (Model Context Protocol) som körs som en
+Supabase Edge Function. Med den kan Claude, ChatGPT, Cursor och andra AI-appar läsa din ekonomi
+och, om du vill, lägga till och ändra saker. Ändringarna syns i appen vid nästa synk.
+
+| Verktyg | Gör |
+|---|---|
+| `get_settings` | Kategorier, budget, konton, mål, aktuell löneperiod |
+| `list_transactions` | Söker transaktioner (period, datum, typ, kategori, konto, fritext, belopp) |
+| `summarize_transactions` | Summerar per kategori, månad, butik, konto eller typ |
+| `get_month_summary` | Månadens inkomst, utgifter, sparande, budget och snitt, som i appen |
+| `get_net_worth` | Förmögenhet per månad och framsteg mot målet |
+| `add_transaction` · `update_transaction` · `delete_transaction` | Kräver en nyckel som får ändra |
+| `set_budget` · `set_net_worth` | Kräver en nyckel som får ändra |
+
+### Installera (en gång)
+
+1. **Kör [`schema.sql`](schema.sql) igen** i SQL Editor. Då skapas tabellen `mcp_tokens`.
+2. **Driftsätt funktionen**, med Supabase CLI från repots rotmapp:
+   ```sh
+   npx supabase login
+   npx supabase link --project-ref qchasvatuhndtswxlucr
+   npx supabase functions deploy mcp --no-verify-jwt
+   ```
+   Du kan också använda panelen: *Edge Functions* → *Deploy a new function* → *Via Editor*.
+   Döp funktionen till `mcp`, lägg in `index.ts` och `mcp.ts` och stäng av
+   *Enforce JWT verification* under funktionens *Details*.
+   Funktionen hittar själv projektets URL och hemliga nyckel. Du behöver inte lägga in några secrets.
+3. **Skapa en nyckel** i appen under Inställningar → *Databas (Supabase)* → *AI-koppling (MCP)*.
+   Du får en adress som `https://qchasvatuhndtswxlucr.supabase.co/functions/v1/mcp/pkm_…`.
+   Den visas bara en gång.
+
+### Anslut
+
+- **Claude** (webb, desktop, mobil): *Settings* → *Connectors* → *Add custom connector*. Klistra in
+  adressen och lämna OAuth-fälten tomma. Kopplingen följer med till mobilappen.
+- **Claude Code:** `claude mcp add --transport http privatekonomi <adressen>`
+- **ChatGPT:** *Settings* → *Apps & Connectors* → *Advanced* → *Developer mode* → *Create*.
+  Klistra in adressen och välj *No authentication*.
+- **Cursor och andra som kan sätta headers:** använd adressen utan nyckeln
+  (`…/functions/v1/mcp`) och skicka `Authorization: Bearer pkm_…`.
+
+Prova sedan till exempel: *"Hur gick september jämfört med snittet?"*, *"Vad har jag lagt på
+Mat (Ute) per månad i år?"* eller *"Lägg till 129 kr på Gym idag"*.
+
+### Säkerhet
+
+- Nyckeln ger åtkomst till din ekonomi. Hantera den som ett lösenord och återkalla den i appen om
+  den kommer i fel händer. Välj *bara läsa* om AI:n inte behöver ändra något.
+- Databasen sparar bara SHA-256-hashen av nyckeln.
+- Funktionen använder projektets hemliga nyckel på servern, som kringgår RLS. Varje fråga i
+  `mcp.ts` filtreras därför på nyckelns `user_id`. Den hemliga nyckeln lämnar aldrig Supabase.
