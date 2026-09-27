@@ -822,6 +822,7 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
     </div>
     <div class="field"><label>Din månadslön (kr, efter skatt)</label><input type="number" id="ob-salary" placeholder="t.ex. 27 500" inputmode="numeric"></div>
     <div class="field"><label>Förmögenhetsmål (kr)</label><input type="number" id="ob-goal" placeholder="t.ex. 700 000" inputmode="numeric"></div>
+    <div class="field"><label>Ditt namn (som på kontoutdragen)</label><input type="text" id="ob-name" placeholder="FÖRNAMN EFTERNAMN" autocapitalize="characters" autocomplete="name"></div>
     <div style="font-size:11px;color:var(--sub2);font-family:var(--mono);margin-bottom:12px;line-height:1.5">Du kan ändra allt senare i inställningar — kategorier, löneperioder, mål och mer.</div>
     <button class="btn-p" onclick="finishOnboarding()">Kom igång</button>
     <button class="btn-s" onclick="skipOnboarding()">Hoppa över</button>
@@ -927,6 +928,17 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
   </div>
 
   <div class="s-sec">
+    <div class="s-lbl">Profil</div>
+    <div class="s-card">
+      <div class="s-row" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div><div class="s-row-lbl">Ditt namn <span style="color:var(--amber);font-size:11px">krävs för import</span></div>
+          <div class="s-row-sub">Som det står på dina kontoutdrag, t.ex. AUGUST NERPIN. Överföringar till och från ditt namn räknas som flytt mellan egna konton — inte som inkomst eller utgift.</div></div>
+        <input type="text" id="s-owner" placeholder="FÖRNAMN EFTERNAMN" autocapitalize="characters" autocomplete="name" onchange="saveOwnerName(this.value)" style="width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:var(--rsm);padding:12px 14px;color:var(--text);font-family:var(--sans);font-size:15px;outline:none">
+      </div>
+    </div>
+  </div>
+
+  <div class="s-sec">
     <div class="s-lbl">AI-assistent</div>
     <div class="s-card">
       <div class="s-row" style="flex-direction:column;align-items:stretch;gap:10px">
@@ -956,6 +968,11 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
   <div class="s-sec">
     <div class="s-lbl">Inlärd kategorisering <span style="font-size:10px;color:var(--sub2);font-weight:400">— butik → kategori</span></div>
     <div class="s-card" id="rule-list"></div>
+  </div>
+
+  <div class="s-sec">
+    <div class="s-lbl">Dina förklaringar till AI:n <span style="font-size:10px;color:var(--sub2);font-weight:400">— följs vid varje import</span></div>
+    <div class="s-card" id="ai-notes"></div>
   </div>
 
   <div class="s-sec">
@@ -2509,7 +2526,16 @@ function toggleTheme(isLight){document.body.classList.toggle('light',isLight);sv
 function saveApiKey(v){localStorage.setItem('anthropic_key',v.trim());updateAiStatus()}
 function getApiKey(){return localStorage.getItem('anthropic_key')||''}
 
+function getOwnerName(){return String(ld('owner_name','')||'').trim()}
+function saveOwnerName(v){
+  const n=String(v||'').trim().toUpperCase().replace(/\s+/g,' ');
+  sv('owner_name',n);
+  const el=document.getElementById('s-owner');if(el)el.value=n;
+  if(n)toast('Namn sparat ✓');
+  if(_imp&&_imp.step==='files')renderImport();
+}
 function renderSettings(){
+  document.getElementById('s-owner').value=getOwnerName();
   const isLight=ld('theme','dark')==='light';
   document.getElementById('theme-toggle').checked=isLight;
   document.getElementById('s-salary').value=ld('salary',0)||'';
@@ -2780,7 +2806,8 @@ function buildBackup(){
     ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
     settings:{goal:ld('goal',700000),salary:ld('salary',0),theme:ld('theme','dark'),font:localStorage.getItem('font_theme')||'dm',
       cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
-      accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{})}};
+      accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{}),
+      owner_name:getOwnerName(),ai_import_notes:getImportNotes()}};
 }
 function exportData(){
   const data=buildBackup();
@@ -2822,7 +2849,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps'].forEach(k=>{if(d.settings[k])sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes'].forEach(k=>{if(d.settings[k])sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -2841,7 +2868,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -2947,6 +2974,81 @@ const getRules=()=>ld('merchant_rules',{});
 function setRule(mkey,type,cat){
   if(!mkey)return;
   const r=getRules();r[mkey]={type,cat,t:Date.now()};sv('merchant_rules',r);
+}
+// Användarens förklaringar till AI:n (svar på frågor + fria instruktioner). Följs vid alla importer.
+function getImportNotes(){return ld('ai_import_notes',[])}
+function addImportNote(q,a){
+  a=String(a||'').trim();if(!a)return;
+  const n=getImportNotes().filter(x=>!(q&&x.q===q));
+  n.push({q:q||'',a,t:Date.now()});sv('ai_import_notes',n.slice(-60));
+}
+function removeImportNote(i){const n=getImportNotes();n.splice(i,1);sv('ai_import_notes',n);renderAccountSettings()}
+function addImportNoteFromSettings(){
+  const el=document.getElementById('new-ai-note');const v=el.value.trim();if(!v)return;
+  addImportNote('',v);el.value='';renderAccountSettings();toast('Instruktion sparad ✓');
+}
+
+// Svara på AI:ns frågor / ge en fri förklaring → spara och kategorisera om
+function setQAnswer(id,v){const q=_imp.questions.find(x=>x.id===id);if(q)q.answer=v}
+function pickQOption(id,opt){
+  const q=_imp.questions.find(x=>x.id===id);if(!q)return;
+  q.answer=opt;const el=document.getElementById('qa-'+id);if(el)el.value=opt;
+  document.querySelectorAll(`[data-qopt="${id}"]`).forEach(b=>b.classList.toggle('on',b.dataset.val===opt));
+}
+function skipAiQuestions(){_imp.questions=[];renderImport()}
+async function answerAiQuestions(){
+  const answered=(_imp.questions||[]).filter(q=>q.answer&&q.answer.trim());
+  const free=(document.getElementById('ai-explain')?.value||'').trim();
+  if(!answered.length&&!free){toast('Skriv ett svar eller en förklaring först','warn');return}
+  answered.forEach(q=>{
+    // Spara frågan med exempel så att svaret går att förstå även vid senare importer
+    const ex=q.groups.slice(0,3).map(g=>g.rows[0].desc).filter(Boolean);
+    addImportNote(q.q+(ex.length?` (gällde: ${ex.join(', ')})`:''),q.answer.trim());
+  });
+  if(free)addImportNote('',free);
+  _imp.explain='';
+  // Kategorisera om allt som AI:n eller gissningar bestämt (inte det du själv ändrat eller kända butiker)
+  const redo=_imp.groups.filter(g=>!g.edited&&(g.src==='ai'||g.src==='guess'||g.src==='auto'&&answered.some(q=>q.groups.includes(g))));
+  _imp.questions=[];
+  if(!redo.length||!getApiKey()){renderImport();toast('Förklaringen sparad ✓');return}
+  try{
+    setBusy(`AI kategoriserar om ${redo.length} butik${redo.length>1?'er':''} med dina svar…`);
+    await categorizeWithAI(redo);
+  }catch(e){toast('AI-fel: '+e.message,'err')}
+  _imp.groups.filter(g=>!g.src).forEach(fallbackCat);
+  _imp.groups.sort((a,b)=>(a.conf==='low'?0:1)-(b.conf==='low'?0:1)||Math.abs(b.total)-Math.abs(a.total));
+  _imp.busy=null;renderImport();
+  toast(_imp.questions.length?`Klart — AI:n har ${_imp.questions.length} följdfråg${_imp.questions.length>1?'or':'a'}`:'Omkategoriserat med dina svar ✓');
+}
+function aiQuestionsHtml(){
+  const Q=_imp.questions||[];
+  let h='';
+  if(Q.length){
+    h+=`<div class="card" style="border-color:rgba(90,176,255,.4)"><div class="card-inner" style="padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:18px">🤖</span>
+        <div style="font-size:14px;font-weight:600">AI:n undrar (${Q.length})</div></div>
+      <div style="font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:10px">Svara så kategoriserar den om. Dina svar sparas och används vid alla framtida importer.</div>`;
+    Q.forEach(q=>{
+      const ex=q.groups.slice(0,3).map(g=>`${esc(g.rows[0].desc)} <span style="color:var(--sub2)">${g.total<0?'−':'+'}${fmt(Math.abs(g.total))} kr${g.rows.length>1?` · ${g.rows.length} st`:''}</span>`).join('<br>');
+      h+=`<div style="padding:10px 0;border-top:1px solid var(--line)">
+        <div style="font-size:13px;font-weight:500;line-height:1.5">${esc(q.q)}</div>
+        ${ex?`<div style="font-size:11px;font-family:var(--mono);color:var(--sub);margin:6px 0;line-height:1.6">${ex}</div>`:''}
+        ${q.options.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${q.options.map(o=>`<span class="chip${q.answer===o?' on':''}" data-qopt="${q.id}" data-val="${esc(o)}" onclick="pickQOption('${q.id}',this.dataset.val)">${esc(o)}</span>`).join('')}</div>`:''}
+        <textarea id="qa-${q.id}" rows="2" placeholder="Ditt svar eller en förklaring…" oninput="setQAnswer('${q.id}',this.value)" style="width:100%;margin-top:4px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:9px 11px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none;resize:vertical">${esc(q.answer)}</textarea>
+      </div>`;
+    });
+    h+=`<button class="btn-p" onclick="answerAiQuestions()">Svara och kategorisera om</button>
+      <button class="btn-s" onclick="skipAiQuestions()">Hoppa över frågorna</button>
+    </div></div>`;
+  }
+  // Fri förklaring — alltid tillgänglig
+  h+=`<details class="card" style="padding:0"${Q.length?'':''}><summary style="list-style:none;cursor:pointer;padding:13px 16px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px"><span>💬</span> Förklara för AI:n hur den ska tänka</summary>
+      <div style="padding:0 16px 14px">
+        <textarea id="ai-explain" rows="3" placeholder="T.ex. ”Kontot 53293380441 är mitt sparkonto — räkna det som sparande” eller ”Swish till 0701234567 är hyra till min sambo”" style="width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:9px 11px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none;resize:vertical"></textarea>
+        <button class="btn-s" onclick="answerAiQuestions()">Spara och kategorisera om</button>
+        ${getImportNotes().length?`<div style="font-size:11px;color:var(--sub2);margin-top:8px">${getImportNotes().length} tidigare förklaringar används redan (se Inställningar).</div>`:''}
+      </div></details>`;
+  return h;
 }
 
 // Butiksnyckel: normaliserad beskrivning + riktning (in/ut), så att "ICA NARA 1234 SOLNA 25-09-12" och
@@ -3223,7 +3325,7 @@ function setImpFile(id,key,val){
 }
 function fileSummary(f){
   if(f.kind==='doc')return`${f.media==='application/pdf'?'PDF':'Bild'} · ${Math.round(f.size/1024)} kB · läses av AI`;
-  const rows=tableToRows(f.table,f.map,f.invert);
+  const rows=fileRows(f);
   if(!rows.length)return'Inga transaktioner hittades med nuvarande kolumnval';
   const dates=rows.map(r=>r.date).sort();
   const out=rows.filter(r=>r.amount<0).reduce((s,r)=>s+r.amount,0);
@@ -3294,20 +3396,29 @@ function renderImpFiles(body,bar,sub){
     });
     html+=`</div>`;
   }
-  if(_imp.files.some(f=>f.status==='ready')){
-    // Tidigaste datum i filerna, för att visa vad "alla" betyder
-    const allDates=_imp.files.filter(f=>f.kind==='table'&&f.status==='ready').flatMap(f=>tableToRows(f.table,f.map,f.invert).map(r=>r.date)).sort();
-    const lastImp=getTxs().filter(t=>t.source==='import').map(t=>t.date).sort().pop();
-    html+=`<div class="card"><div class="card-inner" style="padding:14px 16px">
-      <div class="field" style="margin-bottom:10px"><label>Importera från datum</label>
-        <input type="date" value="${esc(_imp.from||'')}" onchange="_imp.from=this.value;sv('import_from',this.value);renderImport()"></div>
-      <div style="font-size:11px;color:var(--sub2);line-height:1.5;margin:-4px 0 12px">
-        ${allDates.length?`Filerna går från ${allDates[0]}. `:''}${_imp.from?`Äldre rader hoppas över.`:'Tomt = allt i filerna.'}${lastImp?` Senast importerade: ${lastImp}.`:''}</div>
-      <div class="field" style="margin-bottom:0"><label>Ditt namn som det står på utdragen</label>
-        <input type="text" value="${esc(ld('owner_name',''))}" placeholder="t.ex. AUGUST NERPIN" autocapitalize="characters" onchange="sv('owner_name',this.value.trim())"></div>
-      <div style="font-size:11px;color:var(--sub2);line-height:1.5;margin-top:6px">Överföringar till och från ditt eget namn räknas som flytt mellan egna konton — inte som inkomst eller utgift.</div>
+  // Månad: importen gäller alltid en budgetmånad (löneperiod) — bara rader i den perioden tas med
+  const months=impMonthOptions();
+  if(!_imp.month||!months.includes(_imp.month))_imp.month=defaultImpMonth(months);
+  const inMonth=_imp.files.filter(f=>f.kind==='table'&&f.status==='ready').map(f=>({f,n:fileRows(f).filter(r=>periodOf(r.date)===_imp.month).length}));
+  const already=getTxs().filter(t=>t.source==='import'&&t.month===_imp.month);
+  // Månad och namn visas överst, före filerna
+  let top=`<div class="card"><div class="card-inner" style="padding:14px 16px">
+      <div class="field" style="margin-bottom:6px"><label>Vilken månad gäller importen?</label>
+        <select onchange="_imp.month=this.value;renderImport()">${months.map(m=>`<option value="${m}"${m===_imp.month?' selected':''}>${mLabel(m)} — ${payPeriodLabel(m).replace('Löneperiod ','')}</option>`).join('')}</select></div>
+      <div style="font-size:11px;color:var(--sub2);line-height:1.6">
+        Bara transaktioner i löneperioden ${payPeriodLabel(_imp.month).replace('Löneperiod ','')} tas med. Lägg till alla filer för månaden (bank + kort).
+        ${inMonth.map(x=>`<br>${esc(x.f.name)}: <b style="color:var(--text)">${x.n}</b> rader i perioden`).join('')}
+        ${already.length?`<br><span style="color:var(--amber)">${already.length} transaktioner är redan importerade för ${mLabel(_imp.month)} — dubbletter hoppas över.</span>`:''}
+      </div>
     </div></div>`;
-  }
+  const owner=getOwnerName();
+  if(!owner)top=`<div class="card" style="border-color:rgba(255,214,10,.35)"><div class="card-inner" style="padding:14px 16px">
+      <div style="font-size:13px;font-weight:600;color:var(--amber);margin-bottom:4px">Registrera ditt namn först</div>
+      <div style="font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:10px">Appen behöver ditt namn som det står på kontoutdragen för att känna igen överföringar mellan dina egna konton.</div>
+      <button class="btn-s" style="margin-top:0" onclick="openSettings();setTimeout(()=>document.getElementById('s-owner')?.focus(),350)">Öppna inställningar → Profil</button>
+    </div></div>`+top;
+  else top+=`<div style="margin:0 20px 12px;font-size:11px;color:var(--sub2)">Egna överföringar känns igen på namnet <b style="color:var(--sub)">${esc(owner)}</b> (ändras i inställningar).</div>`;
+  html=top+html;
   const key=getApiKey();
   html+=`<div style="margin:6px 20px 0;font-size:11px;color:var(--sub2);line-height:1.6">
       ${key?`Nya butiker kategoriseras av Claude ${esc(getAiModel().name)}. Butiker du redan kategoriserat känns igen direkt.`:'⚠️ Utan API-nyckel kategoriseras bara butiker appen redan lärt sig — resten hamnar i Övrigt. PDF och bilder kräver API-nyckel.'}
@@ -3319,7 +3430,37 @@ function renderImpFiles(body,bar,sub){
   drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
   drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');addImportFiles(e.dataTransfer.files)});
   const ready=_imp.files.filter(f=>f.status==='ready');
-  bar.innerHTML=ready.length?`<button class="btn-p" onclick="processImport()">Fortsätt med ${ready.length} fil${ready.length>1?'er':''} →</button>`:'';
+  bar.innerHTML=!ready.length?'':!owner
+    ?`<button class="btn-p" style="opacity:.45" onclick="toast('Registrera ditt namn i inställningar först','warn')">Registrera ditt namn för att fortsätta</button>`
+    :`<button class="btn-p" onclick="processImport()">Importera ${mLabel(_imp.month)} från ${ready.length} fil${ready.length>1?'er':''} →</button>`;
+}
+
+// Snabbare hantering av stora filer: rader per fil och löneperiod per datum cachas
+function fileRows(f){
+  const key=JSON.stringify(f.map)+f.invert;
+  if(f._rowsKey!==key){f._rows=tableToRows(f.table,f.map,f.invert);f._rowsKey=key}
+  return f._rows;
+}
+let _periodCache={},_periodCacheKey='';
+function periodOf(date){
+  const k=localStorage.getItem('pay_periods')||'';
+  if(k!==_periodCacheKey){_periodCache={};_periodCacheKey=k}
+  return _periodCache[date]||(_periodCache[date]=periodForDate(date));
+}
+// Valbara månader: de som finns i filerna + de senaste 6 (för PDF/bilder där datumen inte är kända än)
+function impMonthOptions(){
+  const set=new Set();
+  _imp.files.filter(f=>f.kind==='table'&&f.status==='ready').forEach(f=>fileRows(f).forEach(r=>set.add(periodOf(r.date))));
+  const [y,m]=currentPayPeriod().split('-').map(Number);
+  for(let i=0;i<6;i++){const d=new Date(y,m-1-i,1);set.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'))}
+  return[...set].sort().reverse();
+}
+// Förval: senaste avslutade löneperioden som finns i filerna
+function defaultImpMonth(months){
+  const cur=currentPayPeriod();
+  const inFiles=new Set();
+  _imp.files.filter(f=>f.kind==='table'&&f.status==='ready').forEach(f=>fileRows(f).forEach(r=>inFiles.add(periodOf(r.date))));
+  return[...inFiles].filter(m=>m<cur).sort().pop()||[...inFiles].sort().pop()||months.find(m=>m<cur)||cur;
 }
 
 // ── AI-anrop (strömmat, så långa svar inte slår i tidsgränser) ─
@@ -3389,7 +3530,10 @@ async function categorizeWithAI(groups){
   const rules=getRules();
   const examples=Object.entries(rules).sort((a,b)=>b[1].t-a[1].t).slice(0,40).map(([k,v])=>`${k.split('|')[0]} → ${TYPE_LABEL[v.type]}: ${v.cat}`).join('\n');
   const mem=getAiMemory();
-  const owner=ld('owner_name','');
+  const owner=getOwnerName();
+  // Användarens egna förklaringar (svar på tidigare AI-frågor) — väger tyngst
+  const notes=getImportNotes();
+  const notesTxt=notes.length?`\n\nANVÄNDARENS FÖRKLARINGAR (gäller alltid och går före riktlinjerna ovan):\n${notes.map(n=>n.q?`- Fråga: ${n.q}\n  Svar: ${n.a}`:`- ${n.a}`).join('\n')}`:'';
   const system=`Du kategoriserar bank- och korttransaktioner för en svensk privatperson. Varje rad är en butik/mottagare (kan förekomma flera gånger). Målet är en korrekt bild av vad personen faktiskt KONSUMERAR, vad som SPARAS och vad som bara är pengar som flyttas.
 Välj type och cat. cat MÅSTE vara exakt en av kategorierna för vald type:
 - expense (utgift = konsumtion): ${getExpCats().join(' | ')}
@@ -3417,10 +3561,17 @@ EXPENSE:
 - Resor, flyg, hotell, utlandsköp på semester → "Resa". Taxi/Uber/Bolt/SL/parkering/drivmedel → "Transport/Parkering".
 - Kontantuttag (Bankomat) → expense "Övrigt" med conf low.
 - Swish till företag (swishföretag) utan känt namn → "Övrigt" conf low.
-conf "low" när du är osäker, annars "high". Hitta aldrig på kategorier.${mem.length?`\nVad du vet om användaren:\n${mem.slice(-20).join('\n')}`:''}${examples?`\nAnvändarens tidigare val (följ samma stil):\n${examples}`:''}`;
-  const schema={type:'object',additionalProperties:false,required:['items'],properties:{items:{type:'array',items:{
-    type:'object',additionalProperties:false,required:['k','type','cat','conf'],
-    properties:{k:{type:'integer'},type:{type:'string',enum:types},cat:{type:'string'},conf:{type:'string',enum:['high','low']}}}}}};
+conf "low" när du är osäker, annars "high". Hitta aldrig på kategorier.
+
+FRÅGOR TILL ANVÄNDAREN:
+Om något är oklart på ett sätt som påverkar resultatet mycket (t.ex. vad ett kontonummer är, om en återkommande Swish är hyra/lån/delade kostnader, om en stor post är sparande, konsumtion eller en tillgång) — ställ en kort, konkret fråga på svenska i "questions". Max 4 frågor, bara de viktigaste (stora belopp eller återkommande), aldrig om sådant användaren redan förklarat nedan. Ange "ks" = k-numren frågan gäller och 2–4 korta svarsalternativ i "options" (t.ex. "Sparkonto", "Eget konto för räkningar"). Kategorisera ändå raderna efter bästa gissning med conf "low". Inga frågor behövs = tom lista.${notesTxt}${mem.length?`\nVad du vet om användaren:\n${mem.slice(-20).join('\n')}`:''}${examples?`\nAnvändarens tidigare val (följ samma stil):\n${examples}`:''}`;
+  const schema={type:'object',additionalProperties:false,required:['items','questions'],properties:{
+    items:{type:'array',items:{
+      type:'object',additionalProperties:false,required:['k','type','cat','conf'],
+      properties:{k:{type:'integer'},type:{type:'string',enum:types},cat:{type:'string'},conf:{type:'string',enum:['high','low']}}}},
+    questions:{type:'array',items:{
+      type:'object',additionalProperties:false,required:['question','ks','options'],
+      properties:{question:{type:'string'},ks:{type:'array',items:{type:'integer'}},options:{type:'array',items:{type:'string'}}}}}}};
   const BATCH=100,PARALLEL=3;
   const kindLbl={mobil:'mobil',swishforetag:'swishföretag',konto:'kontonummer'};
   const batches=[];
@@ -3437,11 +3588,20 @@ conf "low" när du är osäker, annars "high". Hitta aldrig på kategorier.${mem
       return`${s+j}|${g.dir}|${g.accKind==='card'?'kort':'bank'}|${kind}|${g.rows.length}st|${fmt(Math.abs(g.total))} kr${typical}|${r0.desc}${extra?` [${extra}]`:''}`;
     }).join('\n');
     const r=await callClaude({system,messages:[{role:'user',content:`k|riktning|konto|typ|antal|summa|beskrivning\n${lines}`}],effort:'low',max_tokens:16000,schema});
-    const items=JSON.parse(r.text).items||[];
-    items.forEach(it=>{
+    const out=JSON.parse(r.text);
+    (out.items||[]).forEach(it=>{
       const g=groups[it.k];if(!g||!part.includes(g))return;
       if(types.includes(it.type)&&catsForType(it.type).includes(it.cat)){g.type=it.type;g.cat=it.cat;g.conf=it.conf;g.src='ai'}
     });
+    // Frågor från AI:n visas i granskningssteget
+    if(_imp){
+      _imp.questions=_imp.questions||[];
+      (out.questions||[]).slice(0,4).forEach(q=>{
+        const gs=(q.ks||[]).map(k=>groups[k]).filter(g=>g&&part.includes(g));
+        if(!q.question||_imp.questions.some(x=>x.q===q.question))return;
+        _imp.questions.push({id:'q'+Math.random().toString(36).slice(2,8),q:String(q.question),groups:gs,options:(q.options||[]).slice(0,4).map(String),answer:''});
+      });
+    }
     done+=part.length;
     setBusySub(`${done} av ${groups.length} butiker klara`);
   };
@@ -3480,6 +3640,8 @@ function fallbackCat(g){
 async function processImport(){
   const files=_imp.files.filter(f=>f.status==='ready');
   if(!files.length)return;
+  if(!getOwnerName()){toast('Registrera ditt namn i inställningar först','warn');return}
+  _imp.questions=[];
   try{
     // 1. Läs rader
     const all=[];
@@ -3487,12 +3649,14 @@ async function processImport(){
       let rows;
       if(f.kind==='doc'){setBusy('Läser '+f.name+' med AI…');rows=await extractDocWithAI(f)}
       else{
-        rows=tableToRows(f.table,f.map,f.invert);
+        rows=fileRows(f);
         // Kom ihåg kolumnval för samma bankformat
         const maps=ld('import_maps',{});maps[f.table.header.join('|')]={map:f.map,invert:f.invert,account:f.account};sv('import_maps',maps);
       }
-      rows.forEach(r=>{if(!_imp.from||r.date>=_imp.from)all.push({...r,account:f.account,file:f.name})});
+      // Bara rader i den valda månaden (löneperioden)
+      rows.forEach(r=>{if(periodOf(r.date)===_imp.month)all.push({...r,account:f.account,file:f.name})});
     }
+    if(!all.length){_imp.busy=null;renderImport();toast(`Inga transaktioner i ${mLabel(_imp.month)} i filerna`,'warn');return}
     // 2. Dubbletter (mot tidigare importer och inom filerna)
     setBusy('Letar dubbletter…');
     const existing=new Set(getTxs().filter(t=>t.hash).map(t=>t.hash));
@@ -3534,7 +3698,8 @@ async function processImport(){
     // Slutsaldo: filen kan vara sorterad nyast först (SEB) eller äldst först — flera rader samma dag
     // gör att datumsortering inte räcker, så använd filens egen ordning.
     _imp.balances=files.filter(f=>f.kind==='table').map(f=>{
-      const rows=tableToRows(f.table,f.map,f.invert).filter(r=>r.balance!==null);
+      // Saldo vid slutet av vald månad
+      const rows=fileRows(f).filter(r=>r.balance!==null&&periodOf(r.date)===_imp.month);
       if(!rows.length)return null;
       const newestFirst=rows[0].bookDate>=rows[rows.length-1].bookDate;
       const r=newestFirst?rows[0]:rows[rows.length-1];
@@ -3567,7 +3732,7 @@ function renderImpReview(body,bar,sub){
   const G=_imp.groups;
   const on=G.filter(g=>g.on);
   const nTx=on.reduce((s,g)=>s+g.rows.length,0);
-  sub.textContent='Steg 2 av 2 · granska';
+  sub.textContent=`Steg 2 av 2 · granska ${mLabel(_imp.month)}`;
   const sumType=t=>on.filter(g=>g.type===t).reduce((s,g)=>s+g.total,0);
   const exp=-sumType('expense'),inc=sumType('income'),sav=-sumType('savings');
   const low=G.filter(g=>g.conf==='low');
@@ -3583,6 +3748,7 @@ function renderImpReview(body,bar,sub){
       ${sav?`<br>Sparande: ${fmt(sav)} kr`:''}
       ${_imp.aiErr?`<br><span style="color:var(--red)">AI-fel: ${esc(_imp.aiErr)}</span>`:''}
     </div>`;
+  if(G.length&&getApiKey())html+=aiQuestionsHtml();
   // Varning för manuella transaktioner i samma period
   Object.entries(_imp.overlap||{}).forEach(([acc,o])=>{
     const chk=!!_imp.replaceManual[acc];
@@ -3660,7 +3826,7 @@ function saveImport(){
     svAccounts(accs);
   }
   const imps=getImports();
-  imps.push({id:impId,date:new Date().toISOString(),count:n,files:_imp.files.filter(f=>f.status==='ready').map(f=>f.name),removed});
+  imps.push({id:impId,date:new Date().toISOString(),month:_imp.month,count:n,files:_imp.files.filter(f=>f.status==='ready').map(f=>f.name),removed});
   svImports(imps.slice(-50));
   _imp.step='done';
   document.getElementById('import-screen').classList.remove('open');
@@ -3694,7 +3860,7 @@ function renderAccountSettings(){
     </div>`}).join('');
   const imps=getImports().slice().reverse();
   document.getElementById('imp-hist').innerHTML=imps.length?imps.slice(0,15).map(i=>`<div class="s-row">
-      <div style="min-width:0"><div class="s-row-lbl">${i.date.slice(0,10)} · ${i.count} st</div>
+      <div style="min-width:0"><div class="s-row-lbl">${i.month?mLabel(i.month)+' · ':''}${i.count} st <span style="color:var(--sub2);font-size:11px">${i.date.slice(0,10)}</span></div>
         <div class="s-row-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((i.files||[]).join(', '))}</div></div>
       <button onclick="undoImport('${i.id}')" style="background:var(--red2);border:1px solid rgba(255,105,97,.3);color:var(--red);border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">Ångra</button>
     </div>`).join(''):`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga importer ännu.</div>`;
@@ -3706,6 +3872,12 @@ function renderAccountSettings(){
       <button class="tag-rm" onclick="removeRule(${jsArg(k)})">×</button></div>`).join('')}</div>
      <div class="s-row"><div class="s-row-sub">${rules.length} butiker</div><button onclick="clearRules()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer">Rensa alla</button></div>`
     :`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Fylls på automatiskt när du importerar.</div>`;
+  const notes=getImportNotes();
+  document.getElementById('ai-notes').innerHTML=(notes.length?notes.map((n,i)=>`<div class="s-row" style="align-items:flex-start">
+      <div style="min-width:0;flex:1">${n.q?`<div class="s-row-sub" style="margin:0 0 3px">${esc(n.q)}</div>`:''}<div style="font-size:13px;line-height:1.5">${esc(n.a)}</div></div>
+      <button class="tag-rm" onclick="removeImportNote(${i})">×</button></div>`).join('')
+    :`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga ännu. Svar på AI:ns frågor vid import hamnar här.</div>`)+
+    `<div class="tag-add" style="padding:10px 16px 12px"><input type="text" id="new-ai-note" placeholder="Ny instruktion, t.ex. ”Konto 5329… är mitt sparkonto”" onkeydown="if(event.key==='Enter')addImportNoteFromSettings()"><button class="tag-add-btn" onclick="addImportNoteFromSettings()">+</button></div>`;
 }
 function addAccount(){
   const inp=document.getElementById('new-acc-name');const name=inp.value.trim();if(!name)return;
@@ -4255,9 +4427,11 @@ function finishOnboarding(){
   const goal=parseFloat(document.getElementById('ob-goal').value)||0;
   if(sal>0)sv('salary',sal);
   if(goal>0)sv('goal',goal);
+  const nm=document.getElementById('ob-name').value;
+  if(nm.trim())saveOwnerName(nm);
   localStorage.setItem('onboarded','1');
   closeOverlay('onboard-modal');
-  toast('Välkommen! Tryck + för din första transaktion');
+  toast('Välkommen! Tryck + för att importera ditt första kontoutdrag');
   render();
 }
 function skipOnboarding(){
