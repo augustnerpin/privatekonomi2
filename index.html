@@ -1430,7 +1430,7 @@ body{height:auto}
     <div class="tag-add" style="padding:0;margin-top:-6px;margin-bottom:16px">
       <input type="text" id="new-acc-name" placeholder="Nytt konto, t.ex. Sparkonto…" onkeydown="if(event.key==='Enter')addAccount()">
       <select id="new-acc-kind" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:var(--rsm);padding:0 10px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none">
-        <option value="bank">Bank</option><option value="card">Kort</option>
+        <option value="bank">Bank</option><option value="card">Kort</option><option value="savings">Sparkonto</option><option value="investment">Investering</option>
       </select>
       <button class="tag-add-btn" onclick="addAccount()">+</button>
     </div>
@@ -1754,6 +1754,9 @@ const svGroups=v=>sv('cat_groups',v);
 const DEF_ACCOUNTS=[{id:'lonekonto',name:'Lönekonto',kind:'bank'},{id:'amex',name:'AMEX',kind:'card'}];
 function getAccounts(){const a=ld('accounts',null);return Array.isArray(a)&&a.length?a:DEF_ACCOUNTS.map(x=>({...x}))}
 function svAccounts(v){sv('accounts',v)}
+// Kontotyper: bank och sparkonto räknas som likvida medel; kort och investering (ISK/depå) gör det inte
+const ACC_KIND_LABEL={bank:'bank',card:'kort',savings:'sparkonto',investment:'investering'};
+const isCashAcc=a=>!a.kind||a.kind==='bank'||a.kind==='savings';
 function accountName(id){return getAccounts().find(a=>a.id===id)?.name||id||'—'}
 // Överföringar (kortfaktura, egna konton) räknas varken som utgift eller inkomst
 const DEF_TRF=['Kreditkortsbetalning','Egen överföring','Bostad, lån & tillgångar'];
@@ -2202,9 +2205,9 @@ function openNWModal(){
     }
   }
   // Summan av bankkontonas saldon kan fyllas i som likvida medel med ett tryck
-  const bankBal=withBal.filter(a=>a.kind!=='card').reduce((s,a)=>s+a.balance.value,0);
+  const bankBal=withBal.filter(isCashAcc).reduce((s,a)=>s+a.balance.value,0);
   const cashCat=cats.find(c=>c.key==='cash')||cats[0];
-  const fillBtn=withBal.some(a=>a.kind!=='card')&&cashCat?`<button type="button" onclick="document.getElementById('nwm-${cashCat.key}').value=${Math.round(bankBal)};toast(${jsArg(cashCat.label+' ifyllt')})" style="margin-top:8px;width:100%;padding:9px;border-radius:12px;background:var(--acc2);border:1px solid var(--acc);color:var(--acc);font-family:var(--sans);font-size:13px;cursor:pointer">Fyll i ${esc(cashCat.label)}: ${fmt(bankBal)} kr</button>`:'';
+  const fillBtn=withBal.some(isCashAcc)&&cashCat?`<button type="button" onclick="document.getElementById('nwm-${cashCat.key}').value=${Math.round(bankBal)};toast(${jsArg(cashCat.label+' ifyllt')})" style="margin-top:8px;width:100%;padding:9px;border-radius:12px;background:var(--acc2);border:1px solid var(--acc);color:var(--acc);font-family:var(--sans);font-size:13px;cursor:pointer">Fyll i ${esc(cashCat.label)}: ${fmt(bankBal)} kr</button>`:'';
   const helpHtml=help?`<div style="background:var(--bg2);border:1px solid var(--line);border-radius:var(--rsm);padding:10px 12px;font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:12px">
     <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--sub2);font-family:var(--mono);margin-bottom:2px">Från dina importer</div>${help}${fillBtn}</div>`:'';
 
@@ -5214,7 +5217,7 @@ function renderAccountSettings(){
   document.getElementById('acc-list').innerHTML=accs.map((a,i)=>{
     const n=txs.filter(t=>t.account===a.id).length;
     return`<div class="s-row">
-      <div style="min-width:0"><div class="s-row-lbl">${esc(a.name)} <span class="acc-tag">${a.kind==='card'?'kort':'bank'}</span></div>
+      <div style="min-width:0"><div class="s-row-lbl">${esc(a.name)} <span class="acc-tag">${ACC_KIND_LABEL[a.kind]||'bank'}</span></div>
         <div class="s-row-sub">${n} transaktioner${a.balance?` · saldo ${fmt(a.balance.value)} kr (${a.balance.date})`:''}</div></div>
       <button class="tag-rm" onclick="removeAccount(${i})">×</button>
     </div>`}).join('');

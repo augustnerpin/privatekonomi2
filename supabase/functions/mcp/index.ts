@@ -48,6 +48,8 @@ const DEF: Obj = {
   cat_groups: [], cat_budgets: {}, pay_periods: [], contact_names: {}, merchant_rules: {},
   goal: 700000, salary: 0, owner_name: '',
 };
+// Kontotyper. Appen räknar bank + savings som likvida medel; card = kreditkort (köp brukar vara positiva i exporten).
+const KINDS: Obj = { bank: 'Bankkonto', card: 'Kreditkort', savings: 'Sparkonto', investment: 'Investering (ISK/depå)' };
 const CAT_KEY: Obj = { expense: 'cats_exp', income: 'cats_inc', savings: 'cats_sav', transfer: 'cats_trf' };
 
 // ── Datum och löneperioder (portat från index.html) ───────────────────
@@ -144,6 +146,11 @@ async function mayMust<T>(p: PromiseLike<{ data: T; error: any }>): Promise<T | 
   if (error) { if (missingTable(error)) return null; throw new Error('Databasfel: ' + (error.message || error)); }
   return data;
 }
+// Skrivning i en ny tabell: fel på svenska om migreringen inte körts
+async function mustNew(p: PromiseLike<{ data: any; error: any }>) {
+  const { error } = await p;
+  if (error) throw missingTable(error) ? new UserError(NEEDS_MIGRATION) : new Error('Databasfel: ' + (error.message || error));
+}
 // Nya id:n i appens schema (millisekunder), alltid större än befintliga
 async function newIds(c: Ctx, n: number) {
   const top = await must<Obj[]>(uq(c, 'transactions', 'id').order('id', { ascending: false }).limit(1));
@@ -183,6 +190,26 @@ function txView(r: Obj, s: Obj) {
   return t;
 }
 const pub = (t: Obj) => { const { _mkey, _acc, _extra, ...rest } = t; return rest; };
+async function balanceRows(c: Ctx) {
+  const rows = await mayMust<Obj[]>(uq(c, 'account_balances', 'account,bal_date,value,source').eq('deleted', false).order('bal_date', { ascending: true }));
+  return { rows: (rows || []).map((r) => ({ account: r.account, date: r.bal_date, value: Number(r.value), source: r.source || null })), migrated: rows !== null };
+}
+// Historik per konto; appens eget saldo (från senaste import) räknas med om det datumet saknas
+function balanceHistory(s: Obj, rows: Obj[]) {
+  const by: Obj = {};
+  for (const r of rows) (by[r.account] ||= []).push({ date: r.date, value: r.value, source: r.source });
+  for (const a of s.accounts) {
+    if (!a.balance?.date) continue;
+    const h = (by[a.id] ||= []);
+    if (!h.some((x: Obj) => x.date === a.balance.date)) h.push({ date: a.balance.date, value: Number(a.balance.value), source: 'app' });
+  }
+  for (const k in by) by[k].sort((x: Obj, y: Obj) => x.date.localeCompare(y.date));
+  return by;
+}
+function accountView(a: Obj, hist: Obj[] = []) {
+  const last = hist[hist.length - 1];
+  return { id: a.id, name: a.name, kind: a.kind || 'bank', ...(a.number ? { number: a.number } : {}), ...(last ? { balance: { value: last.value, date: last.date } } : {}) };
+}
 function accountName(s: Obj, id: string) { return s.accounts.find((a: Obj) => a.id === id)?.name || id; }
 function accountId(s: Obj, v: string) {
   const l = String(v).toLowerCase();
@@ -217,18 +244,20 @@ export const TOOLS: Tool[] = [
   {
     name: 'get_settings',
     title: 'Inställningar och kategorier',
-    description: 'Hämtar kategorier per typ, budget per kategori, konton, kategorigrupper, förmögenhetsmål, lön, förmögenhetskategorier och aktuell löneperiod. Anropa först för att få exakta kategorinamn.',
+    description: 'Hämtar kategorier per typ, budget per kategori, konton (typ, kontonummer och senaste saldo), kategorigrupper, förmögenhetsmål, lön, förmögenhetskategorier och aktuell löneperiod. Anropa först för att få exakta kategorinamn och konton.',
     inputSchema: { type: 'object', properties: {} },
     annotations: RO,
     async run(c) {
       const s = await loadState(c, SETTINGS);
       const cur = periodForDate(today(), s.pay_periods);
+      const hist = balanceHistory(s, (await balanceRows(c)).rows);
       return {
         current_period: { month: cur, ...periodRange(cur, s.pay_periods) },
         categories: { expense: s.cats_exp, income: s.cats_inc, savings: s.cats_sav, transfer: s.cats_trf },
         category_groups: s.cat_groups,
         budgets: s.cat_budgets,
-        accounts: s.accounts.map((a: Obj) => ({ id: a.id, name: a.name, kind: a.kind, ...(a.balance ? { balance: a.balance } : {}) })),
+        accounts: s.accounts.map((a: Obj) => accountView(a, hist[a.id])),
+        account_kinds: KINDS,
         net_worth_categories: s.cats_nw,
         net_worth_goal: +s.goal,
         salary: +s.salary || 0,
@@ -493,6 +522,85 @@ export const TOOLS: Tool[] = [
     },
   },
 
+  // ── Konton och saldon ───────────────────────────────────────────────
+  {
+    name: 'get_account_balances',
+    title: 'Kontosaldon över tid',
+    description: 'Saldo per konto och datum (saldohistorik), t.ex. för att följa sparkontot eller se lönekontots saldo vid en viss tidpunkt. Saldot är det banken visar (för kreditkort oftast skulden som negativt tal). Utan account returneras alla konton. Senaste saldot per konto finns också i get_settings.',
+    inputSchema: { type: 'object', properties: { account: { type: 'string', description: 'Kontots id eller namn' }, date_from: FILTERS.date_from, date_to: FILTERS.date_to } },
+    annotations: RO,
+    async run(c, a) {
+      const s = await loadState(c, ['accounts']);
+      let accs = s.accounts;
+      if (a.account) { const id = accountId(s, a.account); if (!id) throw new UserError(unknownAccount(s, a.account)); accs = accs.filter((x: Obj) => x.id === id); }
+      const { rows, migrated } = await balanceRows(c);
+      const hist = balanceHistory(s, rows);
+      return {
+        accounts: accs.map((x: Obj) => {
+          const h = (hist[x.id] || []).filter((b: Obj) => (!a.date_from || b.date >= a.date_from) && (!a.date_to || b.date <= a.date_to));
+          return { ...accountView(x, hist[x.id]), history: h };
+        }),
+        ...(migrated ? {} : { note: 'Bara appens senaste saldo visas. ' + NEEDS_MIGRATION }),
+      };
+    },
+  },
+  {
+    name: 'set_account',
+    title: 'Skapa eller ändra konto',
+    description: 'Skapar ett konto eller ändrar namn, typ eller kontonummer. Utan account skapas ett nytt konto (name och kind krävs). kind: bank = vanligt bank-/lönekonto, card = kreditkort, savings = sparkonto (t.ex. SEB sparkonto), investment = ISK/depå (t.ex. Avanza). Kontot syns i appen efter nästa synk.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account: { type: 'string', description: 'Befintligt kontos id eller namn. Utelämna för att skapa nytt.' },
+        name: { type: 'string' }, kind: { type: 'string', enum: Object.keys(KINDS) },
+        number: { type: 'string', description: 'Kontonummer, t.ex. 53293380441. Tom sträng tar bort det.' },
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['accounts']);
+      const name = a.name != null ? String(a.name).trim() : undefined;
+      if (name === '') throw new UserError('Kontot måste ha ett namn');
+      let acc: Obj;
+      if (a.account) {
+        const id = accountId(s, a.account); if (!id) throw new UserError(unknownAccount(s, a.account));
+        acc = s.accounts.find((x: Obj) => x.id === id);
+      } else {
+        if (!name || !a.kind) throw new UserError('Ange name och kind för att skapa ett konto (eller account för att ändra ett befintligt)');
+        acc = { id: 'acc_' + Date.now().toString(36), name, kind: a.kind };
+        s.accounts.push(acc);
+      }
+      if (name && s.accounts.some((x: Obj) => x !== acc && x.name.toLowerCase() === name.toLowerCase())) throw new UserError(`Det finns redan ett konto som heter "${name}"`);
+      if (name) acc.name = name;
+      if (a.kind) acc.kind = a.kind;
+      if (a.number != null) { const n = String(a.number).trim(); if (n) acc.number = n; else delete acc.number; }
+      await saveState(c, 'accounts', s.accounts);
+      return { account: accountView(acc), created: !a.account };
+    },
+  },
+  {
+    name: 'set_account_balance',
+    title: 'Spara kontosaldo',
+    description: 'Sparar ett kontos saldo ett visst datum (som banken visar det; för kreditkort oftast negativt = skuld). Ett senare datum än det appen har blir kontots aktuella saldo även i appen. Samma konto och datum skrivs över.',
+    write: true,
+    inputSchema: {
+      type: 'object', required: ['account', 'value'],
+      properties: { account: { type: 'string', description: 'Kontots id eller namn' }, value: { type: 'number' }, date: { ...S.date, description: 'Datum, standard idag' } },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['accounts']);
+      const id = accountId(s, a.account); if (!id) throw new UserError(unknownAccount(s, a.account));
+      const date = a.date || today();
+      await mustNew(c.db.from('account_balances').upsert({ user_id: c.uid, account: id, bal_date: date, value: a.value, source: 'mcp', deleted: false }, { onConflict: 'user_id,account,bal_date' }));
+      const acc = s.accounts.find((x: Obj) => x.id === id);
+      const current = !acc.balance?.date || date >= acc.balance.date;
+      if (current) { acc.balance = { value: a.value, date }; await saveState(c, 'accounts', s.accounts); }
+      return { account: acc.name, date, value: a.value, is_latest: current };
+    },
+  },
+
   // ── Dela upp ────────────────────────────────────────────────────────
   {
     name: 'split_transaction',
@@ -560,6 +668,7 @@ export const TOOLS: Tool[] = [
 ];
 
 class UserError extends Error {}
+const unknownAccount = (s: Obj, v: string) => `Okänt konto "${v}". Finns: ${s.accounts.map((x: Obj) => x.name).join(', ')}`;
 async function unlinkPair(c: Ctx, id: number) {
   const rows = await must<Obj[]>(uq(c, 'transactions', 'id,extra').eq('id', id));
   if (!rows[0]?.extra?.transfer_pair_id) return;
