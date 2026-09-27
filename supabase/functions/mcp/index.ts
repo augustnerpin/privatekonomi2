@@ -217,6 +217,29 @@ function accountView(a: Obj, hist: Obj[] = []) {
   const last = hist[hist.length - 1];
   return { id: a.id, name: a.name, kind: a.kind || 'bank', ...(a.number ? { number: a.number } : {}), ...(last ? { balance: { value: last.value, date: last.date } } : {}) };
 }
+// Lån och deras skuld per datum (null om tabellerna inte finns ännu)
+async function loadLoans(c: Ctx): Promise<Obj[] | null> {
+  const loans = await mayMust<Obj[]>(uq(c, 'loans', '*').eq('deleted', false).order('name', { ascending: true }));
+  if (loans === null) return null;
+  const bal = (await mayMust<Obj[]>(uq(c, 'loan_balances', 'loan_id,bal_date,value').eq('deleted', false).order('bal_date', { ascending: true }))) || [];
+  return loans.map((l) => ({ ...l, history: bal.filter((b) => b.loan_id === l.id).map((b) => ({ date: b.bal_date, value: Number(b.value) })) }));
+}
+// Skulden ett visst datum = senaste kända saldo den dagen eller tidigare
+const debtAt = (l: Obj, date: string) => { let v: number | null = null; for (const b of l.history) if (b.date <= date) v = b.value; return v; };
+function findLoan(loans: Obj[], v: string) {
+  const l = String(v).trim().toLowerCase(), n = l.replace(/[\s-]/g, '');
+  return loans.find((x) => x.id.toLowerCase() === l || x.name.toLowerCase() === l || (x.reference && String(x.reference).replace(/[\s-]/g, '').toLowerCase() === n)) || null;
+}
+function loanView(l: Obj, s: Obj, withHistory = false) {
+  const last = l.history[l.history.length - 1];
+  const o: Obj = { id: l.id, name: l.name, lender: l.lender || null, reference: l.reference || null,
+    interest_pct: l.interest_pct != null ? Number(l.interest_pct) : null, amortization_monthly: l.amortization != null ? Number(l.amortization) : null,
+    secured_by: l.secured_by ? { key: l.secured_by, label: s.cats_nw.find((x: Obj) => x.key === l.secured_by)?.label || l.secured_by } : null,
+    netted_in_assets: !!l.netted_in_assets, balance: last ? { value: last.value, date: last.date } : null };
+  if (last && o.interest_pct != null) o.interest_monthly_estimate = round((last.value * o.interest_pct) / 100 / 12);
+  if (withHistory) o.history = l.history;
+  return o;
+}
 function accountName(s: Obj, id: string) { return s.accounts.find((a: Obj) => a.id === id)?.name || id; }
 function accountId(s: Obj, v: string) {
   const l = String(v).toLowerCase();
@@ -383,7 +406,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'get_net_worth',
     title: 'Förmögenhet',
-    description: 'Förmögenhet per månad (snapshots) uppdelat per tillgångskategori, med förändring mot föregående och framsteg mot målet.',
+    description: 'Förmögenhet per månad (snapshots) uppdelat per tillgångskategori, med förändring mot föregående och framsteg mot målet. total/assets = summan av förmögenhetsvärdena som de är inmatade. Finns lån (get_loans) visas även liabilities (skuld vid månadens slut), net (= assets minus skulder som inte redan är avdragna) och gross_assets (= assets plus skulder som redan är avdragna i ett tillgångsvärde, t.ex. Lägenhet angiven netto). Förändring och målet räknas på total som i appen.',
     inputSchema: { type: 'object', properties: { month_from: FILTERS.month_from, month_to: FILTERS.month_to } },
     annotations: RO,
     async run(c, a) {
@@ -399,7 +422,22 @@ export const TOOLS: Tool[] = [
         return o;
       });
       const last = snaps[snaps.length - 1];
-      return { goal: +s.goal, latest: last ? { period: last.period, total: last.total, goal_progress_pct: Math.round((last.total / s.goal) * 1000) / 10, left_to_goal: round(s.goal - last.total) } : null, categories: s.cats_nw, snapshots: snaps };
+      const loans = await loadLoans(c);
+      const extra: Obj = {};
+      if (loans?.length) {
+        // Skulder vid kalendermånadens slut; lån markerade netted_in_assets är redan avdragna i tillgången
+        for (const o of snaps) {
+          const [y, m] = o.period.split('-').map(Number); const end = ymd(new Date(y, m, 0));
+          let all = 0, netted = 0; const by: Obj = {};
+          for (const l of loans) { const d = debtAt(l, end); if (d == null) continue; all += d; if (l.netted_in_assets) netted += d; by[l.name] = d; }
+          Object.assign(o, { assets: o.total, liabilities: round(all), liabilities_already_in_assets: round(netted), net: round(o.total - (all - netted)), gross_assets: round(o.total + netted), liabilities_by_loan: by });
+        }
+        extra.loans = loans.map((l) => loanView(l, s));
+        extra.explanation = 'assets = inmatade förmögenhetsvärden (samma som total). liabilities = lånens skuld vid månadens slut. Lån med netted_in_assets är redan avdragna i tillgången de hör till (secured_by) och dras inte av igen: net = assets − (liabilities − liabilities_already_in_assets). gross_assets = assets + liabilities_already_in_assets.';
+      } else if (loans === null) extra.loans_note = 'Lån visas när schema.sql körts igen.';
+      const latest = last ? { period: last.period, total: last.total, goal_progress_pct: Math.round((last.total / s.goal) * 1000) / 10, left_to_goal: round(s.goal - last.total),
+        ...(last.net != null ? { assets: last.assets, liabilities: last.liabilities, liabilities_already_in_assets: last.liabilities_already_in_assets, net: last.net, gross_assets: last.gross_assets } : {}) } : null;
+      return { goal: +s.goal, latest, categories: s.cats_nw, snapshots: snaps, ...extra };
     },
   },
 
@@ -694,6 +732,98 @@ export const TOOLS: Tool[] = [
         await must(c.db.from('transactions').update({ extra: { ...(p.i.extra || {}), ...sides, transfer_pair_id: Number(p.o.id) } }).eq('user_id', c.uid).eq('id', p.i.id));
       }
       return { linked: pairs.length, ...res };
+    },
+  },
+
+  // ── Lån ─────────────────────────────────────────────────────────────
+  {
+    name: 'get_loans',
+    title: 'Lån',
+    description: 'Listar lån (t.ex. bolån) med långivare, lånenummer, ränta, amortering per månad, aktuell skuld (positivt tal) och vilken förmögenhetskategori lånet hör till. netted_in_assets = skulden är redan avdragen i den tillgången (t.ex. Lägenhet angiven netto) och dras därför inte av igen i get_net_worth.',
+    inputSchema: { type: 'object', properties: { include_history: { type: 'boolean', default: false, description: 'Ta med skulden per datum' } } },
+    annotations: RO,
+    async run(c, a) {
+      const s = await loadState(c, ['cats_nw']);
+      const loans = await loadLoans(c);
+      if (loans === null) return { loans: [], note: NEEDS_MIGRATION };
+      const view = loans.map((l) => loanView(l, s, a.include_history));
+      return { loans: view, total_debt: round(view.reduce((x, l) => x + (l.balance?.value || 0), 0)),
+        total_amortization_monthly: round(view.reduce((x, l) => x + (l.amortization_monthly || 0), 0)),
+        total_interest_monthly_estimate: round(view.reduce((x, l) => x + (l.interest_monthly_estimate || 0), 0)) };
+    },
+  },
+  {
+    name: 'set_loan',
+    title: 'Skapa eller ändra lån',
+    description: 'Skapar ett lån eller ändrar ett befintligt (loan = id, namn eller lånenummer). Utan loan skapas nytt lån (name krävs). secured_by = förmögenhetskategorin lånet hör till (nyckel eller namn, t.ex. "apt" eller "Lägenhet"). netted_in_assets: true om tillgångens värde redan anges minus lånet (netto). balance sparar aktuell skuld som positivt tal (datum balance_date, standard idag).',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        loan: { type: 'string', description: 'Befintligt lån. Utelämna för att skapa nytt.' },
+        name: { type: 'string' }, lender: { type: 'string' }, reference: { type: 'string', description: 'Lånenummer/kontonummer, t.ex. 53293315887' },
+        interest_pct: { type: 'number', minimum: 0, maximum: 100, description: 'Ränta i procent, t.ex. 3.85' },
+        amortization: { type: 'number', minimum: 0, description: 'Amortering i kr per månad' },
+        secured_by: { type: 'string', description: 'Förmögenhetskategori (nyckel eller namn). Tom sträng tar bort kopplingen.' },
+        netted_in_assets: { type: 'boolean' },
+        balance: { type: 'number', minimum: 0, description: 'Aktuell skuld i kr' }, balance_date: S.date,
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['cats_nw']);
+      const loans = await loadLoans(c);
+      if (loans === null) throw new UserError(NEEDS_MIGRATION);
+      let l: Obj;
+      if (a.loan) {
+        const f = findLoan(loans, a.loan);
+        if (!f) throw new UserError(`Okänt lån "${a.loan}". Finns: ${loans.map((x) => x.name).join(', ') || 'inga lån än'}`);
+        const { history, updated_at, ...rest } = f; l = rest;
+      } else {
+        if (!a.name?.trim()) throw new UserError('Ange name för att skapa ett lån (eller loan för att ändra ett befintligt)');
+        l = { user_id: c.uid, id: 'loan_' + Date.now().toString(36), netted_in_assets: false, extra: {}, deleted: false };
+      }
+      if (a.name != null) {
+        const name = String(a.name).trim(); if (!name) throw new UserError('Lånet måste ha ett namn');
+        if (loans.some((x) => x.id !== l.id && x.name.toLowerCase() === name.toLowerCase())) throw new UserError(`Det finns redan ett lån som heter "${name}"`);
+        l.name = name;
+      }
+      for (const k of ['lender', 'reference']) if (a[k] != null) l[k] = String(a[k]).trim() || null;
+      if (a.interest_pct != null) l.interest_pct = a.interest_pct;
+      if (a.amortization != null) l.amortization = a.amortization;
+      if (a.netted_in_assets != null) l.netted_in_assets = a.netted_in_assets;
+      if (a.secured_by != null) {
+        const v = String(a.secured_by).trim().toLowerCase();
+        const cat = v ? s.cats_nw.find((x: Obj) => x.key.toLowerCase() === v || x.label.toLowerCase() === v) : null;
+        if (v && !cat) throw new UserError(`Okänd förmögenhetskategori "${a.secured_by}". Finns: ${s.cats_nw.map((x: Obj) => `${x.key} (${x.label})`).join(', ')}`);
+        l.secured_by = cat ? cat.key : null;
+      }
+      await mustNew(c.db.from('loans').upsert(l, { onConflict: 'user_id,id' }));
+      const history = loans.find((x) => x.id === l.id)?.history || [];
+      if (a.balance != null) {
+        const date = a.balance_date || today();
+        await mustNew(c.db.from('loan_balances').upsert({ user_id: c.uid, loan_id: l.id, bal_date: date, value: a.balance, deleted: false }, { onConflict: 'user_id,loan_id,bal_date' }));
+        history.push({ date, value: a.balance }); history.sort((x: Obj, y: Obj) => x.date.localeCompare(y.date));
+      }
+      return { loan: loanView({ ...l, history }, s), created: !a.loan };
+    },
+  },
+  {
+    name: 'set_loan_balance',
+    title: 'Spara lånets skuld',
+    description: 'Sparar ett låns skuld ett visst datum som positivt tal (t.ex. 2 150 000). Samma lån och datum skrivs över. Används av get_net_worth för skulden vid varje månads slut.',
+    write: true,
+    inputSchema: { type: 'object', required: ['loan', 'value'], properties: { loan: { type: 'string', description: 'Lånets id, namn eller lånenummer' }, value: { type: 'number', minimum: 0 }, date: { ...S.date, description: 'Datum, standard idag' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const loans = await loadLoans(c);
+      if (loans === null) throw new UserError(NEEDS_MIGRATION);
+      const l = findLoan(loans, a.loan);
+      if (!l) throw new UserError(`Okänt lån "${a.loan}". Finns: ${loans.map((x) => x.name).join(', ') || 'inga lån än — skapa med set_loan'}`);
+      const date = a.date || today();
+      await mustNew(c.db.from('loan_balances').upsert({ user_id: c.uid, loan_id: l.id, bal_date: date, value: a.value, deleted: false }, { onConflict: 'user_id,loan_id,bal_date' }));
+      const prev = debtAt(l, addDays(date, -1));
+      return { loan: l.name, date, value: a.value, ...(prev != null ? { change_since_previous: round(a.value - prev) } : {}) };
     },
   },
 
