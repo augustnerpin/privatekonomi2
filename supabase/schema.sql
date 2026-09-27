@@ -128,3 +128,65 @@ create policy "own rows" on public.mcp_tokens for all to authenticated
   with check ((select auth.uid()) = user_id);
 revoke all on public.mcp_tokens from anon;
 grant select, insert, delete on public.mcp_tokens to authenticated;
+
+-- ── Saldohistorik, lån och skulder (används av MCP-servern) ──────────
+-- Samma mönster som tabellerna ovan: user_id, deleted-flagga, updated_at som servern sätter, RLS.
+-- Konton finns kvar i user_state.accounts (kind: bank | card | savings | investment); här sparas
+-- saldot per datum. Lånets skuld sparas som positivt tal per datum i loan_balances.
+create table if not exists public.account_balances (
+  user_id    uuid          not null default auth.uid() references auth.users(id) on delete cascade,
+  account    text          not null,                 -- id i user_state.accounts
+  bal_date   date          not null,
+  value      numeric(16,2) not null,                 -- saldo som banken visar det
+  source     text,                                   -- 'manual' | 'import' | 'mcp'
+  deleted    boolean       not null default false,
+  updated_at timestamptz   not null default clock_timestamp(),
+  primary key (user_id, account, bal_date)
+);
+create table if not exists public.loans (
+  user_id          uuid          not null default auth.uid() references auth.users(id) on delete cascade,
+  id               text          not null,           -- t.ex. 'loan_mr3k1x'
+  name             text          not null,
+  lender           text,
+  reference        text,                             -- lånenummer/kontonummer, t.ex. 53293315887
+  interest_pct     numeric(6,3),
+  amortization     numeric(14,2),                    -- kr per månad
+  secured_by       text,                             -- förmögenhetskategori (cats_nw.key), t.ex. 'apt'
+  netted_in_assets boolean       not null default false, -- skulden är redan avdragen i tillgångsvärdet
+  extra            jsonb         not null default '{}'::jsonb,
+  deleted          boolean       not null default false,
+  updated_at       timestamptz   not null default clock_timestamp(),
+  primary key (user_id, id)
+);
+create table if not exists public.loan_balances (
+  user_id    uuid          not null default auth.uid() references auth.users(id) on delete cascade,
+  loan_id    text          not null,
+  bal_date   date          not null,
+  value      numeric(16,2) not null check (value >= 0),
+  deleted    boolean       not null default false,
+  updated_at timestamptz   not null default clock_timestamp(),
+  primary key (user_id, loan_id, bal_date)
+);
+create index if not exists account_balances_sync_idx on public.account_balances (user_id, updated_at);
+create index if not exists loans_sync_idx            on public.loans (user_id, updated_at);
+create index if not exists loan_balances_sync_idx    on public.loan_balances (user_id, updated_at);
+-- Uppdelade transaktioner och länkade överföringar (fälten ligger i transactions.extra)
+create index if not exists transactions_parent_idx on public.transactions ((extra->>'parent_id')) where extra ? 'parent_id';
+create index if not exists transactions_pair_idx   on public.transactions ((extra->>'transfer_pair_id')) where extra ? 'transfer_pair_id';
+
+do $$
+declare t text;
+begin
+  foreach t in array array['account_balances','loans','loan_balances'] loop
+    execute format('drop trigger if exists %I on public.%I', t || '_touch', t);
+    execute format('create trigger %I before insert or update on public.%I for each row execute function public.touch_updated_at()', t || '_touch', t);
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists "own rows" on public.%I', t);
+    execute format(
+      'create policy "own rows" on public.%I for all to authenticated
+         using ((select auth.uid()) = user_id)
+         with check ((select auth.uid()) = user_id)', t);
+    execute format('revoke all on public.%I from anon', t);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+  end loop;
+end $$;

@@ -44,19 +44,31 @@ Tips: När du har skapat ditt konto kan du stänga av nya registreringar under
 Supabase Edge Function. Med den kan Claude, ChatGPT, Cursor och andra AI-appar läsa din ekonomi
 och, om du vill, lägga till och ändra saker. Ändringarna syns i appen vid nästa synk.
 
-| Verktyg | Gör |
+Verktyg markerade ✏️ kräver en nyckel som får ändra. Belopp följer appens teckenkonvention:
+utgift och sparande positivt = pengar ut, inkomst positivt = in, överföring negativt = ut.
+
+| Område | Verktyg |
 |---|---|
-| `get_settings` | Kategorier, budget, konton, mål, aktuell löneperiod |
-| `list_transactions` | Söker transaktioner (period, datum, typ, kategori, konto, fritext, belopp) |
-| `summarize_transactions` | Summerar per kategori, månad, butik, konto eller typ |
-| `get_month_summary` | Månadens inkomst, utgifter, sparande, budget och snitt, som i appen |
-| `get_net_worth` | Förmögenhet per månad och framsteg mot målet |
-| `add_transaction` · `update_transaction` · `delete_transaction` | Kräver en nyckel som får ändra |
-| `set_budget` · `set_net_worth` | Kräver en nyckel som får ändra |
+| Översikt | `get_settings` (kategorier, föräldralösa kategorier, konton med saldo, budget, löneperiod), `get_month_summary`, `get_net_worth` (tillgångar, skulder, netto) |
+| Transaktioner | `list_transactions`, `summarize_transactions`, ✏️ `add_transaction`, ✏️ `update_transaction`, ✏️ `delete_transaction`, ✏️ `split_transaction`, ✏️ `bulk_update_transactions` |
+| Överföringar | ✏️ `match_transfers` (parar ihop båda sidor av en överföring mellan egna konton) |
+| Konton | `get_account_balances`, ✏️ `set_account`, ✏️ `set_account_balance` |
+| Lån | `get_loans`, ✏️ `set_loan`, ✏️ `set_loan_balance` |
+| Budget och förmögenhet | ✏️ `set_budget`, ✏️ `set_net_worth` |
+| Regler | `list_rules`, ✏️ `update_rule`, ✏️ `delete_rule` |
+| Kategorier | ✏️ `create_category`, ✏️ `rename_category`, ✏️ `merge_categories` |
+| Swish-namn | `list_contacts`, ✏️ `set_contact` |
+
+Verktyg som ändrar många rader har förhandsgranskning: `bulk_update_transactions` sparar bara med
+`dry_run: false` och rätt `expected_count`, och `match_transfers` länkar bara med `confirm: true`.
+`split_transaction`, `update_transaction`, `update_rule`, `rename_category` och `merge_categories`
+tar emot `dry_run: true`.
 
 ### Installera (en gång)
 
-1. **Kör [`schema.sql`](schema.sql) igen** i SQL Editor. Då skapas tabellen `mcp_tokens`.
+1. **Kör [`schema.sql`](schema.sql) igen** i SQL Editor. Då skapas tabellerna `mcp_tokens`,
+   `account_balances`, `loans` och `loan_balances`. Ingen befintlig data ändras. Innan det är gjort
+   fungerar alla verktyg utom saldohistorik och lån, som säger till att filen behöver köras.
 2. **Driftsätt funktionen**, med Supabase CLI från repots rotmapp:
    ```sh
    npx supabase login
@@ -84,6 +96,26 @@ och, om du vill, lägga till och ändra saker. Ändringarna syns i appen vid nä
 
 Prova sedan till exempel: *"Hur gick september jämfört med snittet?"*, *"Vad har jag lagt på
 Mat (Ute) per månad i år?"* eller *"Lägg till 129 kr på Gym idag"*.
+
+### Så sparas det
+
+- Uppdelningar, överföringarnas motkonton och länkar ligger i `transactions.extra` (`parent_id`,
+  `split_into`, `from_account`, `to_account`, `transfer_pair_id`). Appen behåller fälten vid synk.
+- Konton (med typ och kontonummer), regler, kategorier och Swish-namn ligger i `user_state` som förut.
+- Saldohistorik och lån ligger i egna tabeller som appen inte läser än.
+- Alla ändringar synkar till appens enheter som vanligt. Ett ändrat saldo, en ändrad regel och
+  liknande skrivs per nyckel, och den senaste ändringen vinner. Har en telefon osynkade ändringar i
+  samma inställning skriver den över ändringen vid nästa synk.
+
+### Tester
+
+```sh
+node --test 'supabase/tests/*.test.mjs'
+```
+
+Testerna kör `functions/mcp/index.ts` i Node 22.18 eller senare mot en låtsasdatabas. De kontrollerar
+bland annat teckenkonventionerna, summakontrollen i `split_transaction`, att `dry_run` aldrig skriver
+och att en användare aldrig kan läsa eller ändra någon annans data.
 
 ### Säkerhet
 
