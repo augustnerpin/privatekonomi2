@@ -8,3 +8,7 @@ verify_jwt = false
 # AI-proxyn kontrollerar inloggningen själv (auth.getUser), så att CORS-förfrågan (OPTIONS) går igenom.
 [functions.ai]
 verify_jwt = false
+
+# Bankkopplingen: BankID-retur (callback) kommer utan inloggning; övriga vägar kontrollerar den själv.
+[functions.bank]
+verify_jwt = false

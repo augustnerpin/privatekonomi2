@@ -1500,6 +1500,11 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
           <label class="toggle"><input type="checkbox" id="sb-auto" onchange="localStorage.setItem('sb_auto',JSON.stringify(this.checked));if(this.checked)sbSync({silent:true})"><span class="tsl"></span></label>
         </div>
         <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
+          <div><div class="s-row-lbl">🏦 Bankkoppling</div><div class="s-row-sub">Hämtar saldon och transaktioner från SEB automatiskt. Du godkänner med BankID, och samtycket förnyas var 180:e dag. Kontoutdrag som redan importerats dubbleras inte.</div></div>
+          <div id="bank-list"></div>
+          <div style="display:flex;gap:8px"><button class="sb-btn sb-btn2" style="flex:1" onclick="bankConnect('SEB')">Koppla SEB med BankID</button><button class="sb-btn sb-btn2" id="bank-sync-btn" onclick="bankSync()">Hämta nu</button></div>
+        </div>
+        <div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
           <div><div class="s-row-lbl">🤖 AI-koppling (MCP)</div><div class="s-row-sub">Låt Claude, ChatGPT m.fl. läsa din ekonomi. Varje nyckel kan återkallas. Se supabase/README.md.</div></div>
           <div id="mcp-new" style="display:none"></div>
           <div id="mcp-list"></div>
@@ -4126,7 +4131,40 @@ function renderSbSettings(){
   document.getElementById('sb-who').textContent=_sbUser?.email||'';
   document.getElementById('sb-auto').checked=ld('sb_auto',true)!==false;
   document.getElementById('sb-status').textContent=!url?'Inte konfigurerad — ange projektets URL':!_sbUser?'Inte inloggad':ld('sb_status','Inloggad');
-  if(_sbUser)mcpList();
+  if(_sbUser){mcpList();bankList()}
+}
+
+// ── Bankkoppling (Enable Banking) — se supabase/functions/bank ──
+async function bankCall(path,body){
+  const sb=await sbClient();const tok=(await sb?.auth.getSession())?.data?.session?.access_token;
+  if(!tok)throw new Error('Logga in först');
+  const r=await fetch(sbCfg().url+'/functions/v1/bank/'+path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok,apikey:sbCfg().key},body:JSON.stringify(body||{})});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j;
+}
+async function bankConnect(aspsp){
+  try{toast('Öppnar BankID…');const{url}=await bankCall('start',{aspsp,return_to:location.origin+location.pathname});location.href=url}
+  catch(e){toast(e.message,'err')}
+}
+let _bankBusy=false;
+async function bankSync(){
+  if(_bankBusy)return;_bankBusy=true;
+  const btn=document.getElementById('bank-sync-btn');if(btn)btn.textContent='Hämtar…';
+  try{const r=await bankCall('sync');toast(r.added?`${r.added} nya transaktioner från banken ✓`:'Inget nytt från banken');await sbSync({silent:true});bankList()}
+  catch(e){toast('Bankhämtningen misslyckades: '+e.message,'err')}
+  finally{_bankBusy=false;if(btn)btn.textContent='Hämta nu'}
+}
+async function bankList(){
+  const el=document.getElementById('bank-list');if(!el)return;
+  try{
+    const sb=await sbClient();
+    const{data,error}=await sb.from('bank_connections').select('id,aspsp,valid_until,accounts,status,last_sync,last_error').in('status',['active','expired']).order('created_at',{ascending:false});
+    if(error)throw error;
+    const d=s=>s?new Date(s).toLocaleString('sv-SE',{dateStyle:'short',timeStyle:'short'}):'aldrig';
+    el.innerHTML=data.length?data.map(c=>{
+      const days=Math.floor((Date.parse(c.valid_until)-Date.now())/864e5),ok=c.status==='active'&&days>=0;
+      return`<div style="padding:6px 0;border-top:1px solid var(--line)"><div style="font-size:14px">${esc(c.aspsp)} <span style="font-size:11px;color:${ok&&days>14?'var(--green)':'var(--red)'}">${ok?`samtycke ${days} dagar till`:'förnya med BankID'}</span></div>
+        <div class="s-row-sub">${(c.accounts||[]).map(a=>esc(a.app_account?accountName(a.app_account):(a.name||'konto'))).join(', ')||'Inga konton'} · hämtat ${d(c.last_sync)}${c.last_error?` · ⚠️ ${esc(c.last_error)}`:''}</div></div>`}).join(''):'<div class="s-row-sub">Ingen bank kopplad än.</div>';
+  }catch(e){el.innerHTML=`<div class="s-row-sub">${/bank_connections/.test(e.message||'')?'Kör supabase/schema.sql igen för att aktivera.':'Kunde inte hämta: '+esc(e.message||e)}</div>`}
 }
 
 // ── AI-koppling (MCP) — se supabase/functions/mcp ──
@@ -6058,6 +6096,15 @@ async function installApp(){
   _installPrompt=null;renderInstall();
   if(outcome==='accepted')toast('Installerar…');
 }
+// Tillbaka från BankID: ?bank=ok&added=N eller ?bank=error&msg=…
+(function(){
+  const p=new URLSearchParams(location.search),b=p.get('bank');if(!b)return;
+  history.replaceState(null,'',location.pathname);
+  setTimeout(()=>{
+    if(b==='ok'){toast(`Banken är kopplad ✓ ${+p.get('added')||0} nya transaktioner`);sbSync({silent:true});openSettings()}
+    else toast('Bankkopplingen misslyckades: '+(p.get('msg')||'okänt fel'),'err');
+  },600);
+})();
 // Genvägar från appikonen (manifest "shortcuts"): ?open=import / ?open=ai
 (function(){
   const o=new URLSearchParams(location.search).get('open');if(!o)return;

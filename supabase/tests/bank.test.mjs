@@ -1,0 +1,85 @@
+// Bankkopplingens logik (functions/bank/core.ts): tolkning, dubbletter, kategorisering.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules } from '../functions/bank/core.ts';
+
+const ebTx = (amount, cd, date, text, o = {}) => ({
+  entry_reference: o.ref || `${date}-${text}-${amount}`, transaction_amount: { amount: String(amount), currency: 'SEK' },
+  credit_debit_indicator: cd, status: 'BOOK', booking_date: date, remittance_information: [text], ...o,
+});
+const S = {
+  cats_exp: ['Mat (Butik)', 'Fest', 'Swish (privat)', 'Övrigt'], cats_inc: ['Lön', 'Övrigt'], cats_sav: ['Avanza'],
+  cats_trf: ['Kreditkortsbetalning', 'Egen överföring'], owner_name: 'AUGUST NERPIN', pay_periods: [],
+  merchant_rules: { 'partyland|ut': { type: 'expense', cat: 'Fest', t: 1 } },
+};
+
+test('mapTx: tecken, text och köpdatum i SEB-texten', () => {
+  assert.deepEqual(mapTx(ebTx(187, 'DBIT', '2026-09-24', 'K*PARTYLAND')), { ref: '2026-09-24-K*PARTYLAND-187', date: '2026-09-24', bookingDate: '2026-09-24', raw: -187, desc: 'K*PARTYLAND' });
+  const r = mapTx(ebTx(78.45, 'DBIT', '2026-09-24', 'ICA NARA B /26-09-22'));
+  assert.equal(r.desc, 'ICA NARA B'); assert.equal(r.date, '2026-09-22'); assert.equal(r.bookingDate, '2026-09-24');
+  assert.equal(mapTx(ebTx(29500, 'CRDT', '2026-09-25', 'LÖN')).raw, 29500);
+  // Utan text: motpartens namn
+  assert.equal(mapTx({ ...ebTx(100, 'DBIT', '2026-09-01', ''), remittance_information: [], creditor: { name: 'Hyresvärd AB' } }).desc, 'Hyresvärd AB');
+  assert.equal(mapTx(ebTx(0, 'DBIT', '2026-09-01', 'NOLL')), null);
+});
+
+test('dedupe: kontoutdrag som redan importerats dubbleras inte, två likadana köp blir kvar', () => {
+  const existing = [
+    { id: 1, type: 'expense', amount: 187, tx_date: '2026-09-22', extra: {} },           // CSV-import, annan dag
+    { id: 2, type: 'income', amount: 29500, tx_date: '2026-09-25', extra: {} },
+    { id: 3, type: 'expense', amount: 50, tx_date: '2026-09-20', extra: { bank_ref: 'r-old' } },
+  ];
+  const fresh = [
+    mapTx(ebTx(187, 'DBIT', '2026-09-24', 'K*PARTYLAND')),       // = rad 1 (±4 dagar)
+    mapTx(ebTx(29500, 'CRDT', '2026-09-25', 'LÖN')),             // = rad 2
+    mapTx(ebTx(50, 'DBIT', '2026-09-20', 'X', { ref: 'r-old' })), // samma bankreferens
+    mapTx(ebTx(35, 'DBIT', '2026-09-26', 'KAFFE', { ref: 'a' })),
+    mapTx(ebTx(35, 'DBIT', '2026-09-26', 'KAFFE', { ref: 'b' })), // två likadana köp
+    mapTx(ebTx(187, 'DBIT', '2026-09-24', 'K*PARTYLAND', { ref: 'p2' })), // ett till köp: rad 1 redan använd
+  ];
+  const { fresh: out, dups } = dedupe(fresh, existing);
+  assert.equal(dups, 3);
+  assert.deepEqual(out.map((t) => t.ref), ['a', 'b', 'p2']);
+  assert.equal(overlap(fresh, existing), 3);
+});
+
+test('pickBalance: bokfört saldo först', () => {
+  assert.deepEqual(pickBalance([{ balance_type: 'ITAV', balance_amount: { amount: '900' }, reference_date: '2026-09-27' }, { balance_type: 'CLBD', balance_amount: { amount: '1000.50' }, reference_date: '2026-09-27' }]), { value: 1000.5, date: '2026-09-27' });
+  assert.equal(pickBalance([]), null);
+});
+
+test('newAppAccount: namn och typ från banken', () => {
+  const a = newAppAccount({ uid: 'u1', aspsp: 'SEB', name: 'Sparkonto', cash_account_type: 'SVGS', account_id: { iban: 'SE45 5000 0000 0583 9825 7466' } }, new Set(['seb_7466']));
+  assert.deepEqual(a, { id: 'seb_7466x', name: 'Sparkonto ••7466', kind: 'savings', number: 'SE4550000000058398257466' });
+});
+
+test('categorize: regler, automatiska regler, AI och gissning', async () => {
+  const rows = [
+    { ...mapTx(ebTx(187, 'DBIT', '2026-09-24', 'PARTYLAND')), account: 'lonekonto' },        // inlärd regel (K* spelar ingen roll)
+    { ...mapTx(ebTx(5000, 'DBIT', '2026-09-24', 'AMERICAN EXPRESS')), account: 'lonekonto' }, // kortfakturan
+    { ...mapTx(ebTx(200, 'DBIT', '2026-09-24', '46701234567')), account: 'lonekonto' },       // Swish mobil
+    { ...mapTx(ebTx(99, 'DBIT', '2026-09-24', 'WILLYS UMEA')), account: 'lonekonto' },        // AI
+    { ...mapTx(ebTx(42, 'DBIT', '2026-09-24', 'OKAND BUTIK')), account: 'lonekonto' },        // AI svarar ogiltigt → gissning
+  ];
+  let asked;
+  const ai = async (groups) => { asked = groups.map((g) => g.desc); return [{ k: 0, type: 'expense', cat: 'Mat (Butik)', conf: 'high' }, { k: 1, type: 'expense', cat: 'Finns inte', conf: 'high' }]; };
+  const groups = await categorize(S, rows, () => 'bank', ai);
+  const by = Object.fromEntries(groups.map((g) => [g.desc, [g.type, g.cat, g.src]]));
+  assert.deepEqual(asked, ['WILLYS UMEA', 'OKAND BUTIK']);
+  assert.deepEqual(by['PARTYLAND'], ['expense', 'Fest', 'rule']);
+  assert.deepEqual(by['AMERICAN EXPRESS'], ['transfer', 'Kreditkortsbetalning', 'auto']);
+  assert.deepEqual(by['46701234567'], ['expense', 'Swish (privat)', 'auto']);
+  assert.deepEqual(by['WILLYS UMEA'], ['expense', 'Mat (Butik)', 'ai']);
+  assert.deepEqual(by['OKAND BUTIK'], ['expense', 'Övrigt', 'guess']);
+  // Rader: utgift positivt, överföring med bankens tecken, osäkra markeras för granskning, löneperiod
+  const out = toRows('u', groups, S, 1000);
+  const amex = out.find((r) => r.description === 'AMERICAN EXPRESS');
+  assert.equal(amex.amount, -5000); assert.equal(out.find((r) => r.description === 'PARTYLAND').amount, 187);
+  assert.equal(out.find((r) => r.description === 'OKAND BUTIK').extra.review, true);
+  assert.equal(out[0].month, '2026-09'); // 24 sep är dagen före lönen (25 sep) → september-perioden
+  assert.deepEqual(new Set(out.map((r) => r.source)), new Set(['bank']));
+  assert.deepEqual(Object.keys(learnRules(S, groups)).sort(), ['partyland|ut', 'willys umea|ut']);
+  // Fel i AI:n: allt som inte har regel gissas, inget kraschar
+  const g2 = await categorize(S, rows.slice(3), () => 'bank', async () => { throw new Error('nere'); });
+  assert.deepEqual(g2.map((g) => g.src), ['guess', 'guess']);
+});

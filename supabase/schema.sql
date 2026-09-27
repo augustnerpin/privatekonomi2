@@ -190,3 +190,39 @@ begin
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
   end loop;
 end $$;
+
+-- ── Bankkoppling (Enable Banking, PSD2) — se supabase/functions/bank ──
+-- bank_connections: en rad per BankID-samtycke. accounts = bankens konton och vilket konto i appen
+-- de hör till ([{uid,name,iban,app_account,...}]). Appen får läsa (visa status), bara servern skriver.
+create table if not exists public.bank_connections (
+  id          uuid        primary key default gen_random_uuid(),
+  user_id     uuid        not null references auth.users(id) on delete cascade,
+  aspsp       text        not null,                  -- t.ex. 'SEB'
+  country     text        not null default 'SE',
+  session_id  text        not null,
+  valid_until timestamptz not null,                  -- samtycket måste förnyas med BankID efter detta
+  accounts    jsonb       not null default '[]'::jsonb,
+  status      text        not null default 'active', -- 'active' | 'expired' | 'error'
+  last_sync   timestamptz,
+  last_error  text,
+  created_at  timestamptz not null default now()
+);
+create index if not exists bank_connections_user_idx on public.bank_connections (user_id);
+alter table public.bank_connections enable row level security;
+drop policy if exists "own rows read" on public.bank_connections;
+create policy "own rows read" on public.bank_connections for select to authenticated
+  using ((select auth.uid()) = user_id);
+revoke all on public.bank_connections from anon, authenticated;
+grant select (id, aspsp, country, valid_until, accounts, status, last_sync, last_error, created_at, user_id)
+  on public.bank_connections to authenticated;
+
+-- Pågående BankID-inloggningar (state → användare). Bara servern läser och skriver.
+create table if not exists public.bank_auth_states (
+  state      uuid        primary key,
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  aspsp      text        not null,
+  return_to  text        not null,
+  created_at timestamptz not null default now()
+);
+alter table public.bank_auth_states enable row level security;
+revoke all on public.bank_auth_states from anon, authenticated;
