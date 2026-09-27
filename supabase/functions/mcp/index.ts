@@ -131,23 +131,38 @@ function txQuery(c: Ctx, f: Obj) {
   return q.order('tx_date', { ascending: false }).order('id', { ascending: false });
 }
 const arr = (v: any) => (Array.isArray(v) ? v : [v]);
+// Kontoflöde: minus = pengar ut från kontot, plus = in. Utgift/sparande lagras med omvänt tecken,
+// så flow() är sin egen invers: flow(typ, flow(typ, x)) === x.
+const flow = (type: string, amount: number) => (type === 'expense' || type === 'savings' ? -amount : amount);
+const ore = (n: number) => Math.round(n * 100);
+const kr = (n: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 2 }).format(n).replace(/\u2212/g, '-').replace(/[\u00a0\u202f]/g, ' ');
+// Nya tabeller (account_balances, loans, loan_balances) finns först när schema.sql körts igen
+const NEEDS_MIGRATION = 'Tabellen saknas i databasen — kör supabase/schema.sql igen i Supabase (SQL Editor).';
+const missingTable = (e: any) => /42P01|PGRST205|does not exist|could not find the table/i.test(`${e?.code || ''} ${e?.message || ''}`);
+async function mayMust<T>(p: PromiseLike<{ data: T; error: any }>): Promise<T | null> {
+  const { data, error } = await p;
+  if (error) { if (missingTable(error)) return null; throw new Error('Databasfel: ' + (error.message || error)); }
+  return data;
+}
+// Nya id:n i appens schema (millisekunder), alltid större än befintliga
+async function newIds(c: Ctx, n: number) {
+  const top = await must<Obj[]>(uq(c, 'transactions', 'id').order('id', { ascending: false }).limit(1));
+  const base = Math.max(Date.now(), (top[0] ? Number(top[0].id) : 0) + 1);
+  return Array.from({ length: n }, (_, i) => base + i);
+}
+async function getTx(c: Ctx, id: number) {
+  const rows = await must<Obj[]>(uq(c, 'transactions', '*').eq('id', id).eq('deleted', false));
+  if (!rows[0]) throw new UserError(`Hittar ingen transaktion med id ${id}`);
+  return rows[0];
+}
 const digits = (s: string) => { const t = String(s || '').trim(); return /^\+?\d[\d\s-]{5,}$/.test(t) ? t.replace(/\D/g, '') : null; };
 const round = (n: number) => Math.round(n * 100) / 100;
 
 // Hämta transaktioner: filter i databasen, fritext och belopp här (så att Swish-namn också matchar)
 async function queryTxs(c: Ctx, f: Obj, s: Obj) {
   if (f.account) f = { ...f, account: accountId(s, f.account) ?? f.account };
-  let rows = await fetchAll(() => txQuery(c, f));
-  const contacts = s.contact_names || {};
-  let txs = rows.map((r) => {
-    const t: Obj = { id: Number(r.id), date: r.tx_date, month: r.month, type: r.type, amount: Number(r.amount), category: r.category, description: r.description };
-    const n = digits(r.description); if (n && contacts[n]) t.contact = contacts[n];
-    if (r.account) t.account = accountName(s, r.account);
-    if (r.source) t.source = r.source;
-    if (r.extra?.note) t.note = r.extra.note;
-    t._mkey = r.mkey || null; t._acc = r.account || null;
-    return t;
-  });
+  const rows = await fetchAll(() => txQuery(c, f));
+  let txs = rows.map((r) => txView(r, s));
   if (f.search) {
     const words = String(f.search).toLowerCase().split(/\s+/).filter(Boolean);
     txs = txs.filter((t) => { const h = [t.description, t.contact, t.category, t.note].join(' ').toLowerCase(); return words.every((w) => h.includes(w)); });
@@ -156,7 +171,18 @@ async function queryTxs(c: Ctx, f: Obj, s: Obj) {
   if (f.max_amount != null) txs = txs.filter((t) => t.amount <= f.max_amount);
   return txs;
 }
-const pub = (t: Obj) => { const { _mkey, _acc, ...rest } = t; return rest; };
+function txView(r: Obj, s: Obj) {
+  const t: Obj = { id: Number(r.id), date: r.tx_date, month: r.month, type: r.type, amount: Number(r.amount), category: r.category, description: r.description };
+  const n = digits(r.description); if (n && s.contact_names?.[n]) t.contact = s.contact_names[n];
+  if (r.account) t.account = accountName(s, r.account);
+  if (r.source) t.source = r.source;
+  const x = r.extra || {};
+  if (x.note) t.note = x.note;
+  if (x.parent_id) { t.parent_id = Number(x.parent_id); t.split = `${x.split_index}/${x.split_of}`; }
+  t._mkey = r.mkey || null; t._acc = r.account || null; t._extra = x;
+  return t;
+}
+const pub = (t: Obj) => { const { _mkey, _acc, _extra, ...rest } = t; return rest; };
 function accountName(s: Obj, id: string) { return s.accounts.find((a: Obj) => a.id === id)?.name || id; }
 function accountId(s: Obj, v: string) {
   const l = String(v).toLowerCase();
@@ -361,9 +387,7 @@ export const TOOLS: Tool[] = [
       checkTx(s, { ...a, date });
       const acc = a.account ? accountId(s, a.account) : s.accounts[0].id;
       if (!acc) throw new UserError(`Okänt konto "${a.account}". Finns: ${s.accounts.map((x: Obj) => x.name).join(', ')}`);
-      // Samma id-schema som appen (millisekunder), alltid större än befintliga
-      const top = await must<Obj[]>(uq(c, 'transactions', 'id').order('id', { ascending: false }).limit(1));
-      const id = Math.max(Date.now(), (top[0] ? Number(top[0].id) : 0) + 1);
+      const [id] = await newIds(c, 1);
       const row = {
         user_id: c.uid, id, type: a.type, amount: a.amount, description: String(a.description || '').trim(), category: a.category,
         tx_date: date, month: periodForDate(date, s.pay_periods), account: acc, source: 'manual', extra: { via: 'mcp' }, deleted: false,
@@ -468,9 +492,80 @@ export const TOOLS: Tool[] = [
       return { period: a.period, total, amounts };
     },
   },
+
+  // ── Dela upp ────────────────────────────────────────────────────────
+  {
+    name: 'split_transaction',
+    title: 'Dela upp transaktion',
+    description: 'Delar upp en transaktion i flera delar med egen typ och kategori. Exempel: bolånebetalning 6 030 kr (utgift) → {amount: 1500, type: "expense", category: "Boende (Lån)"} (ränta) + {amount: -4530, type: "transfer", category: "Bostad, lån & tillgångar"} (amortering). Varje del anges med samma teckenkonvention som annars: utgift/sparande positivt = pengar ut, inkomst positivt = in, överföring negativt = pengar ut. Delarnas pengar in/ut måste summera exakt (på öret) till originalets, annars fel. Originalet ersätts och försvinner på alla enheter; delarna får parent_id = originalets id och ärver datum, löneperiod, konto och källa. En del kan inte delas igen. dry_run: true visar resultatet utan att spara.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      required: ['id', 'parts'],
+      properties: {
+        id: { type: 'integer', description: 'Transaktionens id (från list_transactions)' },
+        parts: {
+          type: 'array', minItems: 2, maxItems: 20,
+          items: {
+            type: 'object', required: ['amount', 'type', 'category'],
+            properties: {
+              amount: { type: 'number', description: 'Belopp med teckenkonventionen för delens typ' },
+              type: S.type, category: { type: 'string' },
+              description: { type: 'string', description: 'Standard: originalets beskrivning' },
+            },
+          },
+        },
+        dry_run: { type: 'boolean', default: false },
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['accounts', 'contact_names', ...Object.values(CAT_KEY)]);
+      const r = await getTx(c, a.id);
+      if (r.extra?.parent_id) throw new UserError(`Transaktion ${a.id} är redan en del av en uppdelning (av ${r.extra.parent_id}) och kan inte delas igen`);
+      a.parts.forEach((p: Obj, i: number) => {
+        try { checkTx(s, { ...p, date: r.tx_date }); } catch (e: any) { throw new UserError(`Del ${i + 1}: ${e.message}`); }
+      });
+      // Jämför i kontoflöde (in/ut) och på öret, så att t.ex. utgift 1 500 + överföring −4 530 = utgift 6 030
+      const want = ore(flow(r.type, Number(r.amount)));
+      const got = a.parts.reduce((x: number, p: Obj) => x + ore(flow(p.type, p.amount)), 0);
+      if (got !== want) {
+        const each = a.parts.map((p: Obj) => `${kr(p.amount)} (${TYPE_LABEL[p.type].toLowerCase()})`).join(' + ');
+        throw new UserError(`Delarnas summa (${kr(flow(r.type, got / 100))}) matchar inte originalbeloppet (${kr(Number(r.amount))}), räknat som ${TYPE_LABEL[r.type].toLowerCase()}. ` +
+          `Skillnad: ${kr(Math.abs(want - got) / 100)} kr. Delar: ${each}. Tecken: utgift/sparande positivt = pengar ut, överföring negativt = pengar ut, inkomst positivt = in.`);
+      }
+      const ids = await newIds(c, a.parts.length);
+      const base: Obj = { ...(r.extra || {}) };
+      for (const k of ['split_into', 'transfer_pair_id', 'from_account', 'to_account']) delete base[k];
+      const parts = a.parts.map((p: Obj, i: number) => ({
+        user_id: c.uid, id: ids[i], type: p.type, amount: p.amount, category: p.category,
+        description: p.description != null ? String(p.description).trim() : r.description,
+        tx_date: r.tx_date, month: r.month, account: r.account, source: r.source,
+        // hash och import_id följer med: då räknas originalet som redan importerat, och "Ångra import" tar även delarna
+        import_id: r.import_id ?? null, hash: r.hash ?? null,
+        // Ingen butiksnyckel på delarna — annars skulle regler och "samma butik" skriva över deras kategorier
+        mkey: null,
+        extra: { ...base, parent_id: Number(r.id), split_index: i + 1, split_of: a.parts.length, ...(r.mkey ? { split_mkey: r.mkey } : {}), via: 'mcp' },
+        deleted: false,
+      }));
+      const out = { original: pub(txView(r, s)), parts: parts.map((p: Obj) => pub(txView(p, s))) };
+      if (a.dry_run) return { dry_run: true, ...out, note: 'Inget sparat. Kör igen utan dry_run för att dela upp.' };
+      await must(c.db.from('transactions').insert(parts));
+      await must(c.db.from('transactions').update({ deleted: true, extra: { ...(r.extra || {}), split_into: ids } }).eq('user_id', c.uid).eq('id', r.id));
+      // En länkad överföring tappar sin motpart när originalet försvinner
+      if (r.extra?.transfer_pair_id) await unlinkPair(c, Number(r.extra.transfer_pair_id));
+      return { ...out, note: 'Originalet tas bort och delarna läggs till på alla enheter vid nästa synk.' };
+    },
+  },
 ];
 
 class UserError extends Error {}
+async function unlinkPair(c: Ctx, id: number) {
+  const rows = await must<Obj[]>(uq(c, 'transactions', 'id,extra').eq('id', id));
+  if (!rows[0]?.extra?.transfer_pair_id) return;
+  const { transfer_pair_id, ...extra } = rows[0].extra;
+  await must(c.db.from('transactions').update({ extra }).eq('user_id', c.uid).eq('id', id));
+}
 function checkTx(s: Obj, t: Obj) {
   if (!TYPES.includes(t.type)) throw new UserError(`Ogiltig typ "${t.type}"`);
   if (typeof t.amount !== 'number' || !isFinite(t.amount) || t.amount === 0) throw new UserError('Ange ett belopp skilt från 0');
