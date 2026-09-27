@@ -759,7 +759,9 @@ body.light .ai-bottom{background:rgba(255,255,255,0.85);border-top-color:rgba(0,
     <div class="ai-chip" onclick="trainAi()" style="border-color:var(--acc);color:var(--acc)">🎓 Träna AI</div>
     <div class="ai-chip" onclick="sendChip('Hur ser min ekonomi ut denna månaden?')">📊 Månaden</div>
     <div class="ai-chip" onclick="sendChip('Analysera mitt totala sparande och ge konkreta tips')">💡 Spartips</div>
-    <div class="ai-chip" onclick="sendChip('Visa mina topputgifter det senaste året')">🔍 Topputgifter</div>
+    <div class="ai-chip" onclick="sendChip('Jämför förra månaden med mitt snitt: vilka kategorier och butiker drog iväg, och vad kan jag göra konkret nästa månad?')">📈 Vad drog iväg?</div>
+    <div class="ai-chip" onclick="sendChip('Gå igenom mina återkommande kostnader och prenumerationer. Vad kostar de per år, vad har blivit dyrare och vad kan jag säga upp?')">🔁 Prenumerationer</div>
+    <div class="ai-chip" onclick="sendChip('Visa mina 10 största butiker det senaste året och hur de har utvecklats per månad')">🔍 Topputgifter</div>
     <div class="ai-chip" onclick="sendChip('Hur utvecklas min förmögenhet och när når jag målet?')">🎯 Förmögenhetsmål</div>
     <div class="ai-chip" onclick="sendChip('Finns det månader jag spenderade onödigt mycket?')">⚠️ Avvikelser</div>
   </div>
@@ -1769,6 +1771,8 @@ function renderBudget(){
     })()}
   </div></div>`;
 
+  // AI-analys + återkommande kostnader
+  html+=insightCardHtml(month);
   // Budget per kategori
   html+=budgetCardHtml(month,byCat);
 
@@ -1878,6 +1882,192 @@ function saveBudgets(){
   const B={};
   document.querySelectorAll('#budget-fields input[data-bcat]').forEach(i=>{const v=parseFloat(i.value);if(v>0)B[i.dataset.bcat]=v});
   sv('cat_budgets',B);closeOverlay('budget-modal');toast('Budget sparad ✓');render();
+}
+
+// ═══════════════════════════════════════════
+// AI-ANALYS AV MÅNADEN
+// Fakta räknas fram lokalt (snitt, återkommande, nya butiker, stora poster, möjliga dubbletter)
+// och AI:n tolkar dem: vad som sticker ut, vad som bör göras, budgetförslag, nya kategorier.
+// ═══════════════════════════════════════════
+const getInsights=()=>ld('ai_insights',{});
+function mkeyBase(t){return t.mkey?t.mkey.split('|')[0]:merchantBase(t.desc||t.cat)}
+function median(a){if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)]}
+
+// Återkommande kostnader: samma butik de flesta av de senaste 6 perioderna, ungefär samma belopp, ~1 dragning/månad
+function detectRecurring(month){
+  const periods=[...Array(6).keys()].map(i=>periodShift(month,-i));
+  const by={};
+  getTxs().forEach(t=>{
+    if(t.type!=='expense'||t.amount<=0||!periods.includes(t.month))return;
+    const k=mkeyBase(t);
+    const m=by[k]||(by[k]={key:k,name:displayDesc(t.desc)||t.cat,cat:t.cat,per:{},n:0});
+    m.per[t.month]=(m.per[t.month]||0)+t.amount;m.n++;
+  });
+  const out=[];
+  Object.values(by).forEach(m=>{
+    const ms=Object.keys(m.per);if(ms.length<3)return;
+    const prev=periods.slice(1,5).filter(p=>m.per[p]).length;
+    if(prev<3&&ms.length<4)return;
+    if(m.n/ms.length>1.6)return; // många köp per månad = vanlig handel, inte en fast kostnad
+    const vals=ms.map(p=>m.per[p]);const med=median(vals);
+    if(vals.filter(v=>v>=med*0.6&&v<=med*1.6).length<vals.length-1)return;
+    const cur=m.per[month]||0;
+    out.push({key:m.key,name:m.name,cat:m.cat,typical:Math.round(med),current:Math.round(cur),months:ms.length,
+      status:!cur?(month===currentPayPeriod()?'ej dragen än':'saknas'):cur>med*1.15?'dyrare':'ok'});
+  });
+  return out.sort((a,b)=>b.typical-a.typical);
+}
+
+function monthFacts(month){
+  const all=getTxs();
+  const txs=all.filter(t=>t.month===month);
+  const sum=ty=>txs.filter(t=>t.type===ty).reduce((s,t)=>s+t.amount,0);
+  const{avg,months}=catAverages(month);
+  const byCat={};txs.filter(t=>t.type==='expense').forEach(t=>byCat[t.cat]=(byCat[t.cat]||0)+t.amount);
+  const B=getBudgets();
+  // Referenser (t1, t2 …) så att AI:n kan peka på enskilda transaktioner
+  const refs={};let rn=0;const ref=t=>{const r='t'+(++rn);refs[r]=t.id;return r};
+  const seenBefore=new Set(all.filter(t=>t.month<month).map(mkeyBase));
+  const exp=txs.filter(t=>t.type==='expense'&&t.amount>0);
+  const newMerch={};exp.filter(t=>!seenBefore.has(mkeyBase(t))).forEach(t=>{const k=mkeyBase(t);(newMerch[k]=newMerch[k]||[]).push(t)});
+  const large=[...exp].sort((a,b)=>b.amount-a.amount).slice(0,8);
+  const dupMap={};exp.forEach(t=>{const k=mkeyBase(t)+'|'+t.amount.toFixed(2);(dupMap[k]=dupMap[k]||[]).push(t)});
+  const dups=Object.values(dupMap).filter(l=>l.length>1&&l.some((a,i)=>l.some((b,j)=>i!==j&&Math.abs(new Date(a.date)-new Date(b.date))<=2*864e5)));
+  const ovr={};exp.filter(t=>t.cat==='Övrigt').forEach(t=>{const k=mkeyBase(t);const o=ovr[k]||(ovr[k]={key:k,name:displayDesc(t.desc),sum:0,n:0});o.sum+=t.amount;o.n++});
+  const ovrList=Object.values(ovr).sort((a,b)=>b.sum-a.sum).slice(0,25);
+  const mrefs={};let mn=0;ovrList.forEach(o=>{o.ref='m'+(++mn);mrefs[o.ref]=o.key});
+  const moved=-txs.filter(t=>t.type==='transfer'&&t.cat!=='Kreditkortsbetalning').reduce((s,t)=>s+t.amount,0);
+  const fmtT=t=>`${ref(t)}: ${t.date} "${displayDesc(t.desc)}" ${Math.round(t.amount)} kr (${t.cat}, ${accountName(t.account)})`;
+  const text=`MÅNAD: ${mLabel(month)} (${payPeriodLabel(month)})${month===currentPayPeriod()?' — PÅGÅR fortfarande':''}
+Inkomst ${Math.round(sum('income'))} kr · Utgifter ${Math.round(sum('expense'))} kr · Sparande ${Math.round(sum('savings'))} kr · Flyttat till egna konton ${Math.round(moved)} kr
+Sparkvot ${sum('income')>0?Math.round(sum('savings')/sum('income')*100):0} %${months?` · jämförelse mot snitt av ${months} tidigare månader`:' · inga tidigare månader att jämföra med'}
+
+UTGIFTER PER KATEGORI (denna månad / snitt${Object.keys(B).length?' / budget':''}):
+${Object.keys({...byCat,...avg}).sort((a,b)=>(byCat[b]||0)-(byCat[a]||0)).map(c=>`- ${c}: ${Math.round(byCat[c]||0)} / ${Math.round(avg[c]||0)}${B[c]?` / ${B[c]}`:''}`).join('\n')}
+
+ÅTERKOMMANDE KOSTNADER (typiskt/månad → denna månad):
+${detectRecurring(month).map(r=>`- ${r.name} (${r.cat}): ${r.typical} → ${r.current} [${r.status}]`).join('\n')||'- inga hittade ännu'}
+
+NYA BUTIKER (aldrig sedda tidigare):
+${Object.values(newMerch).sort((a,b)=>b.reduce((s,t)=>s+t.amount,0)-a.reduce((s,t)=>s+t.amount,0)).slice(0,12).map(l=>fmtT(l[0])+(l.length>1?` (+${l.length-1} till)`:'')).join('\n')||'- inga'}
+
+STÖRSTA UTGIFTERNA:
+${large.map(fmtT).join('\n')}
+
+MÖJLIGA DUBBELDRAGNINGAR (samma butik och belopp inom 2 dagar):
+${dups.map(l=>l.map(fmtT).join(' | ')).join('\n')||'- inga'}
+
+I "ÖVRIGT" (${Math.round(byCat['Övrigt']||0)} kr) — butiker (ref: namn, summa, antal):
+${ovrList.map(o=>`${o.ref}: ${o.name}, ${Math.round(o.sum)} kr, ${o.n} st`).join('\n')||'- inget'}
+
+BEFINTLIGA UTGIFTSKATEGORIER: ${getExpCats().join(' | ')}`;
+  return{text,refs,mrefs,txCount:txs.length};
+}
+
+async function runMonthAnalysis(month,silent){
+  if(!getApiKey()){if(!silent)toast('Ange API-nyckel i inställningar','warn');return}
+  const txs=getTxs().filter(t=>t.month===month);
+  if(!txs.length){if(!silent)toast('Inga transaktioner i månaden','warn');return}
+  window._analysing=window._analysing||{};
+  if(window._analysing[month])return;
+  window._analysing[month]=true;render();
+  try{
+    const f=monthFacts(month);
+    const notes=getImportNotes();const mem=getAiMemory();
+    const system=`Du är en skarp, konkret ekonomicoach för en svensk privatperson. Du får fakta om en månad (utgifter, snitt, återkommande kostnader, nya butiker, största poster, möjliga dubbeldragningar). Skriv en kort analys som hjälper personen fatta bättre beslut.
+Regler:
+- Svenska, kort och rakt. Använd siffrorna — hitta aldrig på belopp. Jämför mot snittet när det finns.
+- Överföringar till egna konton är inte kostnader. "Swish (privat)" är netto.
+- highlights: 2–5 punkter, det viktigaste först. kind "good" = något som gick bra, "warn" = något att se upp med, "info" = neutral observation/tips med konkret åtgärd.
+- anomalies: bara verkliga avvikelser (möjlig dubbeldragning, oväntat stor post, ny prenumeration, fast kostnad som blivit dyrare). Ange refs (t1…) från listorna. Max 5, tom lista om inget.
+- budget_suggestions: realistiska månadstak för kategorier där budget saknas eller är orimlig, baserat på snittet (avrunda till 100 kr). Max 5.
+- new_categories: föreslå bara om flera butiker i "Övrigt" naturligt hör ihop (t.ex. Snus, Nöje, Hälsa, Godis/kiosk). Ange butikernas refs (m1…). Max 3, annars tom lista.${notes.length?`\nAnvändarens förklaringar:\n${notes.map(n=>n.q?`- ${n.q} → ${n.a}`:`- ${n.a}`).join('\n')}`:''}${mem.length?`\nVad du vet om användaren:\n${mem.slice(-15).join('\n')}`:''}`;
+    const schema={type:'object',additionalProperties:false,required:['headline','summary','highlights','anomalies','budget_suggestions','new_categories'],properties:{
+      headline:{type:'string'},summary:{type:'string'},
+      highlights:{type:'array',items:{type:'object',additionalProperties:false,required:['kind','title','text'],properties:{kind:{type:'string',enum:['good','warn','info']},title:{type:'string'},text:{type:'string'}}}},
+      anomalies:{type:'array',items:{type:'object',additionalProperties:false,required:['refs','title','reason'],properties:{refs:{type:'array',items:{type:'string'}},title:{type:'string'},reason:{type:'string'}}}},
+      budget_suggestions:{type:'array',items:{type:'object',additionalProperties:false,required:['category','amount','reason'],properties:{category:{type:'string'},amount:{type:'number'},reason:{type:'string'}}}},
+      new_categories:{type:'array',items:{type:'object',additionalProperties:false,required:['name','refs','reason'],properties:{name:{type:'string'},refs:{type:'array',items:{type:'string'}},reason:{type:'string'}}}}}};
+    const r=await callClaude({system,messages:[{role:'user',content:f.text}],effort:'medium',max_tokens:16000,schema});
+    const d=JSON.parse(r.text);
+    // Översätt referenser till transaktions-id och butiksnycklar
+    d.anomalies=(d.anomalies||[]).map(a=>({...a,ids:(a.refs||[]).map(x=>f.refs[x]).filter(Boolean)}));
+    d.new_categories=(d.new_categories||[]).map(c=>({...c,keys:(c.refs||[]).map(x=>f.mrefs[x]).filter(Boolean)})).filter(c=>c.keys.length&&c.name&&!getExpCats().includes(c.name));
+    d.budget_suggestions=(d.budget_suggestions||[]).filter(b=>getExpCats().includes(b.category)&&b.amount>0);
+    const all=getInsights();all[month]={d,txCount:f.txCount,t:Date.now(),model:r.served};sv('ai_insights',all);
+    if(silent)toast(`AI-analys av ${mLabel(month)} klar ✨`);
+  }catch(e){toast('AI-analysen misslyckades: '+e.message,'err')}
+  finally{window._analysing[month]=false;render()}
+}
+
+function insightCardHtml(month){
+  const txs=getTxs().filter(t=>t.month===month);
+  if(!txs.length)return'';
+  const ins=getInsights()[month];
+  const busy=window._analysing?.[month];
+  const rec=detectRecurring(month);
+  const recTot=rec.reduce((s,r)=>s+r.typical,0);
+  const recHtml=rec.length?`<details style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px"><summary style="list-style:none;cursor:pointer;font-size:12px;color:var(--sub)">🔁 Fasta kostnader & prenumerationer: <b style="color:var(--text)">${fmt(recTot)} kr/mån</b> (${rec.length} st)${rec.some(r=>r.status==='dyrare')?' · <span style="color:var(--amber)">något har blivit dyrare</span>':''} ›</summary>
+      <div style="margin-top:6px">${rec.map(r=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:4px 0">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(r.name)} <span style="color:var(--sub2)">· ${esc(r.cat)}</span></span>
+        <span style="font-family:var(--mono);white-space:nowrap;color:${r.status==='dyrare'?'var(--amber)':'var(--text)'}">${r.status==='dyrare'?`${fmt(r.current)} (var ${fmt(r.typical)})`:fmt(r.typical)}</span></div>`).join('')}</div></details>`:'';
+  if(!getApiKey())return rec.length?`<div class="card"><div class="card-inner" style="padding:12px 17px">${recHtml.replace('margin-top:10px;border-top:1px solid var(--line);padding-top:8px','')}</div></div>`:'';
+  if(busy)return`<div class="card"><div class="card-inner" style="padding:16px 17px;display:flex;align-items:center;gap:12px"><div class="imp-spin" style="width:22px;height:22px;margin:0;border-width:2px"></div><div style="font-size:13px;color:var(--sub)">AI analyserar ${mLabel(month)}…</div></div></div>`;
+  if(!ins)return`<div class="card"><div class="card-inner" style="padding:14px 17px">
+      <div class="card-lbl">✨ AI-analys</div>
+      <div style="font-size:13px;color:var(--sub);line-height:1.5;margin:4px 0 10px">Låt AI:n gå igenom månaden: vad som sticker ut mot ditt snitt, ovanliga dragningar, budgetförslag och bättre kategorier.</div>
+      <button class="btn-s" style="margin-top:0" onclick="runMonthAnalysis('${month}')">Analysera ${mLabel(month)}</button>${recHtml}
+    </div></div>`;
+  const d=ins.d;const stale=ins.txCount!==txs.length;
+  const B=getBudgets();
+  const icon={good:'✅',warn:'⚠️',info:'💡'};
+  let h=`<div class="card" style="border-color:rgba(191,143,255,.35)"><div class="card-inner" style="padding:14px 17px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <div class="card-lbl">✨ AI-analys</div>
+      <button onclick="runMonthAnalysis('${month}')" style="background:none;border:none;color:${stale?'var(--amber)':'var(--sub2)'};font-size:11px;cursor:pointer;font-family:var(--sans)">${stale?'Ny data — uppdatera':'Uppdatera'}</button>
+    </div>
+    <div style="font-size:15px;font-weight:600;line-height:1.4;margin:2px 0 6px">${esc(d.headline)}</div>
+    <div style="font-size:13px;color:var(--sub);line-height:1.6">${esc(d.summary)}</div>`;
+  (d.highlights||[]).forEach(x=>{h+=`<div style="display:flex;gap:9px;margin-top:10px"><span style="flex-shrink:0">${icon[x.kind]||'💡'}</span><div><div style="font-size:13px;font-weight:600">${esc(x.title)}</div><div style="font-size:12px;color:var(--sub);line-height:1.55">${esc(x.text)}</div></div></div>`});
+  if(d.anomalies?.length){
+    h+=`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:4px">Värt att kolla</div>`;
+    d.anomalies.forEach(a=>{
+      const t=getTxs().find(x=>x.id===a.ids?.[0]);
+      h+=`<div style="padding:6px 0;${t?'cursor:pointer':''}" ${t?`onclick="openEdit(${t.id})"`:''}><div style="font-size:13px;font-weight:500;color:var(--amber)">🔎 ${esc(a.title)}</div><div style="font-size:12px;color:var(--sub);line-height:1.5">${esc(a.reason)}${t?` <span style="color:var(--acc)">Visa ›</span>`:''}</div></div>`;
+    });
+    h+=`</div>`;
+  }
+  const bs=(d.budget_suggestions||[]).filter(b=>B[b.category]!==b.amount);
+  if(bs.length){
+    h+=`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:4px">Budgetförslag</div>`;
+    bs.forEach(b=>{h+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><div style="flex:1;min-width:0"><div style="font-size:13px">${esc(b.category)}: <b>${fmt(b.amount)} kr</b>${B[b.category]?` <span style="color:var(--sub2)">(nu ${fmt(B[b.category])})</span>`:''}</div><div style="font-size:11px;color:var(--sub2);line-height:1.4">${esc(b.reason)}</div></div>
+      <button class="chip" onclick="applyBudgetSuggestion(${jsArg(b.category)},${Math.round(b.amount)})">Använd</button></div>`});
+    h+=`</div>`;
+  }
+  if(d.new_categories?.length){
+    h+=`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:4px">Ny kategori?</div>`;
+    d.new_categories.forEach((c,i)=>{h+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><div style="flex:1;min-width:0"><div style="font-size:13px"><b>${esc(c.name)}</b> <span style="color:var(--sub2)">· ${c.keys.length} butik${c.keys.length>1?'er':''}</span></div><div style="font-size:11px;color:var(--sub2);line-height:1.4">${esc(c.reason)}</div></div>
+      <button class="chip" onclick="applyNewCategory('${month}',${i})">Skapa & flytta</button></div>`});
+    h+=`</div>`;
+  }
+  h+=recHtml+`<div style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-top:8px">${modelNameForId(ins.model)} · ${new Date(ins.t).toLocaleDateString('sv-SE')}</div></div></div>`;
+  return h;
+}
+function applyBudgetSuggestion(cat,amount){
+  const B=getBudgets();B[cat]=amount;sv('cat_budgets',B);toast(`Budget för ${cat}: ${fmt(amount)} kr ✓`);render();
+}
+function applyNewCategory(month,i){
+  const ins=getInsights()[month];const c=ins?.d.new_categories?.[i];if(!c)return;
+  if(!confirm(`Skapa kategorin "${c.name}" och flytta ${c.keys.length} butik${c.keys.length>1?'er':''} dit (alla månader)?`))return;
+  const cats=getExpCats();
+  if(!cats.includes(c.name)){const i2=cats.indexOf('Övrigt');cats.splice(i2>=0?i2:cats.length,0,c.name);sv('cats_exp',cats)}
+  // Matcha även avkortade varianter av samma butik (SEB: "SNUSHYLLAN S" / "K*SNUSHYLLAN")
+  const same=(a,b)=>a===b||(Math.min(a.length,b.length)>=6&&(a.startsWith(b)||b.startsWith(a)));
+  let n=0;
+  const txs=getTxs().map(t=>{if(t.type==='expense'&&c.keys.some(k=>same(k,mkeyBase(t)))){n++;if(t.mkey)setRule(t.mkey,'expense',c.name);return{...t,cat:c.name}}return t});
+  svTxs(txs);
+  ins.d.new_categories.splice(i,1);const all=getInsights();all[month]=ins;sv('ai_insights',all);
+  toast(`${n} transaktioner flyttade till ${c.name} ✓`);render();
 }
 
 function setBgtCat(c){_bgt.cat=_bgt.cat===c?null:c;_bgt.showAll=false;renderBudget()}
@@ -3992,6 +4182,8 @@ function saveImport(){
   const latest=Object.entries(perMonth).sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0]))[0]?.[0];
   if(latest){state.month=latest;if(state.screen!=='budget')showScreen('budget');else render()}
   toast(`${n} transaktioner importerade ✓${removed?` · ${removed} manuella ersatta`:''}`);
+  // Analysera månaden direkt i bakgrunden
+  if(latest&&getApiKey())setTimeout(()=>runMonthAnalysis(latest,true),600);
 }
 
 function undoImport(id){
@@ -4202,10 +4394,12 @@ function buildCtx(){
   });
   const topMerchants=Object.values(byMerchant).sort((a,b)=>b.sum-a.sum).slice(0,40)
     .map(m=>`${m.name} (${m.cat}): ${Math.round(m.sum)} kr, ${m.n} st`);
-  const recent=[...txs].filter(t=>t.type!=='transfer').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,150)
-    .map(t=>`${t.date} ${TYPE_LABEL[t.type]||''} ${t.cat}: "${displayDesc(t.desc)||''}" ${Math.round(t.amount)} kr [${accountName(t.account)}]`);
+  // Enskilda transaktioner hämtas med verktygen search_transactions/summarize_spending i stället för att allt skickas med
+  const rec=detectRecurring(state.month);
+  const ins=getInsights()[state.month];
   const describedSection=(topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'')+
-    (recent.length?`\n\nSENASTE TRANSAKTIONER (nyast först, överföringar exkluderade):\n${recent.join('\n')}`:'');
+    (rec.length?`\n\nÅTERKOMMANDE KOSTNADER (typiskt/mån):\n${rec.map(r=>`- ${r.name} (${r.cat}): ${r.typical} kr${r.status==='dyrare'?` — nu ${r.current} kr (dyrare)`:''}`).join('\n')}`:'')+
+    (ins?`\n\nSENASTE AI-ANALYS AV ${mLabel(state.month).toUpperCase()}: ${ins.d.headline} — ${ins.d.summary}`:'');
 
   return`Du är en personlig ekonomicoach. Du körs via Anthropics API; användaren kan byta modell (Opus, Sonnet, Fable) mellan meddelanden. Om användaren frågar vilken modell du är, svara Claude ${getAiModel().name}. Svara alltid på svenska. Var konkret och visuell.
 
@@ -4228,6 +4422,12 @@ Tillgängliga widgets:
 
 5. Insikt/tips-kort:
 <widget type="insight" icon="💡" title="Spartips" text="Du sparar i snitt 18% av din inkomst. Experter rekommenderar 20%. Öka med 550 kr/mån för att nå dit."/>
+
+VERKTYG — DU KAN SÖKA I ALLA TRANSAKTIONER:
+- search_transactions: hitta enskilda köp (butik, datum, belopp, kategori). Använd för "när köpte jag…", "hur ofta…", "vad kostade…", "visa mina köp på…".
+- summarize_spending: summor per kategori, butik eller månad för valfri period. Använd för trender, jämförelser och topplistor.
+- Använd verktygen för ALLA frågor om specifika belopp, butiker eller perioder — gissa aldrig siffror. Sammanfattningen nedan är bara en överblick.
+- Dagens datum: ${todayLocal()}. Månader = löneperioder (t.ex. "Sep 2026" = ${payPeriodLabel(periodShift(currentPayPeriod(),-1)).replace('Löneperiod ','')}).
 
 Regler:
 - Kombinera kort text + widgets för bästa upplevelse
@@ -4281,6 +4481,60 @@ function extractAndSaveMemory(reply){
   return reply.replace(/<memory>[\s\S]*?<\/memory>/g,'').trim();
 }
 
+// ── Verktyg för AI-chatten: sök och summera bland alla transaktioner ──
+const COACH_TOOLS=[
+  {name:'search_transactions',
+   description:'Söker bland användarens alla transaktioner (importerade och manuella). Returnerar matchande transaktioner (upp till limit) samt antal och summa för ALLA träffar. Belopp: utgift/sparande positivt = pengar ut, negativt = retur/återbetalning; inkomst positivt = pengar in.',
+   input_schema:{type:'object',additionalProperties:false,properties:{
+     query:{type:'string',description:'Fritext mot beskrivning/butik/Swish-namn, skiftlägesokänsligt (t.ex. "systembolaget", "uber"). Utelämna för alla.'},
+     category:{type:'string',description:'Exakt kategorinamn'},
+     type:{type:'string',enum:['expense','income','savings','transfer']},
+     from:{type:'string',description:'Från och med datum YYYY-MM-DD'},
+     to:{type:'string',description:'Till och med datum YYYY-MM-DD'},
+     min_amount:{type:'number'},max_amount:{type:'number'},
+     sort:{type:'string',enum:['date_desc','date_asc','amount_desc']},
+     limit:{type:'integer',description:'Max antal rader att visa (standard 30, max 100)'}}}},
+  {name:'summarize_spending',
+   description:'Summerar belopp grupperat per kategori, butik eller månad (löneperiod) för ett filter. Använd för trender, jämförelser mellan perioder och topplistor.',
+   input_schema:{type:'object',additionalProperties:false,required:['group_by'],properties:{
+     group_by:{type:'string',enum:['category','merchant','month']},
+     type:{type:'string',enum:['expense','income','savings','transfer'],description:'Standard: expense'},
+     category:{type:'string'},query:{type:'string'},
+     from:{type:'string',description:'YYYY-MM-DD'},to:{type:'string',description:'YYYY-MM-DD'},
+     top:{type:'integer',description:'Max antal grupper (standard 25)'}}}}
+];
+function coachFilter(inp){
+  const q=String(inp.query||'').toLowerCase().trim();
+  return getTxs().filter(t=>
+    (!inp.type||t.type===inp.type)&&(!inp.category||t.cat===inp.category)&&
+    (!inp.from||t.date>=inp.from)&&(!inp.to||t.date<=inp.to)&&
+    (inp.min_amount==null||Math.abs(t.amount)>=inp.min_amount)&&(inp.max_amount==null||Math.abs(t.amount)<=inp.max_amount)&&
+    (!q||(t.desc||'').toLowerCase().includes(q)||(contactName(t.desc)||'').toLowerCase().includes(q)||(t.cat||'').toLowerCase().includes(q)));
+}
+function runCoachTool(name,inp){
+  if(name==='search_transactions'){
+    let r=coachFilter(inp);
+    const total=r.reduce((s,t)=>s+t.amount,0);
+    const sort=inp.sort||'date_desc';
+    r.sort(sort==='amount_desc'?(a,b)=>Math.abs(b.amount)-Math.abs(a.amount):sort==='date_asc'?(a,b)=>a.date.localeCompare(b.date):(a,b)=>b.date.localeCompare(a.date));
+    const lim=Math.min(Math.max(inp.limit||30,1),100);
+    return{count:r.length,sum:Math.round(total),first_date:r.length?[...r].sort((a,b)=>a.date.localeCompare(b.date))[0].date:null,
+      last_date:r.length?[...r].sort((a,b)=>b.date.localeCompare(a.date))[0].date:null,
+      shown:Math.min(lim,r.length),
+      transactions:r.slice(0,lim).map(t=>({date:t.date,desc:displayDesc(t.desc),amount:Math.round(t.amount*100)/100,type:t.type,category:t.cat,account:accountName(t.account),month:t.month}))};
+  }
+  if(name==='summarize_spending'){
+    const r=coachFilter({...inp,type:inp.type||'expense'});
+    const g={};
+    r.forEach(t=>{const k=inp.group_by==='month'?t.month:inp.group_by==='merchant'?displayDesc(t.desc)||t.cat:t.cat;const x=g[k]||(g[k]={key:k,sum:0,count:0});x.sum+=t.amount;x.count++});
+    let rows=Object.values(g);
+    rows.sort(inp.group_by==='month'?(a,b)=>a.key.localeCompare(b.key):(a,b)=>b.sum-a.sum);
+    rows=rows.slice(0,Math.min(inp.top||25,60)).map(x=>({[inp.group_by]:inp.group_by==='month'?`${x.key} (${mLabel(x.key)})`:x.key,sum:Math.round(x.sum),count:x.count}));
+    return{total:Math.round(r.reduce((s,t)=>s+t.amount,0)),transactions:r.length,groups:rows};
+  }
+  return{error:'okänt verktyg'};
+}
+
 function sendChip(txt){
   document.getElementById('ai-inp').value=txt;
   autoResizeAi(document.getElementById('ai-inp'));
@@ -4315,10 +4569,33 @@ async function sendAi(){
     body.fallbacks='default';
     headers['anthropic-beta']='server-side-fallback-2026-07-01';
   }
+  body.tools=COACH_TOOLS;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body:JSON.stringify(body)});
-    const data=await res.json();
+    // Verktygsloop: modellen kan söka/summera i transaktionerna flera gånger innan den svarar
+    const convo=[...msgs];let data=null;const usage={input_tokens:0,output_tokens:0};let cost=0;
+    for(let round=0;round<6;round++){
+      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body:JSON.stringify({...body,messages:convo})});
+      data=await res.json();
+      if(data.error)break;
+      if(data.usage){usage.input_tokens+=data.usage.input_tokens||0;usage.output_tokens+=data.usage.output_tokens||0;cost+=calcCost(data.usage.input_tokens||0,data.usage.output_tokens||0,data.model||model.id)}
+      if(data.stop_reason!=='tool_use')break;
+      // Skicka tillbaka assistentens block oförändrade (inkl. tänkande). Efter en reservmodells övertagande
+      // gäller bara blocken efter sista "fallback"-markören.
+      let content=data.content||[];
+      const lf=content.map(b=>b.type).lastIndexOf('fallback');
+      if(lf>=0)content=content.slice(lf+1);
+      convo.push({role:'assistant',content});
+      const calls=content.filter(b=>b.type==='tool_use');
+      const el=document.getElementById(tid);
+      if(el)el.textContent=calls.map(c=>c.name==='search_transactions'?`🔎 Söker${c.input?.query?` "${c.input.query}"`:''}${c.input?.category?` i ${c.input.category}`:''}…`:`📊 Summerar per ${({category:'kategori',merchant:'butik',month:'månad'})[c.input?.group_by]||'kategori'}…`).join(' ');
+      convo.push({role:'user',content:calls.map(c=>{
+        let out;try{out=JSON.stringify(runCoachTool(c.name,c.input||{}))}catch(e){out=JSON.stringify({error:e.message})}
+        return{type:'tool_result',tool_use_id:c.id,content:out.slice(0,20000)};
+      })});
+    }
     document.getElementById(tid)?.remove();
+    if(!data)throw new Error('inget svar');
+    data._cost=cost;data._usage=usage;
     const raw=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     if(data.error){dropPending();addAiMsg('⚠️ '+data.error.message,'bot')}
     else if(data.stop_reason==='refusal'||!raw){dropPending();addAiMsg(data.stop_reason==='refusal'?'⚠️ '+modelNameForId(data.model)+' avböjde att svara på frågan. Prova att formulera om den eller byt modell.':'⚠️ Tomt svar från AI:n','bot')}
@@ -4328,10 +4605,7 @@ async function sendAi(){
       persistAiHistory();
       addAiMsg(reply,'bot');
       // Beräkna och visa kostnad (prissatt efter modellen som faktiskt svarade)
-      if(data.usage){
-        const cost=calcCost(data.usage.input_tokens,data.usage.output_tokens,data.model||model.id);
-        addCostBadge(cost,data.usage,data.model||model.id,model.id,effort);
-      }
+      if(data._usage.input_tokens)addCostBadge(data._cost,data._usage,data.model||model.id,model.id,effort);
     }
   }catch{
     document.getElementById(tid)?.remove();
