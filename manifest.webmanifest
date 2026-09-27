@@ -1,0 +1,23 @@
+{
+  "id": "./",
+  "name": "Ekonomi",
+  "short_name": "Ekonomi",
+  "description": "Privat budget, transaktioner och förmögenhet med AI-analys",
+  "lang": "sv",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Importera kontoutdrag", "short_name": "Importera", "url": "./?open=import", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "AI-coach", "url": "./?open=ai", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
