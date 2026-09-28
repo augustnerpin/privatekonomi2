@@ -131,6 +131,7 @@ export async function categorize(s: Obj, rows: Obj[], accOf: (acc: string) => Ob
   const rules = s.merchant_rules || {};
   const todo: Obj[] = [];
   for (const g of list) {
+    if (rules[g.mkey]?.tags?.length) g.tags = [...rules[g.mkey].tags]; // regler kan sätta taggar (även när kontorollen avgör kategorin)
     const byRole = roleCat(s, accOf(g.account), g);
     if (byRole) { Object.assign(g, byRole); continue; }
     const rule = rules[g.mkey];
@@ -154,7 +155,7 @@ export function toRows(uid: string, groups: Obj[], s: Obj, firstId: number) {
     out.push({
       user_id: uid, id: firstId + n++, type: g.type, amount: storedAmount(g.type, r.raw), description: r.desc, category: g.cat,
       tx_date: r.date, month: periodForDate(r.date, s.pay_periods || []), account: r.account, source: 'bank', import_id: null,
-      hash: 'eb:' + r.ref, mkey: g.mkey, extra: { bank_ref: r.ref, ...(g.conf === 'low' ? { review: true } : {}) }, deleted: false,
+      hash: 'eb:' + r.ref, mkey: g.mkey, extra: { bank_ref: r.ref, ...(g.conf === 'low' ? { review: true } : {}), ...(g.tags?.length ? { tags: g.tags } : {}) }, deleted: false,
     });
   }
   return out;

@@ -1346,6 +1346,8 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
     <div class="field"><label>Belopp (kr)</label><input type="number" id="tx-amt" placeholder="0" inputmode="decimal"></div>
     <div class="field"><label>Beskrivning</label><input type="text" id="tx-desc" placeholder="Valfritt"></div>
     <div class="field"><label>Kategori</label><select id="tx-cat"></select></div>
+    <div class="field"><label>Taggar <span style="font-weight:400;color:var(--sub2)">(kommaseparerade, t.ex. London, Semester)</span></label><input type="text" id="tx-tags" list="tag-list" placeholder="Valfritt"><datalist id="tag-list"></datalist>
+      <label id="tx-tag-rule-row" style="display:none;gap:8px;align-items:center;font-size:12px;color:var(--sub);margin-top:6px"><input type="checkbox" id="tx-tag-rule"> Tagga även framtida köp från samma butik</label></div>
     <div class="field" id="tx-contact-field" style="display:none"><label>Vem är <span id="tx-contact-nr"></span>?</label>
       <input type="text" id="tx-contact" placeholder="T.ex. Anna (sambo)">
       <div style="font-size:11px;color:var(--sub2);margin-top:5px;line-height:1.5">Namnet visas i stället för numret överallt och hjälper AI:n att kategorisera.</div></div>
@@ -2200,6 +2202,8 @@ function openManualAdd(){
   setType('expense');
   document.getElementById('tx-amt').value='';
   document.getElementById('tx-desc').value='';
+  document.getElementById('tx-tags').value='';document.getElementById('tx-tag-rule-row').style.display='none';
+  document.getElementById('tag-list').innerHTML=allTags().map(x=>`<option value="${esc(x.tag)}">`).join('');
   fillAccountSelect(document.getElementById('tx-acc'));
   document.getElementById('tx-contact-field').style.display='none';
   const d=new Date();
@@ -2218,6 +2222,10 @@ function openEdit(id){
   document.getElementById('tx-amt').value=tx.amount;
   document.getElementById('tx-desc').value=tx.desc||'';
   document.getElementById('tx-date').value=tx.date;
+  document.getElementById('tx-tags').value=(tx.tags||[]).join(', ');
+  document.getElementById('tag-list').innerHTML=allTags().map(x=>`<option value="${esc(x.tag)}">`).join('');
+  document.getElementById('tx-tag-rule-row').style.display=tx.mkey?'flex':'none';
+  document.getElementById('tx-tag-rule').checked=!!(tx.mkey&&getRules()[tx.mkey]?.tags?.length);
   fillAccountSelect(document.getElementById('tx-acc'),tx.account);
   const num=descNumber(tx.desc);
   document.getElementById('tx-contact-field').style.display=num?'block':'none';
@@ -2260,6 +2268,12 @@ function saveTx(){
     month:periodForDate(dateVal),
     account:document.getElementById('tx-acc').value
   };
+  const tags=parseTags(document.getElementById('tx-tags').value);
+  if(tags.length)obj.tags=tags;else delete obj.tags;
+  // Regel: tagga även framtida köp från samma butik
+  if(obj.mkey&&document.getElementById('tx-tag-rule-row').style.display!=='none'){
+    if(document.getElementById('tx-tag-rule').checked)setRuleTags(obj.mkey,tags);else if(getRules()[obj.mkey]?.tags)setRuleTags(obj.mkey,[]);
+  }
   if(state.editId){txs=txs.map(t=>t.id===state.editId?obj:t)}
   else{txs.push(obj)}
   // Namn på Swish-/kontonummer
@@ -2761,14 +2775,14 @@ function txRowHtml(tx,clickable=true){
   return`<div class="txi${tx.type==='transfer'?' trf':''}"${clickable?` onclick="openEdit(${tx.id})"`:' style="cursor:default"'}>
     <div class="txav" style="background:${bg}">${tx.type==='transfer'?'⇄':esc(catIcon(tx.cat))}</div>
     <div class="txi-info">
-      <div class="txi-name">${esc(displayDesc(tx.desc)||tx.cat)}${accTag}</div>
+      <div class="txi-name">${esc(displayDesc(tx.desc)||tx.cat)}${accTag}${(tx.tags||[]).map(g=>`<span class="acc-tag" style="color:var(--acc)">#${esc(g)}</span>`).join('')}</div>
       <div class="txi-meta">${esc(tx.cat)} · ${tx.date.slice(5)}${contactName(tx.desc)?` · ${esc(tx.desc)}`:''}</div>
     </div>
     <div class="txi-amt" style="color:${col}">${sign}${fmt(Math.abs(tx.amount))}</div>
   </div>`;
 }
 
-let _bgt={cat:null,q:'',showAll:false,showTrf:false};
+let _bgt={cat:null,tag:null,q:'',showAll:false,showTrf:false};
 
 function renderBudget(){
   const month=state.month;
@@ -2881,12 +2895,14 @@ function renderBudget(){
   }
 
   const nTrf=txs.filter(t=>t.type==='transfer').length;
+  html+=tagsCardHtml();
   html+=`<div class="sec"><span class="sec-t">Transaktioner</span><span class="sec-sub" id="bgt-count"></span></div>
     <div class="bgt-tools">
       <input class="bgt-search" id="bgt-q" type="search" placeholder="Sök butik, kategori, belopp…" value="${esc(_bgt.q)}" oninput="_bgt.q=this.value;_bgt.showAll=false;renderBgtList()">
       ${nTrf?`<span class="chip${_bgt.showTrf?' on':''}" onclick="_bgt.showTrf=!_bgt.showTrf;renderBudget()">⇄ ${nTrf}</span>`:''}
     </div>
     ${_bgt.cat?`<div style="padding:0 16px 10px"><span class="chip on" onclick="setBgtCat(null)">${esc(_bgt.cat)} ✕</span></div>`:''}
+    ${_bgt.tag?`<div style="padding:0 16px 10px"><span class="chip on" onclick="setBgtTag(${jsArg(_bgt.tag)})">#${esc(_bgt.tag)} · alla månader ✕</span></div>${tagSummaryHtml(_bgt.tag)}`:''}
     <div id="bgt-list"></div>`;
   document.getElementById('bgt-content').innerHTML=html;groupBlocks(document.getElementById('bgt-content'),'cols2');
   renderBgtList();
@@ -3290,7 +3306,8 @@ function openBgtCat(c){_bgt.cat=c;_bgt.q='';_bgt.showAll=false;showScreen('budge
 
 function renderBgtList(){
   const el=document.getElementById('bgt-list');if(!el)return;
-  let txs=getTxs().filter(t=>t.month===state.month);
+  // Tagg vald: alla månader (t.ex. vad en resa kostade), annars vald månad
+  let txs=_bgt.tag?getTxs().filter(t=>(t.tags||[]).includes(_bgt.tag)):getTxs().filter(t=>t.month===state.month);
   if(!_bgt.showTrf)txs=txs.filter(t=>t.type!=='transfer');
   if(_bgt.cat){
     const grp=getGroups().find(g=>g.name===_bgt.cat);
@@ -3298,10 +3315,10 @@ function renderBgtList(){
     txs=txs.filter(t=>t.type==='expense'&&cats.has(t.cat));
   }
   const q=_bgt.q.trim().toLowerCase();
-  if(q)txs=txs.filter(t=>(t.desc||'').toLowerCase().includes(q)||(contactName(t.desc)||'').toLowerCase().includes(q)||(t.cat||'').toLowerCase().includes(q)||String(Math.round(Math.abs(t.amount))).includes(q.replace(/\s/g,'')));
+  if(q)txs=txs.filter(t=>(t.tags||[]).some(g=>g.toLowerCase().includes(q.replace(/^#/,'')))||(t.desc||'').toLowerCase().includes(q)||(contactName(t.desc)||'').toLowerCase().includes(q)||(t.cat||'').toLowerCase().includes(q)||String(Math.round(Math.abs(t.amount))).includes(q.replace(/\s/g,'')));
   txs.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
   const cnt=document.getElementById('bgt-count');
-  if(cnt)cnt.textContent=`${txs.length} st`+(_bgt.cat||q?` · ${fmt(txs.reduce((s,t)=>s+(t.type==='income'?0:t.amount),0))} kr`:'');
+  if(cnt)cnt.textContent=`${txs.length} st`+(_bgt.cat||_bgt.tag||q?` · ${fmt(txs.reduce((s,t)=>s+(t.type==='income'?0:t.amount),0))} kr`:'');
   if(!txs.length){el.innerHTML=`<div class="empty" style="padding:30px 24px"><div class="empty-t">Inga träffar.</div></div>`;return}
   const LIMIT=60;
   const shown=_bgt.showAll?txs:txs.slice(0,LIMIT);
@@ -4959,7 +4976,7 @@ const svImports=v=>sv('imports',v);
 const getRules=()=>ld('merchant_rules',{});
 function setRule(mkey,type,cat){
   if(!mkey)return;
-  const r=getRules();r[mkey]={type,cat,t:Date.now()};sv('merchant_rules',r);
+  const r=getRules();r[mkey]={...(r[mkey]?.tags?{tags:r[mkey].tags}:{}),type,cat,t:Date.now()};sv('merchant_rules',r); // taggar på regeln behålls
 }
 // Användarens förklaringar till AI:n (svar på frågor + fria instruktioner). Följs vid alla importer.
 function getImportNotes(){return ld('ai_import_notes',[])}
@@ -5840,8 +5857,9 @@ function saveImport(){
     g.rows.forEach(r=>{
       // Utgifter/sparande lagras som positiva belopp; retur = negativ utgift
       const amount=g.type==='income'?r.amount:g.type==='transfer'?r.amount:-r.amount;
+      const rt=getRules()[g.mkey]?.tags;
       txs.push({id:base+(n++),type:g.type,amount,desc:r.desc,cat:g.cat,date:r.date,month:periodForDate(r.date),
-        account:r.account,source:'import',importId:impId,hash:r.hash,mkey:g.mkey});
+        account:r.account,source:'import',importId:impId,hash:r.hash,mkey:g.mkey,...(rt?.length?{tags:[...rt]}:{})});
     });
     setRule(g.mkey,g.type,g.cat);
   });
@@ -6521,6 +6539,30 @@ function loanRateWarning(l){
   const x=l.extra||{};if(x.rate_type!=='rörlig'||!x.rate_change_date)return'';
   const months=(parseLocalDate(x.rate_change_date)-parseLocalDate(todayLocal()))/864e5/30.4;
   return months>3?`Markerat som rörlig ränta men villkorsändringen ${x.rate_change_date} ligger ${Math.round(months)} mån fram – är lånet egentligen bundet?`:'';
+}
+
+// ═══════════════════════════════════════════
+// TAGGAR — flera per transaktion (tx.tags, synkas i transactions.extra.tags). Filter och summering per tagg;
+// inlärda regler kan sätta taggar (merchant_rules[mkey].tags).
+// ═══════════════════════════════════════════
+const parseTags=s=>[...new Set(String(s||'').split(',').map(x=>x.trim()).filter(Boolean))];
+function allTags(){
+  const m={};getTxs().forEach(t=>(t.tags||[]).forEach(g=>{const x=m[g]||(m[g]={tag:g,n:0,sum:0,from:t.date,to:t.date});x.n++;if(t.type==='expense')x.sum+=t.amount;if(t.date<x.from)x.from=t.date;if(t.date>x.to)x.to=t.date}));
+  return Object.values(m).sort((a,b)=>b.to.localeCompare(a.to));
+}
+function setRuleTags(mkey,tags){if(!mkey)return;const r=getRules();if(!r[mkey])return;if(tags.length)r[mkey].tags=tags;else delete r[mkey].tags;sv('merchant_rules',r)}
+function setBgtTag(t){_bgt.tag=_bgt.tag===t?null:t;_bgt.cat=null;_bgt.showAll=false;renderBudget();setTimeout(()=>document.getElementById('bgt-list')?.scrollIntoView({behavior:'smooth'}),50)}
+function tagsCardHtml(){
+  const tags=allTags();if(!tags.length)return'';
+  return`<div class="sec"><span class="sec-t">Taggar</span><span class="sec-sub">${tap()} för att se alla</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px">${tags.map(x=>`<span class="chip${_bgt.tag===x.tag?' on':''}" onclick="setBgtTag(${jsArg(x.tag)})">#${esc(x.tag)} · ${fmt(x.sum)} kr</span>`).join('')}</div>`;
+}
+function tagSummaryHtml(tag){
+  const txs=getTxs().filter(t=>(t.tags||[]).includes(tag)),byCat={};
+  txs.filter(t=>t.type==='expense').forEach(t=>byCat[t.cat]=(byCat[t.cat]||0)+t.amount);
+  const sum=Object.values(byCat).reduce((a,b)=>a+b,0),dates=txs.map(t=>t.date).sort();
+  return`<div class="card" style="margin:0 16px 10px"><div class="card-inner"><div class="card-lbl">#${esc(tag)} · ${txs.length} transaktioner${dates.length?` · ${dates[0]} – ${dates[dates.length-1]}`:''}</div>
+    <div class="card-big">${fmt(sum)} kr</div>${Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0"><span style="color:var(--sub)">${esc(c)}</span><span style="font-family:var(--mono)">${fmt(v)}</span></div>`).join('')}</div></div>`;
 }
 
 const COACH_TOOLS=[

@@ -204,3 +204,17 @@ test('bolånebetalningen delas i ränta (utgift) och amortering (sparande)', asy
   // Utan kategorin Amortering: ingen uppdelning
   assert.equal(splitMortgageRows({ ...s, cats_sav: ['Avanza'] }, rows, loans, () => n++).split, 0);
 });
+
+test('taggar från inlärda regler följer med nya bankrader (även när kontorollen avgör kategorin)', async () => {
+  const S4 = { ...S, merchant_rules: { 'sas|ut': { type: 'expense', cat: 'Övrigt', t: 1, tags: ['London'] } } };
+  const rows = [{ ...mapTx(ebTx(3000, 'DBIT', '2026-10-01', 'SAS')), account: 'lonekonto' }];
+  const out = toRows('u', await categorize(S4, rows, () => ({ kind: 'bank' })), S4, 1);
+  assert.deepEqual(out[0].extra.tags, ['London']); assert.equal(out[0].category, 'Övrigt');
+});
+
+test('regeltaggar även för rader där kontorollen avgör kategorin', async () => {
+  const S5 = { ...S, merchant_rules: { '#51960273264|ut': { type: 'transfer', cat: 'Kreditkortsbetalning', t: 1, tags: ['AMEX'] } } };
+  const rows = [{ ...mapTx(ebTx(500, 'DBIT', '2026-10-01', '51960273264')), account: 'amexk' }];
+  const out = toRows('u', await categorize(S5, rows, () => ({ kind: 'bank', role: 'card_payment' })), S5, 1);
+  assert.deepEqual([out[0].category, out[0].extra.tags], ['Kreditkortsbetalning', ['AMEX']]);
+});
