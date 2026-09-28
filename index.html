@@ -1422,6 +1422,17 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
   </div>
 </div>
 
+<!-- ═══ UPPDELNING AV BOLÅNEDRAGNINGAR ═══ -->
+<div class="overlay" id="split-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Dela upp bolånedragningar</div>
+    <div id="split-body"></div>
+    <button class="btn-p" id="split-apply" onclick="applySplitBackfill()">Dela upp markerade</button>
+    <button class="btn-s" onclick="closeOverlay('split-modal')">Avbryt</button>
+  </div>
+</div>
+
 <!-- ═══ PAY PERIOD MODAL ═══ -->
 <div class="overlay" id="pp-modal">
   <div class="modal">
@@ -2391,7 +2402,8 @@ function loansHtml(latest){
       <div class="txav" style="background:var(--red2);color:var(--red)">🏠</div>
       <div class="txi-info"><div class="txi-name">${esc(l.name)}${l.lender?` <span style="font-size:11px;color:var(--sub2)">${esc(l.lender)}</span>`:''}</div>
         <div class="txi-meta">${rate!=null?String(rate).replace('.',',')+' %':'Ränta saknas'}${im!=null?` · ränta ca ${fmt(im)} kr/mån`:''}${l.amortization?` · amortering ${fmt(l.amortization)} kr/mån`:''}</div>
-        ${terms?`<div class="txi-meta" style="${soon.length?'color:var(--amber)':''}">${esc(terms)}${soon.length?` — om ${Math.min(...soon)} dagar`:''}</div>`:''}</div>
+        ${terms?`<div class="txi-meta" style="${soon.length?'color:var(--amber)':''}">${esc(terms)}${soon.length?` — om ${Math.min(...soon)} dagar`:''}</div>`:''}
+        ${loanRateWarning(l)?`<div class="txi-meta" style="color:var(--amber)">⚠️ ${esc(loanRateWarning(l))}</div>`:''}</div>
       <div style="text-align:right"><div class="txi-amt" style="color:var(--red)">${d?'−'+fmt(d.value)+' kr':'—'}</div>${d?`<div class="txi-meta">${esc(d.date)}</div>`:''}</div>
     </div>`}).join('');
   const debt=_loans.filter(l=>!l.netted_in_assets).reduce((s,l)=>s+(loanDebt(l)?.value||0),0);
@@ -2403,7 +2415,8 @@ function loansHtml(latest){
   return`<div class="sec"><span class="sec-t">Lån & skulder</span>${_sbUser?'':'<span class="sec-sub">logga in för att visa</span>'}</div>
   <div class="txl">${rows||`<div style="padding:14px 17px;font-size:13px;color:var(--sub);line-height:1.5">Inga lån inlagda. Lägg in bolånet så räknar appen räntekostnad, amortering och förmögenhet efter skulder, och påminner dig före villkorsändringsdagen.</div>`}
     ${foot.length?`<div style="padding:10px 17px;font-size:12px;color:var(--sub);line-height:1.6;border-top:1px solid var(--line)">${foot.join('<br>')}</div>`:''}</div>
-  <div style="display:flex;gap:8px;margin-top:8px"><button class="btn-s" style="flex:1;margin:0" onclick="openLoanModal()">+ Lägg till lån</button><button class="btn-s" style="flex:1;margin:0" onclick="document.getElementById('loan-doc').click()">📄 Läs låneutdrag</button></div>`;
+  <div style="display:flex;gap:8px;margin-top:8px"><button class="btn-s" style="flex:1;margin:0" onclick="openLoanModal()">+ Lägg till lån</button><button class="btn-s" style="flex:1;margin:0" onclick="document.getElementById('loan-doc').click()">📄 Läs låneutdrag</button></div>
+  ${_loans.length?`<button class="btn-s" style="margin:8px 0 0" onclick="openSplitBackfill()">✂️ Dela upp bolånedragningar bakåt (ränta + amortering)</button>`:''}`;
 }
 function openLoanModal(id,pre){
   const l=id?_loans.find(x=>x.id===id):null;_loanEdit=l?l.id:null;
@@ -2421,6 +2434,7 @@ function openLoanModal(id,pre){
   g('lm-account').innerHTML='<option value="">—</option>'+accs.map(a=>`<option value="${esc(a.id)}"${a.id===v.account?' selected':''}>${esc(a.name)}</option>`).join('');
   g('lm-secured').innerHTML='<option value="">Ingen</option>'+cats.map(c=>`<option value="${esc(c.key)}"${c.key===v.secured?' selected':''}>${esc(c.label)}</option>`).join('');
   g('lm-netted').checked=!!v.netted;g('lm-delete').style.display=l?'':'none';
+  if(l&&loanRateWarning(l))g('lm-hint').textContent='⚠️ '+loanRateWarning(l);
   openOverlay('loan-modal');
 }
 const loanNum=v=>{const n=parseFloat(String(v??'').replace(/\s/g,'').replace(',','.'));return isFinite(n)?n:null};
@@ -5831,6 +5845,12 @@ function saveImport(){
     });
     setRule(g.mkey,g.type,g.cat);
   });
+  // Bolånebetalningen: ränta + amortering (samma regler som bankhämtningen)
+  const byNum=mortgageExpected();
+  if(Object.keys(byNum).length){
+    let sid=nextTxId(txs);
+    txs.filter(t=>t.importId===impId).forEach(t=>{const sp=mortgageSplitOf(t,byNum);if(sp){ensureAmortCat();applyMortgageSplit(txs,t,sp,()=>sid++)}});
+  }
   // Kortfakturan för perioden: de väntande AMEX-raderna ersätts av fakturans köp (blir kortbetalningar)
   const settled=[];
   const cardImport=on.some(g=>g.rows.some(r=>getAccounts().find(a=>a.id===r.account)?.kind==='card'));
@@ -6197,10 +6217,12 @@ const ymdOf=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+St
 // raderna är märkta (äldre rader saknar ofta text, så butiksnyckeln räcker inte). off = typisk dag i perioden.
 function fixedCats(ym){
   const txs=getTxs(),prev=[1,2,3,4].map(i=>periodShift(ym,-i)),out={};
-  const cats=new Set(txs.filter(t=>t.type==='expense'&&prev.includes(t.month)).map(t=>t.cat));
+  // Utgifter + amortering (sparande men en fast dragning varje månad)
+  const isCost=t=>t.type==='expense'||t.type==='savings'&&t.cat===AMORT_CAT;
+  const cats=new Set(txs.filter(t=>isCost(t)&&prev.includes(t.month)).map(t=>t.cat));
   cats.delete(PENDING_CARD_CAT);
   for(const c of cats){
-    const per=prev.map(p=>txs.filter(t=>t.month===p&&t.type==='expense'&&t.cat===c&&t.amount>0));
+    const per=prev.map(p=>txs.filter(t=>t.month===p&&isCost(t)&&t.cat===c&&t.amount>0));
     const vals=per.map(a=>a.reduce((s,t)=>s+t.amount,0)).filter(v=>v>0);
     if(vals.length<3||median(per.filter(a=>a.length).map(a=>a.length))>2)continue;
     const med=median(vals);if(vals.filter(v=>v>=med*0.7&&v<=med*1.3).length<vals.length-1)continue;
@@ -6438,6 +6460,68 @@ function expectFixed(i){const x=getFixedCosts()[i];if(!x)return;const l=getExpec
   if(l.some(e=>e.cat===x.cat&&e.name===x.name)){toast('Finns redan','warn');return}
   const type=getSavCats().includes(x.cat)?'savings':'expense';
   l.push({id:'exp_'+Date.now().toString(36),name:x.name,type,cat:x.cat,days:5,enabled:true});saveExpected(l);toast(`Notis om ${x.name} uteblir ✓`)}
+
+// ═══════════════════════════════════════════
+// BOLÅNEBETALNINGEN I RÄNTA + AMORTERING — samma regler som splitMortgageRows i supabase/functions/bank/core.ts
+// Pengar till kontot lånen "dras från" med belopp nära ränta (skuld × ränta / 12) + amortering delas i
+// ränta (utgift "Boende (Lån)") och amortering (sparande "Amortering"). Originalet tas bort (synkas som borttaget,
+// bankreferensen finns kvar så att det inte hämtas igen); delarna får parent_id.
+// ═══════════════════════════════════════════
+function mortgageExpected(){
+  const pay={};_loans.forEach(l=>{const a=l.extra?.pay_account;if(!a)return;const d=loanDebt(l),x=pay[a]||(pay[a]={interest:0,amort:0});
+    if(d&&l.interest_pct!=null)x.interest+=Math.round(d.value*(+l.interest_pct)/100/12);x.amort+=+l.amortization||0});
+  const byNum={};getAccounts().forEach(a=>{if(pay[a.id]&&a.number)byNum[String(a.number).replace(/\D/g,'')]={account:a.id,...pay[a.id]}});
+  return byNum;
+}
+// tolerance: 5 % vid import (samma villkor som idag), bredare vid uppdelning bakåt (räntan har ändrats över tid)
+function mortgageSplitOf(t,byNum,tol=0.05){
+  if(t.parent_id||t.type!=='expense'&&t.type!=='transfer')return null;
+  const amount=t.type==='expense'?t.amount:-t.amount;if(!(amount>0))return null;
+  const n=descNumber(t.desc),m=n?byNum[n]:null;
+  // Äldre rader saknar ofta text: då räcker kategorin "Boende (Lån)" om det bara finns ett betalkonto
+  const only=Object.values(byNum);const hit=m||(tol>0.05&&!t.desc&&t.cat==='Boende (Lån)'&&only.length===1?only[0]:null);
+  if(!hit||hit.account===t.account)return null;
+  const expected=hit.interest+hit.amort;if(!(hit.amort>0)||Math.abs(amount-expected)>Math.max(100,expected*tol))return null;
+  if(amount<hit.amort)return null;
+  return{interest:Math.round((amount-hit.amort)*100)/100,amortization:hit.amort,expected};
+}
+function ensureAmortCat(){const c=getSavCats();if(!c.includes(AMORT_CAT)){sv('cats_sav',[...c,AMORT_CAT])}}
+// Ersätter t med två delar i txs (muterar listan). Returnerar true om den delades.
+function applyMortgageSplit(txs,t,sp,idFn){
+  const i=txs.indexOf(t);if(i<0)return false;
+  const base={...t,parent_id:t.id,split_of:2,...(t.mkey?{split_mkey:t.mkey}:{}),via:'app'};delete base.hash;delete base.bank_ref;
+  const a={...base,id:idFn(),type:'expense',cat:getExpCats().includes('Boende (Lån)')?'Boende (Lån)':t.cat,amount:sp.interest,split_index:1,part:'ränta'};
+  const b={...base,id:idFn(),type:'savings',cat:AMORT_CAT,amount:sp.amortization,split_index:2,part:'amortering'};
+  txs.splice(i,1,a,b);return true;
+}
+// Uppdelning bakåt med förhandsgranskning
+let _splitCand=[];
+function openSplitBackfill(){
+  const byNum=mortgageExpected();
+  if(!Object.keys(byNum).length){toast('Lägg in lånen med "Dras från konto" (och kontots nummer) först','warn');return}
+  _splitCand=getTxs().map(t=>({t,sp:mortgageSplitOf(t,byNum,0.3)})).filter(x=>x.sp).sort((a,b)=>b.t.date.localeCompare(a.t.date));
+  const exp=Object.values(byNum)[0];
+  document.getElementById('split-body').innerHTML=_splitCand.length?`<div style="font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:10px">Amorteringen ${fmt(exp.amort)} kr/mån (dina lån idag) blir sparande i "Amortering"; resten av varje dragning blir ränta i "Boende (Lån)". Äldre räntor kan ha varit andra, så kontrollera raderna.</div>
+    <div style="max-height:50vh;overflow:auto">${_splitCand.map((x,i)=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:6px 0;border-top:1px solid var(--line)"><input type="checkbox" class="split-cb" data-i="${i}" checked>
+      <span style="flex:1;min-width:0">${esc(x.t.date)} · ${esc(displayDesc(x.t.desc)||x.t.cat)}<br><span style="color:var(--sub2)">${fmt(x.t.amount)} kr → ränta ${fmt(x.sp.interest)} + amortering ${fmt(x.sp.amortization)}</span></span></label>`).join('')}</div>`
+    :'<div style="font-size:13px;color:var(--sub)">Inga dragningar att dela upp (redan uppdelade eller för långt från ränta + amortering).</div>';
+  document.getElementById('split-apply').style.display=_splitCand.length?'':'none';
+  openOverlay('split-modal');
+}
+function applySplitBackfill(){
+  const pick=[...document.querySelectorAll('.split-cb')].filter(c=>c.checked).map(c=>_splitCand[+c.dataset.i]).filter(Boolean);
+  if(!pick.length){closeOverlay('split-modal');return}
+  ensureAmortCat();
+  const txs=getTxs();let id=nextTxId(txs),n=0;
+  pick.forEach(x=>{const t=txs.find(y=>y.id===x.t.id);if(t&&applyMortgageSplit(txs,t,x.sp,()=>id++))n++});
+  svTxs(txs);closeOverlay('split-modal');toast(`${n} dragningar uppdelade i ränta + amortering ✓`);render();
+}
+// Varning: "Rörlig" men villkorsändringsdagen ligger mer än 3 månader fram → troligen bundet lån
+function loanRateWarning(l){
+  const x=l.extra||{};if(x.rate_type!=='rörlig'||!x.rate_change_date)return'';
+  const months=(parseLocalDate(x.rate_change_date)-parseLocalDate(todayLocal()))/864e5/30.4;
+  return months>3?`Markerat som rörlig ränta men villkorsändringen ${x.rate_change_date} ligger ${Math.round(months)} mån fram – är lånet egentligen bundet?`:'';
+}
 
 const COACH_TOOLS=[
   {name:'search_transactions',

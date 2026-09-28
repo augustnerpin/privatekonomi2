@@ -12,7 +12,7 @@ import { computeNetWorth, DEF_NW_CATS } from '../_shared/networth.ts';
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
 import { buildDigest, missingExpected } from './notify.ts';
-import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals, loanUpdates } from './core.ts';
+import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals, loanUpdates, splitMortgageRows } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
 const EB = 'https://api.enablebanking.com';
@@ -200,8 +200,11 @@ async function syncLocked(uid: string, psu: Psu) {
     const accOf = (id: string) => s.accounts.find((x: Obj) => x.id === id);
     const groups = await categorize(s, newRows, accOf, (g) => aiCategorize(s, g));
     const top = await must<Obj[]>(db.from('transactions').select('id').eq('user_id', uid).order('id', { ascending: false }).limit(1));
-    const rows = toRows(uid, groups, s, Math.max((top[0]?.id || 0) + 1, Date.now()));
+    let rows = toRows(uid, groups, s, Math.max((top[0]?.id || 0) + 1, Date.now()));
     markSavingsWithdrawals(s, rows, accOf);
+    // Bolånebetalningen delas i ränta + amortering (originalet sparas som borttaget, med bankreferensen)
+    let nid = rows.length ? rows[rows.length - 1].id + 1 : Date.now();
+    rows = splitMortgageRows(s, rows, await loadLoansFor(uid).catch(() => []), () => nid++).rows;
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
     added = rows.length; review = rows.filter((r) => r.extra.review).length; saved = rows;
     learned = learnRules(s, groups);

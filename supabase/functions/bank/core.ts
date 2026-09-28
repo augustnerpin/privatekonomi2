@@ -44,7 +44,8 @@ export const rawOf = (r: Obj) => (r.type === 'income' || r.type === 'transfer' ?
 // Bankrader som du tagit bort (deleted) räknas också, så att de inte kommer tillbaka vid nästa hämtning.
 export function dedupe(fresh: Obj[], existing: Obj[]) {
   const refs = new Set(existing.map((r) => r.extra?.bank_ref).filter(Boolean));
-  const pool = existing.filter((r) => !r.extra?.bank_ref && !r.deleted).map((r) => ({ raw: Math.round(rawOf(r) * 100), date: r.tx_date, used: false }));
+  // Delar av en uppdelad transaktion (extra.parent_id) jämförs inte: originalet har bankreferensen
+  const pool = existing.filter((r) => !r.extra?.bank_ref && !r.deleted && !r.extra?.parent_id).map((r) => ({ raw: Math.round(rawOf(r) * 100), date: r.tx_date, used: false }));
   const out: Obj[] = []; let dups = 0;
   for (const t of fresh) {
     if (refs.has(t.ref)) { dups++; continue; }
@@ -203,4 +204,43 @@ export function loanUpdates(rows: Obj[], loans: Obj[], accOf: (id: string) => Ob
     } else if (/r[äa]nt/i.test(desc)) interest[loan.id] = { date: r.tx_date, amount: -raw };
   }
   return { balances, interest };
+}
+
+// Bolånebetalningen delas i ränta (utgift, "Boende (Lån)") och amortering (sparande, "Amortering"), så att
+// sparkvoten stämmer. Matchas: pengar till kontot som lånen dras från (loans.extra.pay_account, kontots nummer
+// i texten) med ett belopp nära ränta (skuld × ränta / 12) + amortering (±5 %, minst 100 kr).
+// Samma modell som MCP-verktyget split_transaction: originalraden markeras borttagen med extra.split_into och
+// delarna får extra.parent_id. Räntan = beloppet − amorteringen, så att delarna summerar exakt.
+export const AMORT_CAT = 'Amortering';
+export function mortgageSplit(amount: number, loans: Obj[]) {
+  let interest = 0, amort = 0;
+  for (const l of loans) {
+    const h = [...(l.history || [])].sort((a, b) => a.date.localeCompare(b.date)); const d = h[h.length - 1];
+    if (d && l.interest_pct != null) interest += Math.round((d.value * Number(l.interest_pct)) / 100 / 12);
+    amort += Number(l.amortization) || 0;
+  }
+  const expected = interest + amort;
+  if (!(expected > 0) || !(amort > 0) || Math.abs(amount - expected) > Math.max(100, expected * 0.05)) return null;
+  return { interest: Math.round((amount - amort) * 100) / 100, amortization: amort, expected };
+}
+export function splitMortgageRows(s: Obj, rows: Obj[], loans: Obj[], nextId: () => number) {
+  const pay = new Map<string, Obj[]>();
+  for (const l of loans) if (l.extra?.pay_account) pay.set(l.extra.pay_account, [...(pay.get(l.extra.pay_account) || []), l]);
+  if (!pay.size || !(s.cats_sav || DEF.cats_sav).includes(AMORT_CAT)) return { rows, split: 0 };
+  const byNumber = new Map<string, string>();
+  for (const a of s.accounts || []) if (pay.has(a.id) && a.number) byNumber.set(String(a.number).replace(/\D/g, ''), a.id);
+  const out: Obj[] = []; let split = 0;
+  for (const r of rows) {
+    const target = byNumber.get(descNumber(r.description) || '');
+    const amount = r.type === 'expense' ? Number(r.amount) : -Number(r.amount);
+    const sp = target && target !== r.account && !r.deleted && !r.extra?.parent_id && amount > 0 ? mortgageSplit(amount, pay.get(target)!) : null;
+    if (!sp) { out.push(r); continue; }
+    const cats = (s.cats_exp || DEF.cats_exp) as string[];
+    const base = { ...r, hash: null, extra: { parent_id: r.id, split_of: 2, ...(r.mkey ? { split_mkey: r.mkey } : {}), via: 'bank' } };
+    const a = { ...base, id: nextId(), type: 'expense', category: cats.includes('Boende (Lån)') ? 'Boende (Lån)' : r.category, amount: sp.interest, extra: { ...base.extra, split_index: 1, part: 'ränta' } };
+    const b = { ...base, id: nextId(), type: 'savings', category: AMORT_CAT, amount: sp.amortization, extra: { ...base.extra, split_index: 2, part: 'amortering' } };
+    out.push({ ...r, deleted: true, extra: { ...(r.extra || {}), split_into: [a.id, b.id], split: { interest: sp.interest, amortization: sp.amortization } } }, a, b);
+    split++;
+  }
+  return { rows: out, split };
 }

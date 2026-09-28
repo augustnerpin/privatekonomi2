@@ -179,3 +179,28 @@ test('bolån i lånedelar (SEB "LÅN <nr>"): ränta beräknas, resten amorterar 
   assert.deepEqual(u.balances, [{ loan_id: 'A', bal_date: '2026-09-28', value: 799404 }, { loan_id: 'B', bal_date: '2026-09-28', value: 699441 }]);
   assert.deepEqual(u.interest.A, { date: '2026-09-28', amount: 2000, estimated: true });
 });
+
+test('bolånebetalningen delas i ränta (utgift) och amortering (sparande)', async () => {
+  const { splitMortgageRows, mortgageSplit, dedupe } = await import('../functions/bank/core.ts');
+  const loans = [['A', 648491, 1167], ['B', 650300, 1100], ['C', 213605, 279]].map(([id, v, am]) => ({ id, interest_pct: 2.76, amortization: am, extra: { pay_account: 'bolan' }, history: [{ date: '2026-09-28', value: v }] }));
+  // Ränta 1 492 + 1 496 + 491 = 3 479, amortering 2 546 → 6 025 (exakt dragningen)
+  assert.deepEqual(mortgageSplit(6025, loans), { interest: 3479, amortization: 2546, expected: 6025 });
+  assert.equal(mortgageSplit(9000, loans), null); // för långt från ränta + amortering
+  const s = { accounts: [{ id: 'lonekonto' }, { id: 'bolan', number: '53293315887' }], cats_exp: ['Boende (Lån)'], cats_sav: ['Avanza', 'Amortering'] };
+  const rows = [
+    { id: 10, account: 'lonekonto', type: 'expense', category: 'Boende (Lån)', amount: 6025, description: '53293315887', tx_date: '2026-10-25', month: '2026-11', mkey: '#53293315887|ut', extra: { bank_ref: 'r1' }, deleted: false },
+    { id: 11, account: 'lonekonto', type: 'expense', category: 'Mat', amount: 100, description: 'ICA', tx_date: '2026-10-25', month: '2026-11', extra: {}, deleted: false },
+  ];
+  let n = 100; const r = splitMortgageRows(s, rows, loans, () => n++);
+  assert.equal(r.split, 1); assert.equal(r.rows.length, 4);
+  const [parent, interest, amort, other] = r.rows;
+  assert.equal(parent.deleted, true); assert.deepEqual(parent.extra.split_into, [100, 101]); assert.equal(parent.extra.bank_ref, 'r1');
+  assert.deepEqual([interest.type, interest.category, interest.amount, interest.extra.parent_id], ['expense', 'Boende (Lån)', 3479, 10]);
+  assert.deepEqual([amort.type, amort.category, amort.amount], ['savings', 'Amortering', 2546]);
+  assert.equal(interest.amount + amort.amount, 6025); assert.equal(other.id, 11);
+  // Delarna fångar inte bankrader med samma belopp, och originalet känns igen på bankreferensen
+  const again = dedupe([{ ref: 'r1', date: '2026-10-25', bookingDate: '2026-10-25', raw: -6025 }, { ref: 'x', date: '2026-10-25', bookingDate: '2026-10-25', raw: -2546 }], r.rows);
+  assert.deepEqual(again.fresh.map((t) => t.ref), ['x']);
+  // Utan kategorin Amortering: ingen uppdelning
+  assert.equal(splitMortgageRows({ ...s, cats_sav: ['Avanza'] }, rows, loans, () => n++).split, 0);
+});
