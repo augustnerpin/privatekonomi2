@@ -287,3 +287,45 @@ revoke all on function public.bank_try_lock(uuid, int) from public, anon, authen
 revoke all on function public.bank_unlock(uuid) from public, anon, authenticated;
 grant execute on function public.bank_try_lock(uuid, int) to service_role;
 grant execute on function public.bank_unlock(uuid) to service_role;
+
+-- ── Backups före migreringar ─────────────────────────────────────────
+-- Varje migrering sparar först en JSON-kopia av det den ändrar (label = migreringens namn).
+create table if not exists public.backups (
+  id         bigserial   primary key,
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  label      text        not null,
+  data       jsonb       not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists backups_user_idx on public.backups (user_id, label);
+alter table public.backups enable row level security;
+drop policy if exists "own rows read" on public.backups;
+create policy "own rows read" on public.backups for select to authenticated using ((select auth.uid()) = user_id);
+revoke all on public.backups from anon, authenticated;
+grant select on public.backups to authenticated;
+
+-- ── Tillgångar med manuellt värde per datum (lägenhet, klockor, AB, pension …) ──
+-- asset = förmögenhetskategorins nyckel (cats_nw.key). Lån som "hör till" tillgången (loans.secured_by)
+-- dras av när förmögenheten räknas ut, så värdet här är bruttovärdet.
+create table if not exists public.asset_values (
+  user_id    uuid          not null default auth.uid() references auth.users(id) on delete cascade,
+  asset      text          not null,
+  val_date   date          not null,
+  value      numeric(16,2) not null,
+  note       text,
+  deleted    boolean       not null default false,
+  updated_at timestamptz   not null default clock_timestamp(),
+  primary key (user_id, asset, val_date)
+);
+create index if not exists asset_values_sync_idx on public.asset_values (user_id, updated_at);
+drop trigger if exists asset_values_touch on public.asset_values;
+create trigger asset_values_touch before insert or update on public.asset_values for each row execute function public.touch_updated_at();
+alter table public.asset_values enable row level security;
+drop policy if exists "own rows" on public.asset_values;
+create policy "own rows" on public.asset_values for all to authenticated
+  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+revoke all on public.asset_values from anon;
+grant select, insert, update, delete on public.asset_values to authenticated;
+
+-- Automatiskt skapade förmögenhetsbilder (nattjobbet) markeras; manuellt registrerade skrivs aldrig över
+alter table public.net_worth_snapshots add column if not exists auto boolean not null default false;

@@ -8,6 +8,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff, periodForDate, periodRange, periodShift } from '../_shared/finance.ts';
+import { computeNetWorth, DEF_NW_CATS } from '../_shared/networth.ts';
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
 import { buildDigest } from './notify.ts';
@@ -285,6 +286,32 @@ async function notify(uid: string, r: Obj) {
   return out;
 }
 
+// ── Förmögenhet från saldon, manuella värden och lån ────────────────────
+async function netWorthInputs(uid: string) {
+  const [accounts, cats] = await Promise.all([loadKey(uid, 'accounts'), loadKey(uid, 'cats_nw')]);
+  const balances = await pages(() => db.from('account_balances').select('account,bal_date,value').eq('user_id', uid).eq('deleted', false).order('bal_date'));
+  const assets = await pages(() => db.from('asset_values').select('asset,val_date,value,deleted').eq('user_id', uid).eq('deleted', false).order('val_date'));
+  const loans = await loadLoansFor(uid).catch(() => []);
+  const snaps = await must<Obj[]>(db.from('net_worth_snapshots').select('period,total,amounts,auto').eq('user_id', uid).eq('deleted', false).order('period'));
+  return { accounts: Array.isArray(accounts) && accounts.length ? accounts : DEF.accounts, cats: Array.isArray(cats) && cats.length ? cats : DEF_NW_CATS, balances, assets, loans, snaps };
+}
+// Förmögenhetsbild för löneperioden (läget när perioden börjar; för pågående period: idag)
+export async function netWorthFor(uid: string, period: string, s: Obj) {
+  const inp = await netWorthInputs(uid);
+  const start = periodRange(period, s.pay_periods || []).start, day = today();
+  const date = start < day ? (period === periodForDate(day, s.pay_periods || []) ? day : start) : day;
+  const prev = [...inp.snaps].filter((x) => x.period < period).pop();
+  return { period, existing: inp.snaps.find((x) => x.period === period) || null, ...computeNetWorth({ ...inp, prev: prev ? prev.amounts : null, date }) };
+}
+// Nattjobbet: skapa förmögenhetsbilden för en ny löneperiod om den saknas (en befintlig skrivs aldrig över)
+async function maybeAutoSnapshot(uid: string, s: Obj) {
+  const pid = periodForDate(today(), s.pay_periods || []);
+  const r = await netWorthFor(uid, pid, s);
+  if (r.existing) return null;
+  await must(db.from('net_worth_snapshots').upsert({ user_id: uid, period: pid, total: r.total, amounts: r.amounts, auto: true, deleted: false }, { onConflict: 'user_id,period' }));
+  return { period: pid, total: r.total };
+}
+
 // ── Månadsbokslut och veckobrev (nattjobbet) ───────────────────────────
 // Sparas i user_state (month_closings = {period: bokslut}, weekly_letters = [brev]) så att appen visar dem,
 // och skickas som notis. Bokslutet skrivs dag 2 i en ny löneperiod, veckobrevet på söndagar.
@@ -385,6 +412,12 @@ Deno.serve(async (req) => {
       if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'Unauthorized' }, 401);
       const body = await req.json().catch(() => ({})); // {force: ['closing','weekly']} kör bokslut/veckobrev direkt (test)
       const users = [...new Set((await must<Obj[]>(db.from('bank_connections').select('user_id').eq('status', 'active'))).map((r) => r.user_id))];
+      // {networth: true}: bara räkna förmögenheten (test, ingen bankhämtning)
+      if (body.networth === true) {
+        const res: Obj = {};
+        for (const u of users) { const s = await loadState(u); res[u] = await netWorthFor(u, periodForDate(today(), s.pay_periods || []), s); }
+        return json(res);
+      }
       const out: Obj = {};
       for (const u of users) {
         try {
@@ -392,6 +425,7 @@ Deno.serve(async (req) => {
           const force: string[] = Array.isArray(body.force) ? body.force : [];
           out[u] = r.busy ? { busy: true } : {
             ...pub(r), push: await notify(u, r).catch((e) => ({ error: (e as Error).message })),
+            snapshot: await maybeAutoSnapshot(u, r.state).catch((e) => ({ error: (e as Error).message })),
             closing: await maybeClosing(u, r.state, force.includes('closing')).catch((e) => ({ error: (e as Error).message })),
             weekly: await maybeWeekly(u, r.state, force.includes('weekly')).catch((e) => ({ error: (e as Error).message })),
           };
@@ -417,6 +451,13 @@ Deno.serve(async (req) => {
     if (route === 'sync') {
       const r = await syncUser(uid, psuFrom(req));
       return r.busy ? json({ error: 'En hämtning pågår redan – försök igen om en stund' }, 409) : json(pub(r));
+    }
+    // Förmögenhet från saldon: {period} → beräknade belopp per kategori (appens "Beräkna från saldon")
+    if (route === 'networth') {
+      const b = await req.json().catch(() => ({}));
+      const s = await loadState(uid);
+      const period = /^\d{4}-\d{2}$/.test(b.period || '') ? b.period : periodForDate(today(), s.pay_periods || []);
+      return json(await netWorthFor(uid, period, s));
     }
     if (route === 'push-test') return json(await pushTo(uid, { title: 'Notiser är på ✓', body: 'Här hör appen av sig när lönen kommit, vid stora köp och när budgeten börjar ta slut.', url: APP_URL, tag: 'test' }));
     return json({ error: 'Okänd väg' }, 404);

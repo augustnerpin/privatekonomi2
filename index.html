@@ -1364,6 +1364,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
     <div class="modal-title">Registrera snapshot</div>
     <div id="nwm-hint" style="font-size:12px;color:var(--sub2);font-family:var(--mono);margin-bottom:12px"></div>
     <div class="field"><label>Period</label><input type="month" id="nwm-period" onchange="updateNWMHint()"></div>
+    <button class="btn-s" style="margin:0 0 12px" onclick="nwFromBalances()">⚡ Beräkna från saldon, lån och värden</button>
     <div id="nwm-fields"></div>
     <button class="btn-p" onclick="saveNW()">Spara snapshot</button>
     <button class="btn-s" onclick="closeOverlay('nw-modal')">Avbryt</button>
@@ -1407,6 +1408,19 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
   </div>
 </div>
 <input type="file" id="payslip-doc" accept="application/pdf,image/*" style="display:none" onchange="readPayslip(this)">
+
+<!-- ═══ SALDO / VÄRDE ═══ -->
+<div class="overlay" id="val-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="vm-title">Värde</div>
+    <div id="vm-hint" style="font-size:12px;color:var(--sub2);margin-bottom:12px"></div>
+    <div class="field"><label>Belopp (kr)</label><input type="number" id="vm-value" inputmode="decimal"></div>
+    <div class="field"><label>Datum</label><input type="date" id="vm-date"></div>
+    <button class="btn-p" onclick="saveValModal()">Spara</button>
+    <button class="btn-s" onclick="closeOverlay('val-modal')">Avbryt</button>
+  </div>
+</div>
 
 <!-- ═══ PAY PERIOD MODAL ═══ -->
 <div class="overlay" id="pp-modal">
@@ -2334,11 +2348,15 @@ async function refreshLoans(){
   if(!_sbUser)return;_loansAt=Date.now();
   try{
     const sb=await sbClient();
-    const[a,b]=await Promise.all([sb.from('loans').select('*').eq('deleted',false).order('name'),sb.from('loan_balances').select('loan_id,bal_date,value').eq('deleted',false).order('bal_date')]);
+    const[a,b,c,d]=await Promise.all([sb.from('loans').select('*').eq('deleted',false).order('name'),sb.from('loan_balances').select('loan_id,bal_date,value').eq('deleted',false).order('bal_date'),
+      sb.from('asset_values').select('asset,val_date,value').eq('deleted',false).order('val_date'),sb.from('account_balances').select('account,bal_date,value').eq('deleted',false).order('bal_date')]);
     if(a.error||b.error)throw a.error||b.error;
     const next=a.data.map(l=>({...l,history:b.data.filter(x=>x.loan_id===l.id).map(x=>({date:x.bal_date,value:+x.value}))}));
-    const changed=JSON.stringify(next)!==JSON.stringify(_loans);
-    _loans=next;localStorage.setItem('loans_cache',JSON.stringify(next));
+    // Manuella värden och saldohistorik (tabellerna saknas tills schema.sql körts: då tomt)
+    const nextA=c.error?_assets:c.data,nextB=d.error?_balances:d.data;
+    const changed=JSON.stringify([next,nextA,nextB])!==JSON.stringify([_loans,_assets,_balances]);
+    _loans=next;_assets=nextA;_balances=nextB;localStorage.setItem('loans_cache',JSON.stringify(next));
+    localStorage.setItem('assets_cache',JSON.stringify(nextA));localStorage.setItem('balances_cache',JSON.stringify(nextB));
     if(changed)renderNetWorth();
   }catch(e){console.warn('Lån:',e.message||e)}
 }
@@ -2455,6 +2473,76 @@ Saknas en uppgift: tom sträng eller 0. Hitta aldrig på värden.`;
     }
     toast(`${found.length} lånedelar sparade ✓`);await refreshLoans();
   }catch(e){toast('Kunde inte läsa låneutdraget: '+(e.message||e),'err')}
+}
+
+// ═══════════════════════════════════════════
+// KONTON & VÄRDEN — källorna till förmögenheten (samma regler som supabase/functions/_shared/networth.ts)
+// Saldon per datum i account_balances, manuella tillgångsvärden i asset_values; lån dras av från "Hör till tillgång".
+// ═══════════════════════════════════════════
+let _assets=ld('assets_cache',[]),_balances=ld('balances_cache',[]);
+if(!Array.isArray(_assets))_assets=[];if(!Array.isArray(_balances))_balances=[];
+const nwCatOfAcc=a=>a.nw_cat!==undefined?(a.nw_cat||null):a.kind==='investment'?'stocks':a.kind==='card'?null:'cash';
+function latestOf(rows,date){let b=null;for(const r of rows){const d=r.bal_date||r.val_date||r.date;if(d&&(!date||d<=date)&&(!b||d>b.date))b={date:d,value:+r.value}}return b}
+const accBalance=a=>latestOf(_balances.filter(b=>b.account===a.id))||(a.balance?{date:a.balance.date,value:+a.balance.value}:null);
+// Avkastning: senaste värde − första värde − insättningar i kontots sparkategori däremellan
+function accReturn(a){
+  if(!a.sav_cat)return null;
+  const rows=_balances.filter(b=>b.account===a.id).sort((x,y)=>x.bal_date.localeCompare(y.bal_date));if(!rows.length)return null;
+  const f=rows[0],l=rows[rows.length-1];
+  const dep=getTxs().filter(t=>t.type==='savings'&&t.cat===a.sav_cat&&t.date>f.bal_date&&t.date<=l.bal_date).reduce((s,t)=>s+t.amount,0);
+  return{from:f.bal_date,deposits:dep,ret:+l.value-(+f.value)-dep};
+}
+function wealthSourcesHtml(){
+  const cats=getNWCats(),accs=getAccounts();
+  const btn=(label,on)=>`<span class="chip" onclick="event.stopPropagation();${on}">${label}</span>`;
+  const blocks=cats.map(c=>{
+    const lines=[];
+    accs.filter(a=>nwCatOfAcc(a)===c.key).forEach(a=>{const b=accBalance(a),r=accReturn(a);
+      lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}${b?` <span style="color:var(--sub2);font-size:11px">${esc(b.date)}</span>`:''}</span>
+        <span style="display:flex;gap:6px;align-items:center;flex-shrink:0"><span style="font-family:var(--mono)">${b?fmt(b.value):'—'}</span>${btn('Saldo',`openValModal('acc',${jsArg(a.id)})`)}</span></div>`+
+        (r?`<div style="font-size:11px;color:${r.ret>=0?'var(--green)':'var(--red)'};padding:0 0 3px">Avkastning sedan ${esc(r.from)}: ${fmtSigned(r.ret)} kr (insatt ${fmt(r.deposits)} kr)</div>`:''))});
+    const av=latestOf(_assets.filter(x=>x.asset===c.key));
+    if(av)lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub)">Värde <span style="color:var(--sub2);font-size:11px">${esc(av.date)}</span></span><span style="display:flex;gap:6px;align-items:center"><span style="font-family:var(--mono)">${fmt(av.value)}</span>${btn('Uppdatera',`openValModal('asset',${jsArg(c.key)})`)}</span></div>`);
+    _loans.filter(l=>l.secured_by===c.key).forEach(l=>{const d=loanDebt(l);if(d)lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span style="color:var(--sub)">− ${esc(l.name)}</span><span style="font-family:var(--mono);color:var(--red)">−${fmt(d.value)}</span></div>`)});
+    if(!lines.length)lines.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><span style="color:var(--sub2)">Ingen källa — tas från förra förmögenhetsbilden</span>${btn('Lägg in värde',`openValModal('asset',${jsArg(c.key)})`)}</div>`);
+    return`<div style="padding:10px 17px;border-top:1px solid var(--line);font-size:12.5px"><div style="font-weight:600;margin-bottom:4px">${esc(c.label)}</div>${lines.join('')}</div>`;
+  }).join('');
+  return`<div class="sec"><span class="sec-t">Konton & värden</span><span class="sec-sub">räknas in automatiskt</span></div><div class="txl" style="padding-top:0">${blocks}</div>`;
+}
+// Nytt saldo (konto) eller värde (tillgång) per datum
+let _valEdit=null;
+function openValModal(kind,id){
+  const acc=kind==='acc'?getAccounts().find(a=>a.id===id):null,cat=kind==='asset'?getNWCats().find(c=>c.key===id):null;
+  const cur=acc?accBalance(acc):latestOf(_assets.filter(x=>x.asset===id));
+  _valEdit={kind,id};
+  document.getElementById('vm-title').textContent=acc?`Saldo: ${acc.name}`:`Värde: ${cat?.label||id}`;
+  document.getElementById('vm-hint').textContent=acc?'Saldot sparas per datum och används när förmögenheten räknas ut.':`Bruttovärde. Lån som hör till ${cat?.label||id} dras av automatiskt.`;
+  document.getElementById('vm-value').value=cur?cur.value:'';document.getElementById('vm-date').value=todayLocal();
+  openOverlay('val-modal');
+}
+async function saveValModal(){
+  if(!_sbUser){toast('Logga in under Inställningar → Databas för att spara','warn');return}
+  const v=loanNum(document.getElementById('vm-value').value),d=document.getElementById('vm-date').value||todayLocal();
+  if(v==null){toast('Ange ett belopp','warn');return}
+  try{
+    const sb=await sbClient();const e=_valEdit;let error;
+    if(e.kind==='acc'){
+      ({error}=await sb.from('account_balances').upsert({account:e.id,bal_date:d,value:v,source:'manual',deleted:false},{onConflict:'user_id,account,bal_date'}));if(error)throw error;
+      const accs=getAccounts(),a=accs.find(x=>x.id===e.id);if(a&&(!a.balance||a.balance.date<=d)){a.balance={value:v,date:d};svAccounts(accs)}
+    }else{({error}=await sb.from('asset_values').upsert({asset:e.id,val_date:d,value:v,deleted:false},{onConflict:'user_id,asset,val_date'}));if(error)throw error}
+    closeOverlay('val-modal');toast('Sparat ✓');await refreshLoans();renderNetWorth();
+  }catch(err){toast('Kunde inte spara: '+(err.message||err),'err')}
+}
+// "Beräkna från saldon" i förmögenhetsfönstret: servern räknar ut beloppen, du kan ändra varje kategori innan du sparar
+async function nwFromBalances(){
+  const period=document.getElementById('nwm-period').value;if(!period){toast('Välj period','warn');return}
+  try{
+    const r=await bankCall('networth',{period});
+    Object.entries(r.amounts||{}).forEach(([k,v])=>{const el=document.getElementById('nwm-'+k);if(el)el.value=Math.round(v)});
+    const src={konton:'konton','värde':'värde','lån':'lån','förra':'förra bilden'};
+    document.getElementById('nwm-hint').textContent=`Beräknat ${r.date}: ${fmt(r.total)} kr. `+getNWCats().map(c=>`${c.label}: ${String(r.sources?.[c.key]||'—').split('+').map(s=>src[s]||s).join(' + ')}`).join(' · ')+'. Ändra det som inte stämmer och spara.';
+    toast('Ifyllt från saldon ✓');
+  }catch(e){toast('Kunde inte beräkna: '+(e.message||e),'err')}
 }
 
 // ═══════════════════════════════════════════
@@ -3181,6 +3269,9 @@ function renderNetWorth(){
     </div>`;
   });
   html+=`</div>`;
+
+  // ── 4a. KONTON & VÄRDEN (källorna) ──
+  html+=wealthSourcesHtml();
 
   // ── 4b. LÅN & SKULDER ──
   html+=loansHtml(latest);
@@ -5620,10 +5711,13 @@ function renderAccountSettings(){
   const txs=getTxs();
   document.getElementById('acc-list').innerHTML=accs.map((a,i)=>{
     const n=txs.filter(t=>t.account===a.id).length;
-    return`<div class="s-row">
-      <div style="min-width:0"><div class="s-row-lbl">${esc(a.name)} <span class="acc-tag">${ACC_KIND_LABEL[a.kind]||'bank'}</span></div>
+    const sel=(k,opts,cur)=>`<select onchange="setAccField(${i},'${k}',this.value)" style="background:var(--surf2);border:none;border-radius:8px;color:var(--text);font-size:12px;padding:4px 6px;max-width:48%">${opts.map(([v,l])=>`<option value="${esc(v)}"${v===(cur??'')?' selected':''}>${esc(l)}</option>`).join('')}</select>`;
+    return`<div class="s-row" style="flex-wrap:wrap;gap:6px">
+      <div style="min-width:0;flex:1"><div class="s-row-lbl">${esc(a.name)} <span class="acc-tag">${ACC_KIND_LABEL[a.kind]||'bank'}</span>${a.manual?' <span class="acc-tag">manuellt</span>':''}</div>
         <div class="s-row-sub">${n} transaktioner${a.balance?` · saldo ${fmt(a.balance.value)} kr (${a.balance.date})`:''}</div></div>
+      ${a.kind!=='card'?`<button class="chip" onclick="openValModal('acc',${jsArg(a.id)})">Saldo</button>`:''}
       <button class="tag-rm" onclick="removeAccount(${i})">×</button>
+      <div style="display:flex;gap:6px;width:100%;font-size:11px;color:var(--sub2);align-items:center">Förmögenhet: ${sel('nw_cat',[['','Räknas inte'],...getNWCats().map(c=>[c.key,c.label])],nwCatOfAcc(a)||'')}${a.kind==='investment'?` Sparkategori: ${sel('sav_cat',[['','—'],...getSavCats().map(c=>[c,c])],a.sav_cat||'')}`:''}</div>
     </div>`}).join('');
   const imps=getImports().slice().reverse();
   document.getElementById('imp-hist').innerHTML=imps.length?imps.slice(0,15).map(i=>`<div class="s-row">
@@ -5646,11 +5740,13 @@ function renderAccountSettings(){
     :`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga ännu. Svar på AI:ns frågor vid import hamnar här.</div>`)+
     `<div class="tag-add" style="padding:10px 16px 12px"><input type="text" id="new-ai-note" placeholder="Ny instruktion, t.ex. ”Konto 5329… är mitt sparkonto”" onkeydown="if(event.key==='Enter')addImportNoteFromSettings()"><button class="tag-add-btn" onclick="addImportNoteFromSettings()">+</button></div>`;
 }
+function setAccField(i,k,v){const accs=getAccounts();if(!accs[i])return;accs[i][k]=v||(k==='nw_cat'?null:undefined);if(accs[i][k]===undefined)delete accs[i][k];svAccounts(accs);renderAccountSettings()}
 function addAccount(){
   const inp=document.getElementById('new-acc-name');const name=inp.value.trim();if(!name)return;
   const accs=getAccounts();
   if(accs.some(a=>a.name.toLowerCase()===name.toLowerCase())){toast('Kontot finns redan','warn');return}
-  accs.push({id:'acc_'+Date.now().toString(36),name,kind:document.getElementById('new-acc-kind').value});
+  // Konton som läggs till här saknar bankkoppling: saldot anges för hand ("Saldo")
+  accs.push({id:'acc_'+Date.now().toString(36),name,kind:document.getElementById('new-acc-kind').value,manual:true});
   svAccounts(accs);inp.value='';renderAccountSettings();
 }
 function removeAccount(i){
