@@ -12,7 +12,7 @@ const BIG = 1500; // köp från och med detta belopp nämns var för sig
 export function goalPlan(latest: Obj | null, goal: number, avgMonthly: number | null, goalYM: string) {
   if (!latest || !/^\d{4}-\d{2}$/.test(goalYM || '')) return null;
   const [gy, gm] = goalYM.split('-').map(Number), [ly, lm] = String(latest.period).split('-').map(Number);
-  const months = (gy - ly) * 12 + (gm - lm), left = Math.max(goal - Number(latest.total), 0);
+  const months = (gy - ly) * 12 + (gm - lm) + 1, left = Math.max(goal - Number(latest.total), 0); // innevarande period räknas med
   if (left <= 0) return { done: true, months, left: 0 };
   if (months <= 0) return { late: true, months, left };
   const eta = avgMonthly && avgMonthly > 0 ? Math.ceil(left / avgMonthly) : null;

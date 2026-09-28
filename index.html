@@ -1661,6 +1661,18 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
         <div><div class="s-row-lbl">Nå målet senast</div><div class="s-row-sub">Valfritt. Visar hur mycket förmögenheten behöver öka per månad.</div></div>
         <input type="month" id="s-goal-date" onchange="saveSetting('goal_date',this.value)" style="background:var(--surf2);border:none;border-radius:12px;color:var(--text);padding:8px 10px;font-family:var(--sans);font-size:14px;flex-shrink:0">
       </div>
+      <div class="s-row">
+        <div><div class="s-row-lbl">Planerat sparande</div><div class="s-row-sub">kr/mån. Används i planen, prognosen och kvar per dag.</div></div>
+        <input type="number" id="s-planned" placeholder="10000" onchange="saveSetting('planned_savings',this.value)">
+      </div>
+      <div class="s-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div><div class="s-row-lbl">Kända framtida inbetalningar</div><div class="s-row-sub">T.ex. tjänstepension varje månad eller en klumpsumma. Räknas in i målprognosen.</div></div>
+        <div id="inflow-list" style="margin:0 -16px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><input id="inf-name" class="sb-inp" placeholder="Namn" style="flex:1 1 120px;margin:0"><input id="inf-amount" class="sb-inp" type="number" placeholder="kr" style="width:90px;margin:0">
+          <select id="inf-type" class="sb-inp" style="width:auto;margin:0"><option value="monthly">varje månad</option><option value="once">engång</option></select>
+          <input id="inf-month" type="month" class="sb-inp" style="width:auto;margin:0" title="Från månad (varje månad) eller månad (engång)"><select id="inf-cat" class="sb-inp" style="width:auto;margin:0"></select>
+          <button class="sb-btn sb-btn2" onclick="addInflow()">Lägg till</button></div>
+      </div>
     </div>
   </div>
 
@@ -2617,6 +2629,87 @@ function changeHtml(){
 }
 
 // ═══════════════════════════════════════════
+// MÅLET MOT PLAN — samma regler som supabase/functions/_shared/goal.ts
+// Förmögenhetsbilden för P = läget när P börjar; "senast 2027-12" = vid slutet av 2027-12 (innevarande period räknas med).
+// ═══════════════════════════════════════════
+const ymDiff=(a,b)=>{const[ay,am]=a.split('-').map(Number),[by,bm]=b.split('-').map(Number);return(by-ay)*12+(bm-am)};
+const ymAdd=(ym,n)=>{const[y,m]=ym.split('-').map(Number);const d=new Date(y,m-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')};
+const getPlannedSavings=()=>{const v=+ld('planned_savings',10000);return isFinite(v)&&v>=0?v:10000};
+const getInflows=()=>{const k=ld('known_inflows',[]);return Array.isArray(k)?k:[]};
+function inflowsInApp(p){let invest=0,other=0;getInflows().forEach(x=>{const hit=x.monthly?(!x.from||p>=x.from)&&(!x.to||p<=x.to):x.date===p;if(!hit)return;if(NW_INVEST.includes(x.nw_cat))invest+=+x.amount||0;else other+=+x.amount||0});return{invest,other}}
+function simulateApp(latest,months,monthly,ratePct,amort,goal){
+  let invest=NW_INVEST.reduce((s,k)=>s+(+latest[k]||0),0),other=latest.total-invest,reached=null;const r=Math.pow(1+ratePct/100,1/12)-1,path=[];
+  for(let m=0;m<months;m++){const per=ymAdd(latest.period,m),inf=inflowsInApp(per);invest=invest*(1+r)+monthly+inf.invest;other+=amort+inf.other;
+    path.push({period:ymAdd(per,1),value:Math.round(invest+other)});if(!reached&&invest+other>=goal)reached=per}
+  return{projected:Math.round(invest+other),reached,path};
+}
+function goalProgressApp(){
+  const nws=[...getNWs()].sort((a,b)=>a.period.localeCompare(b.period)),latest=nws[nws.length-1],goal=getGoal(),gd=String(ld('goal_date','')||'');
+  if(!latest||!/^\d{4}-\d{2}$/.test(gd))return null;
+  const monthsLeft=Math.max(0,ymDiff(latest.period,gd)+1),left=Math.max(goal-latest.total,0);
+  const gs=ld('goal_start',null),start=gs&&gs.period<=latest.period?gs:{period:latest.period,total:latest.total};
+  const span=ymDiff(start.period,gd)+1;
+  const planAt=p=>span>0?start.total+(goal-start.total)*Math.min(1,Math.max(0,ymDiff(start.period,p)/span)):goal;
+  const planNow=Math.round(planAt(latest.period));
+  const from12=ymAdd(latest.period,-12),sav12=getTxs().filter(t=>t.type==='savings'&&t.month>=from12&&t.month<latest.period&&t.cat!==AMORT_CAT).reduce((s,t)=>s+t.amount,0)/12;
+  const amort=_loans.reduce((s,l)=>s+(+l.amortization||0),0);
+  const sc=(key,label,monthly,rate)=>{const s=simulateApp(latest,monthsLeft,monthly,rate,amort,goal);return{key,label,monthly,rate,projected:s.projected,gap:s.projected-goal,reached:s.reached,path:s.path}};
+  return{goal,gd,latest,monthsLeft,left,need:monthsLeft?left/monthsLeft:null,done:left<=0,start,planNow,vsPlan:Math.round(latest.total-planNow),planAt,span,nws,amort,
+    scenarios:[sc('svagt','Svagt',sav12,0),sc('plan','Plan',getPlannedSavings(),6),sc('bra','Bra',getPlannedSavings(),9)]};
+}
+// Diagram: utfall (heldragen), planlinje (streckad) och scenariernas bana till måldatumet
+function goalChartSvg(g){
+  const W=340,H=150,L=4,R=4,T=10,B=18;
+  const act=g.nws.filter(n=>n.period>=g.start.period).map(n=>({period:n.period,value:n.total}));
+  const end=ymAdd(g.gd,1),periods=ymDiff(g.start.period,end);if(periods<=0)return'';
+  const all=[...act.map(x=>x.value),g.goal,g.start.total,...g.scenarios.flatMap(s=>s.path.map(x=>x.value))];
+  const lo=Math.min(...all)*0.98,hi=Math.max(...all)*1.02;
+  const x=p=>L+(W-L-R)*ymDiff(g.start.period,p)/periods,y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+  const line=(pts,st)=>`<polyline fill="none" points="${pts.map(p=>`${x(p.period).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ')}" ${st}/>`;
+  const col={svagt:'var(--red)',plan:'var(--acc)',bra:'var(--green)'};
+  const from={period:g.latest.period,value:g.latest.total};
+  return`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;margin-top:10px">
+    <line x1="${L}" x2="${W-R}" y1="${y(g.goal)}" y2="${y(g.goal)}" stroke="var(--line)" stroke-dasharray="2 3"/>
+    <text x="${W-R}" y="${y(g.goal)-3}" text-anchor="end" font-size="9" fill="var(--sub2)">Mål ${fmt(g.goal)}</text>
+    ${line([{period:g.start.period,value:g.start.total},{period:end,value:g.goal}],'stroke="var(--sub)" stroke-width="1.2" stroke-dasharray="4 3"')}
+    ${g.scenarios.map(s=>line([from,...s.path],`stroke="${col[s.key]}" stroke-width="1.2" stroke-opacity="0.7"`)).join('')}
+    ${act.length>1?line(act,'stroke="var(--text)" stroke-width="2"'):''}
+    <circle cx="${x(g.latest.period)}" cy="${y(g.latest.total)}" r="3" fill="var(--text)"/>
+    <text x="${L}" y="${H-4}" font-size="9" fill="var(--sub2)">${mLabel(g.start.period)}</text><text x="${W-R}" y="${H-4}" text-anchor="end" font-size="9" fill="var(--sub2)">${mLabel(g.gd)}</text>
+  </svg><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--sub2);margin-top:2px"><span>━ utfall</span><span>┅ plan</span><span style="color:var(--red)">━ svagt</span><span style="color:var(--acc)">━ plan 6 %</span><span style="color:var(--green)">━ bra 9 %</span></div>`;
+}
+function goalProgressHtml(){
+  const g=goalProgressApp();if(!g)return'';
+  const wrap=t=>`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6">${t}</div>`;
+  if(g.done)return wrap(`🎉 Målet ${fmt(g.goal)} kr är nått, före ${mLabel(g.gd)}.`);
+  if(!g.monthsLeft)return wrap(`Måldatumet ${mLabel(g.gd)} har passerat. Kvar till målet: <b style="color:var(--text)">${fmt(g.left)} kr</b>. Välj ett nytt datum i inställningarna.`);
+  const st=g.vsPlan>=0?`<span style="color:var(--green)">${fmt(g.vsPlan)} kr före plan</span>`:`<span style="color:var(--red)">${fmt(-g.vsPlan)} kr efter plan</span>`;
+  const rows=g.scenarios.map(s=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span>${s.label} <span style="color:var(--sub2);font-size:11px">${fmt(s.monthly)} kr/mån · ${s.rate} %</span></span><span style="font-family:var(--mono);color:${s.gap>=0?'var(--green)':'var(--red)'}">${fmt(s.projected)}${s.reached?` · ${mLabel(s.reached)}`:''}</span></div>`).join('');
+  return wrap(`Mål <b style="color:var(--text)">${fmt(g.goal)} kr</b> senast <b style="color:var(--text)">${mLabel(g.gd)}</b> · ${g.monthsLeft} mån kvar<br>
+    Förmögenheten behöver växa <b style="color:var(--text)">${fmt(g.need)} kr/mån</b>. Mot planlinjen: ${st} (plan ${fmt(g.planNow)} kr nu).
+    ${goalChartSvg(g)}
+    <div style="margin-top:8px"><div class="card-lbl">Prognos vid måldatumet</div>${rows}</div>
+    <div style="font-size:10.5px;color:var(--sub2);margin-top:4px">Scenarierna räknar med ${fmt(g.amort)} kr/mån i amortering och dina kända inbetalningar (inställningar).</div>`);
+}
+// Kända framtida inbetalningar (t.ex. tjänstepension varje månad, klumpsumma en viss månad)
+function renderInflowSettings(){
+  const el=document.getElementById('inflow-list');if(!el)return;
+  const cats=getNWCats();
+  el.innerHTML=getInflows().map((x,i)=>`<div class="s-row"><div style="min-width:0"><div class="s-row-lbl">${esc(x.name)} · ${fmt(x.amount)} kr${x.monthly?'/mån':''}</div><div class="s-row-sub">${x.monthly?`Varje månad${x.from?' från '+esc(x.from):''}${x.to?' till '+esc(x.to):''}`:`Engång ${esc(x.date||'')}`} · ${esc(cats.find(c=>c.key===x.nw_cat)?.label||x.nw_cat||'')}</div></div><button class="tag-rm" onclick="removeInflow(${i})">×</button></div>`).join('')||'<div style="padding:12px 16px;font-size:13px;color:var(--sub2)">Inga inlagda.</div>';
+  const sel=document.getElementById('inf-cat');if(sel&&!sel.options.length)sel.innerHTML=cats.map(c=>`<option value="${esc(c.key)}"${c.key==='pension'?' selected':''}>${esc(c.label)}</option>`).join('');
+}
+function addInflow(){
+  const g=k=>document.getElementById(k),name=g('inf-name').value.trim(),amount=loanNum(g('inf-amount').value),monthly=g('inf-type').value==='monthly',when=g('inf-month').value;
+  if(!name||amount==null){toast('Ange namn och belopp','warn');return}
+  if(!monthly&&!when){toast('Ange månad för engångsbeloppet','warn');return}
+  const list=getInflows();list.push({id:'inf_'+Date.now().toString(36),name,amount,monthly,...(monthly?(when?{from:when}:{}):{date:when}),nw_cat:g('inf-cat').value});
+  sv('known_inflows',list);g('inf-name').value='';g('inf-amount').value='';renderInflowSettings();render();
+}
+function removeInflow(i){const l=getInflows();l.splice(i,1);sv('known_inflows',l);renderInflowSettings();render()}
+// När målet eller datumet ändras börjar planlinjen från senaste förmögenhetsbilden
+function resetGoalStart(){const n=[...getNWs()].sort((a,b)=>a.period.localeCompare(b.period)).pop();if(n)sv('goal_start',{period:n.period,total:Math.round(n.total)})}
+
+// ═══════════════════════════════════════════
 // DONUT SVG
 // ═══════════════════════════════════════════
 function makeDonut(slices,total,cx=70,cy=70,r=54,sw=9){
@@ -3298,7 +3391,7 @@ function renderNetWorth(){
         <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Beräknat</div>
         <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--blue)">${goalDateStr||'—'}</div>
       </div>
-    </div>${goalPlanHtml(latest,goal,avgMonthly)}
+    </div>${goalProgressHtml()}
   </div></div>`;
 
   // ── 2b. VAD FÖRÄNDRINGEN BESTÅR AV ──
@@ -3988,25 +4081,13 @@ function closeSettings(){
   document.getElementById('settings-screen').classList.remove('open');
   updateAiStatus();render();
 }
-function saveSetting(k,v){sv(k,k==='salary'||k==='goal'?parseFloat(v)||0:v);if(k==='goal'||k==='goal_date')render();}
-// Rad under målkortet: behövd ökning per månad mot ditt snitt, och före/efter plan
-function goalPlanHtml(latest,goal,avgMonthly){
-  const ym=String(ld('goal_date','')||''),p=goalPlan(latest,goal,avgMonthly,ym);
-  if(!p)return'';
-  const wrap=t=>`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6">${t}</div>`;
-  if(p.done)return wrap(`🎉 Målet är nått, före ${mLabel(ym)}.`);
-  if(p.late)return wrap(`Måldatumet ${mLabel(ym)} har passerat. Kvar till målet: <b style="color:var(--text)">${fmt(p.left)} kr</b>. Välj ett nytt datum i inställningarna.`);
-  const status=p.diff==null?`<span style="color:var(--red)">I nuvarande takt nås inte målet.</span>`
-    :p.diff>=0?`<span style="color:var(--green)">✓ ${p.diff?p.diff+' mån före planen':'Precis i fas med planen'}</span>`
-    :`<span style="color:var(--red)">${-p.diff} mån efter planen</span> — öka med ${fmt(p.need-(avgMonthly||0))} kr/mån för att hinna.`;
-  return wrap(`Mål senast <b style="color:var(--text)">${mLabel(ym)}</b>, ${p.months} mån kvar. Förmögenheten behöver öka <b style="color:var(--text)">${fmt(p.need)} kr/mån</b>; ditt snitt är ${avgMonthly!=null?fmtSigned(avgMonthly):'—'} kr/mån.<br>${status}`);
-}
+function saveSetting(k,v){sv(k,k==='salary'||k==='goal'||k==='planned_savings'?parseFloat(v)||0:v);if(k==='goal'||k==='goal_date')resetGoalStart();if(k==='goal'||k==='goal_date'||k==='planned_savings')render();}
 // Plan mot måldatum (goal_date = YYYY-MM): månader kvar från senaste snapshot, behövd ökning per månad och
 // hur många månader före (diff > 0) eller efter plan du ligger i nuvarande takt (avgMonthly)
 function goalPlan(latest,goal,avgMonthly,goalYM){
   if(!latest||!/^\d{4}-\d{2}$/.test(goalYM||''))return null;
   const[gy,gm]=goalYM.split('-').map(Number),[ly,lm]=latest.period.split('-').map(Number);
-  const months=(gy-ly)*12+(gm-lm),left=Math.max(goal-latest.total,0);
+  const months=(gy-ly)*12+(gm-lm)+1,left=Math.max(goal-latest.total,0); // innevarande period räknas med
   if(left<=0)return{done:true,months,left:0};
   if(months<=0)return{late:true,months,left};
   const eta=avgMonthly>0?Math.ceil(left/avgMonthly):null;
@@ -4040,6 +4121,8 @@ function renderSettings(){
   document.getElementById('haptics-toggle').checked=ld('haptics',true)!==false;
   document.getElementById('s-goal').value=ld('goal',700000)||'';
   document.getElementById('s-goal-date').value=ld('goal_date','')||'';
+  document.getElementById('s-planned').value=getPlannedSavings();
+  renderInflowSettings();
   document.getElementById('s-apikey').value=getApiKey();
   renderFontPicker();
   renderPayPeriodsList();
@@ -4314,7 +4397,7 @@ function addCat(type){
 function buildBackup(){
   return{version:2,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
     ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
-    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),ai_profile:getProfile(),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
+    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),ai_profile:getProfile(),planned_savings:getPlannedSavings(),known_inflows:getInflows(),goal_start:ld('goal_start',null),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
       cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
       accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{}),
       owner_name:getOwnerName(),ai_import_notes:getImportNotes(),cat_budgets:getBudgets(),contact_names:getContacts()}};
@@ -4359,7 +4442,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date','ai_profile'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date','ai_profile','planned_savings','known_inflows','goal_start'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -4378,7 +4461,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters','planned_savings','known_inflows','goal_start']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -5999,7 +6082,8 @@ function buildCtx(){
   const rec=detectRecurring(state.month);
   const ins=getInsights()[state.month];
   const gym=String(ld('goal_date','')||''),gp=goalPlan(ln,goal,nws.length>1?(nws[nws.length-1].total-nws[0].total)/(nws.length-1):null,gym);
-  const goalPlanTxt=!gp?'':gp.done?' — målet är nått':gp.late?` — måldatumet ${gym} har passerat`:` — ska nås senast ${gym} (${gp.months} mån): behöver öka ${Math.round(gp.need)} kr/mån${gp.diff==null?', nås inte i nuvarande takt':gp.diff>=0?`, i nuvarande takt ${gp.diff} mån före planen`:`, i nuvarande takt ${-gp.diff} mån efter planen`}`;
+  const gpp=goalProgressApp();
+  const goalPlanTxt=gpp&&!gpp.done&&gpp.monthsLeft?` — senast ${gpp.gd} (${gpp.monthsLeft} mån kvar): behöver växa ${Math.round(gpp.need)} kr/mån; ${gpp.vsPlan>=0?Math.round(gpp.vsPlan)+' kr före':Math.round(-gpp.vsPlan)+' kr efter'} planlinjen. Prognos vid måldatumet: ${gpp.scenarios.map(s=>`${s.label} ${Math.round(s.projected)} kr (${Math.round(s.monthly)} kr/mån, ${s.rate} %)`).join(', ')}. Planerat sparande ${getPlannedSavings()} kr/mån`:!gp?'':gp.done?' — målet är nått':gp.late?` — måldatumet ${gym} har passerat`:` — ska nås senast ${gym} (${gp.months} mån): behöver öka ${Math.round(gp.need)} kr/mån${gp.diff==null?', nås inte i nuvarande takt':gp.diff>=0?`, i nuvarande takt ${gp.diff} mån före planen`:`, i nuvarande takt ${-gp.diff} mån efter planen`}`;
   const prof=profileCtx();const profileSection=prof?`\n\nEKONOMISK PROFIL:\n${prof}`:'';
   // Lån: skuld, ränta, villkor (från Supabase, cachat lokalt)
   const loanSection=_loans.length?`\n\nLÅN:\n${_loans.map(l=>{const d=loanDebt(l),x=l.extra||{},im=loanInterestMonth(l);return`- ${l.name}${l.lender?` (${l.lender})`:''}: skuld ${d?Math.round(d.value)+' kr ('+d.date+')':'okänd'}, ränta ${l.interest_pct!=null?l.interest_pct+' %':'okänd'}${x.rate_type?' '+x.rate_type:''}${im!=null?` ≈ ${Math.round(im)} kr/mån`:''}, amortering ${l.amortization?Math.round(l.amortization)+' kr/mån':'okänd'}${x.fixed_until?`, bunden till ${x.fixed_until}`:''}${x.rate_change_date?`, villkorsändring ${x.rate_change_date}`:''}${l.netted_in_assets?' (redan avdragen i förmögenheten)':''}`}).join('\n')}`:'';

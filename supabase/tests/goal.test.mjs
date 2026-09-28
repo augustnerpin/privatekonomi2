@@ -1,0 +1,38 @@
+// Målet mot plan och scenarier (functions/_shared/goal.ts).
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { goalProgress, simulate, inflowsIn, monthsBetween, addMonths, avgSavings12 } from '../functions/_shared/goal.ts';
+
+const latest = { period: '2026-10', total: 707104, amounts: { stocks: 168000, pension: 58000, cash: 230000, apt: 187604, klockor: 31000, ab: 31300, kontanter: 1200, other: 0 } };
+const inflows = [{ name: 'Tjänstepension', amount: 2000, monthly: true, nw_cat: 'pension' }, { name: 'Klumpsumma', amount: 25000, date: '2027-01', nw_cat: 'cash' }];
+
+test('krav per månad räknar med innevarande period: (950 000 − 707 104) / 15 ≈ 16 193', () => {
+  const g = goalProgress({ goal: 950000, goalDate: '2027-12', start: null, latest, plannedSavings: 10000, inflows: [], savingsLast12: 5000, amortMonthly: 0 });
+  assert.equal(g.months_left, 15); assert.equal(g.required_per_month, 16193); assert.equal(g.left, 242896);
+  assert.equal(g.plan.vs_plan, 0); // planen startar nu
+  assert.equal(g.plan.line[0].value, 707104); assert.equal(g.plan.line.at(-1).period, '2028-01'); assert.equal(g.plan.line.at(-1).value, 950000);
+});
+
+test('plan mot utfall: före/efter planlinjen', () => {
+  const start = { period: '2026-04', total: 584340 };
+  const g = goalProgress({ goal: 950000, goalDate: '2027-12', start, latest, plannedSavings: 10000, inflows: [], savingsLast12: 5000, amortMonthly: 0 });
+  // 21 månader från 2026-04 till slutet av 2027-12; 6 av dem har gått → planen 584 340 + 365 660 × 6/21 = 688 814
+  assert.equal(g.plan.value_now, 688814); assert.equal(g.plan.vs_plan, 707104 - 688814);
+});
+
+test('scenarier: svagt < plan < bra, kända inbetalningar och amortering räknas', () => {
+  const g = goalProgress({ goal: 950000, goalDate: '2027-12', start: null, latest, plannedSavings: 10000, inflows, savingsLast12: 4000, amortMonthly: 2546 });
+  const [svagt, plan, bra] = g.scenarios;
+  // svagt: 0 % → 707 104 + 15 × (4 000 + 2 000 + 2 546) + 25 000
+  assert.equal(svagt.projected, 707104 + 15 * (4000 + 2000 + 2546) + 25000);
+  assert.ok(plan.projected > svagt.projected && bra.projected > plan.projected);
+  assert.equal(plan.monthly_savings, 10000); assert.equal(bra.return_pct, 9);
+  assert.ok(plan.reaches_goal === null || plan.reaches_goal <= '2027-12');
+});
+
+test('hjälpfunktioner', () => {
+  assert.equal(monthsBetween('2026-10', '2027-12'), 14); assert.equal(addMonths('2026-11', 2), '2027-01');
+  assert.deepEqual(inflowsIn(inflows, '2027-01'), { invest: 2000, other: 25000 }); assert.deepEqual(inflowsIn(inflows, '2027-02'), { invest: 2000, other: 0 });
+  assert.equal(simulate({ latest: { period: '2026-10', total: 100, amounts: { stocks: 100 } }, months: 12, monthly: 0, ratePct: 12, amort: 0, inflows: [], goal: 1e9 }).projected, 112);
+  assert.equal(avgSavings12([{ type: 'savings', month: '2026-05', amount: 12000, category: 'Avanza' }, { type: 'savings', month: '2026-05', amount: 999, category: 'Amortering' }, { type: 'savings', month: '2026-10', amount: 5000, category: 'Avanza' }], '2026-10'), 1000);
+});
