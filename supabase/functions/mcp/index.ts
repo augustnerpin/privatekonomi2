@@ -1,6 +1,8 @@
 // Supabase Edge Function: MCP-server för Privatekonomi — allt i en fil, så att den går att
 // klistra in direkt i Supabase-panelen. Driftsätt: supabase functions deploy mcp --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { goalProgress, avgSavings12 } from '../_shared/goal.ts';
+import { decompose } from '../_shared/networth.ts';
 
 // Privatekonomi som MCP-server (Model Context Protocol, "Streamable HTTP", tillståndslös).
 // Låter Claude och andra AI-appar läsa och ändra din ekonomi i Supabase.
@@ -46,7 +48,7 @@ const DEF: Obj = {
   ],
   accounts: [{ id: 'lonekonto', name: 'Lönekonto', kind: 'bank' }, { id: 'amex', name: 'AMEX', kind: 'card' }],
   cat_groups: [], cat_budgets: {}, pay_periods: [], contact_names: {}, merchant_rules: {},
-  goal: 700000, goal_date: '', salary: 0, owner_name: '', ai_profile: {},
+  goal: 700000, goal_date: '', salary: 0, owner_name: '', ai_profile: {}, goal_start: null, planned_savings: 10000, known_inflows: [],
 };
 // Kontotyper. Appen räknar bank + savings som likvida medel; card = kreditkort (köp brukar vara positiva i exporten).
 const KINDS: Obj = { bank: 'Bankkonto', card: 'Kreditkort', savings: 'Sparkonto', investment: 'Investering (ISK/depå)' };
@@ -174,6 +176,7 @@ async function queryTxs(c: Ctx, f: Obj, s: Obj) {
     const words = String(f.search).toLowerCase().split(/\s+/).filter(Boolean);
     txs = txs.filter((t) => { const h = [t.description, t.contact, t.category, t.note].join(' ').toLowerCase(); return words.every((w) => h.includes(w)); });
   }
+  if (f.tag) { const tg = String(f.tag).toLowerCase(); txs = txs.filter((t) => (t.tags || []).some((x: string) => x.toLowerCase() === tg)); }
   if (f.min_amount != null) txs = txs.filter((t) => t.amount >= f.min_amount);
   if (f.max_amount != null) txs = txs.filter((t) => t.amount <= f.max_amount);
   return txs;
@@ -186,6 +189,7 @@ function txView(r: Obj, s: Obj) {
   if (r.source) t.source = r.source;
   const x = r.extra || {};
   if (x.note) t.note = x.note;
+  if (Array.isArray(x.tags) && x.tags.length) t.tags = x.tags;
   if (x.parent_id) { t.parent_id = Number(x.parent_id); t.split = `${x.split_index}/${x.split_of}`; }
   if (r.type === 'transfer') {
     // Negativt belopp = pengar ut från radens konto. Motkontot sparas i extra när det är känt.
@@ -267,6 +271,7 @@ const FILTERS: Obj = {
   category: S.strOrList('Kategori(er), exakt namn — se get_settings'),
   account: { type: 'string', description: 'Kontots id eller namn' },
   search: { type: 'string', description: 'Fritext i beskrivning/Swish-namn/kategori, t.ex. "ica" eller "spotify"' },
+  tag: { type: 'string', description: 'Tagg, t.ex. "London" (skiftlägesokänsligt)' },
   min_amount: { type: 'number' },
   max_amount: { type: 'number' },
 };
@@ -341,7 +346,7 @@ export const TOOLS: Tool[] = [
       properties: {
         ...FILTERS,
         type: { ...FILTERS.type, description: FILTERS.type.description + '. Standard: expense' },
-        group_by: { type: 'string', enum: ['category', 'month', 'merchant', 'account', 'type', 'category_month'], default: 'category' },
+        group_by: { type: 'string', enum: ['category', 'month', 'merchant', 'account', 'type', 'category_month', 'tag'], default: 'category', description: 'tag: en rad per tagg (en transaktion med flera taggar räknas i varje)' },
         limit: { type: 'integer', minimum: 1, maximum: 500, default: 50 },
       },
     },
@@ -355,8 +360,8 @@ export const TOOLS: Tool[] = [
         by === 'merchant' ? t.contact || (t._mkey ? t._mkey.split('|')[0] : t.description.toLowerCase()) :
         by === 'category_month' ? t.category + ' | ' + t.month : t.category;
       const g = new Map<string, Obj>();
-      for (const t of txs) {
-        const k = key(t); const o = g.get(k) || { key: k, sum: 0, count: 0 };
+      for (const t of txs) for (const k of by === 'tag' ? (t.tags?.length ? t.tags : ['(ingen tagg)']) : [key(t)]) {
+        const o = g.get(k) || { key: k, sum: 0, count: 0 };
         if (by === 'merchant' && !o.example) { o.example = t.contact || t.description; if (t.number) o.number = t.number; }
         o.sum += t.amount; o.count++; g.set(k, o);
       }
@@ -429,6 +434,16 @@ export const TOOLS: Tool[] = [
       const last = snaps[snaps.length - 1];
       const loans = await loadLoans(c);
       const extra: Obj = {};
+      // Vad förändringen består av: sparande, amortering, avkastning, omvärdering, övrigt (per steg och totalt)
+      if (rows.length > 1) {
+        const st = await loadState(c, ['accounts', 'pay_periods', 'known_inflows']);
+        const sav = await fetchAll(() => uq(c, 'transactions', 'month,type,category,amount').eq('deleted', false).eq('type', 'savings').order('id', { ascending: true }));
+        const starts = Object.fromEntries(rows.map((r) => [r.period, periodStart(r.period, st.pay_periods)]));
+        const investCats = st.accounts.filter((x: Obj) => x.kind === 'investment' && x.sav_cat).map((x: Obj) => x.sav_cat);
+        const pension = (st.known_inflows || []).filter((x: Obj) => x.monthly && x.nw_cat === 'pension').reduce((x: number, y: Obj) => x + (Number(y.amount) || 0), 0);
+        extra.breakdown = decompose({ snaps: rows.map((r) => ({ period: r.period, total: Number(r.total), amounts: r.amounts || {} })), txs: sav, loans: loans || [], starts, investCats, pensionPerMonth: pension });
+        extra.breakdown_explanation = 'Förmögenhetsbilden för P = läget när P börjar. sparande = sparandetransaktioner utom Amortering; amortering = minskad skuld (eller kategorin Amortering); avkastning = aktier/fonder + pension minus insättningar; omvärdering = övriga tillgångar minus amortering (engångsposter); övrigt = resten.';
+      }
       if (loans?.length) {
         // Skulder vid kalendermånadens slut; lån markerade netted_in_assets är redan avdragna i tillgången
         for (const o of snaps) {
@@ -494,6 +509,8 @@ export const TOOLS: Tool[] = [
         type: S.type, category: { type: 'string' }, amount: { type: 'number' },
         description: { type: 'string' }, date: S.date, account: { type: 'string' },
         from_account: TRF_SIDE.from, to_account: TRF_SIDE.to,
+        tags: { type: 'array', items: { type: 'string' }, description: 'Ersätter taggarna ([] tar bort alla)' },
+        add_tags: { type: 'array', items: { type: 'string' } }, remove_tags: { type: 'array', items: { type: 'string' } },
         apply_to_same_merchant: { type: 'boolean', default: false },
         dry_run: { type: 'boolean', default: false, description: 'true = visa ändringarna utan att spara' },
       },
@@ -519,6 +536,12 @@ export const TOOLS: Tool[] = [
         const { from_account, to_account, transfer_pair_id, ...rest } = r.extra || {};
         if (from_account || to_account || transfer_pair_id) patch.extra = rest;
         if (transfer_pair_id) unpair = Number(transfer_pair_id);
+      }
+      if (a.tags || a.add_tags || a.remove_tags) {
+        const base = patch.extra || { ...(r.extra || {}) };
+        const tags = nextTags(base.tags, a);
+        if (tags.length) base.tags = tags; else delete base.tags;
+        patch.extra = base;
       }
       const changedCat = next.category !== r.category || next.type !== r.type;
       const learn = !!r.mkey && changedCat;
@@ -610,6 +633,132 @@ export const TOOLS: Tool[] = [
       const total = s.cats_nw.reduce((x: number, cat: Obj) => x + (+amounts[cat.key] || 0), 0);
       await must(c.db.from('net_worth_snapshots').upsert({ user_id: c.uid, period: a.period, total, amounts, deleted: false }, { onConflict: 'user_id,period' }));
       return { period: a.period, total, amounts };
+    },
+  },
+
+  // ── Målet, manuella värden och förmögenhetskategorier ─────────────────
+  {
+    name: 'set_net_worth_goal',
+    title: 'Sätt förmögenhetsmål',
+    description: 'Sätter förmögenhetsmålet (amount, kr) och när det ska vara nått (target_date, YYYY-MM = löneperiod; målet gäller vid periodens slut). Planlinjen börjar om från senaste förmögenhetsbilden. Valfritt: planned_savings (kr/mån).',
+    write: true,
+    inputSchema: { type: 'object', required: ['amount'], properties: { amount: { type: 'number', minimum: 1 }, target_date: { ...S.month, description: 'YYYY-MM' }, planned_savings: { type: 'number', minimum: 0 } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      await saveState(c, 'goal', Math.round(a.amount));
+      if (a.target_date) await saveState(c, 'goal_date', a.target_date);
+      if (a.planned_savings != null) await saveState(c, 'planned_savings', Math.round(a.planned_savings));
+      const last = (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).order('period', { ascending: false }).limit(1)))[0];
+      if (last) await saveState(c, 'goal_start', { period: last.period, total: Math.round(Number(last.total)) });
+      return { goal: Math.round(a.amount), goal_date: a.target_date ?? null, plan_starts_at: last ? { period: last.period, total: Number(last.total) } : null, note: 'Syns i appen vid nästa synk.' };
+    },
+  },
+  {
+    name: 'get_goal_progress',
+    title: 'Målet mot plan',
+    description: 'Förmögenhetsmålet mot plan: krav per månad ((mål − nu) / månader kvar), planlinjen från när målet sattes och status (vs_plan > 0 = före plan), samt prognos vid måldatumet i tre scenarier: svagt (snittsparande senaste 12 perioderna, 0 %), plan (planerat sparande, 6 %/år på aktier/fonder + pension) och bra (9 %). Alla scenarier räknar med amortering och kända inbetalningar.',
+    inputSchema: { type: 'object', properties: { include_paths: { type: 'boolean', default: false, description: 'Ta med planlinjen och scenariernas bana månad för månad' } } },
+    annotations: RO,
+    async run(c, a) {
+      const s = await loadState(c, ['goal', 'goal_date', 'goal_start', 'planned_savings', 'known_inflows']);
+      if (!s.goal_date) throw new UserError('Inget måldatum satt — använd set_net_worth_goal med target_date');
+      const snaps = await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total,amounts').eq('deleted', false).order('period', { ascending: true }));
+      const latest = snaps[snaps.length - 1]; if (!latest) throw new UserError('Ingen förmögenhetsbild registrerad än');
+      const sav = await fetchAll(() => uq(c, 'transactions', 'month,type,category,amount').eq('deleted', false).eq('type', 'savings').order('id', { ascending: true }));
+      const loans = (await loadLoans(c)) || [];
+      const g = goalProgress({ goal: Number(s.goal), goalDate: s.goal_date, start: s.goal_start, latest: { period: latest.period, total: Number(latest.total), amounts: latest.amounts },
+        plannedSavings: Number(s.planned_savings ?? 10000), inflows: s.known_inflows || [], savingsLast12: avgSavings12(sav, latest.period), amortMonthly: loans.reduce((x, l) => x + (Number(l.amortization) || 0), 0) });
+      if (!g) throw new UserError('Kunde inte räkna ut planen');
+      if (!a.include_paths) { g.plan = { ...g.plan, line: undefined }; g.scenarios = g.scenarios.map((x: Obj) => ({ ...x, path: undefined })); }
+      return { ...g, known_inflows: s.known_inflows || [] };
+    },
+  },
+  {
+    name: 'set_asset_value',
+    title: 'Sätt värde på tillgång',
+    description: 'Sparar värdet på en tillgång med manuellt värde per datum, t.ex. lägenheten (bruttovärde; lån som hör till tillgången dras av automatiskt när förmögenheten räknas ut), klockor, AB eller pension. asset = förmögenhetskategorins nyckel eller namn (se list_net_worth_categories).',
+    write: true,
+    inputSchema: { type: 'object', required: ['asset', 'value'], properties: { asset: { type: 'string' }, value: { type: 'number' }, date: S.date, note: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['cats_nw']);
+      const v = String(a.asset).trim().toLowerCase();
+      const cat = s.cats_nw.find((x: Obj) => x.key.toLowerCase() === v || x.label.toLowerCase() === v);
+      if (!cat) throw new UserError(`Okänd förmögenhetskategori "${a.asset}". Finns: ${s.cats_nw.map((x: Obj) => `${x.key} (${x.label})`).join(', ')}`);
+      const date = a.date || today();
+      if (!validDate(date)) throw new UserError(`Ogiltigt datum "${date}"`);
+      await mustNew(c.db.from('asset_values').upsert({ user_id: c.uid, asset: cat.key, val_date: date, value: a.value, note: a.note ?? null, deleted: false }, { onConflict: 'user_id,asset,val_date' }));
+      return { asset: cat.key, label: cat.label, value: a.value, date, note: 'Används när förmögenheten räknas ut (appen: Beräkna från saldon, nattjobbet vid ny löneperiod).' };
+    },
+  },
+  {
+    name: 'list_net_worth_categories',
+    title: 'Förmögenhetskategorier',
+    description: 'Listar förmögenhetskategorierna (nyckel och namn) med senaste värde i förmögenhetsbilden och senaste manuella värde.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: RO,
+    async run(c) {
+      const s = await loadState(c, ['cats_nw', 'accounts']);
+      const last = (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,amounts').eq('deleted', false).order('period', { ascending: false }).limit(1)))[0];
+      const vals = (await mayMust<Obj[]>(uq(c, 'asset_values', 'asset,val_date,value').eq('deleted', false).order('val_date', { ascending: true }))) || [];
+      return { categories: s.cats_nw.map((x: Obj) => {
+        const v = vals.filter((r) => r.asset === x.key).pop();
+        const accs = s.accounts.filter((acc: Obj) => (acc.nw_cat !== undefined ? acc.nw_cat : acc.kind === 'investment' ? 'stocks' : acc.kind === 'card' ? null : 'cash') === x.key).map((acc: Obj) => acc.name);
+        return { key: x.key, label: x.label, latest: last ? Number(last.amounts?.[x.key] || 0) : null, manual_value: v ? { value: Number(v.value), date: v.val_date } : null, accounts: accs };
+      }), latest_period: last?.period ?? null };
+    },
+  },
+  {
+    name: 'create_net_worth_category',
+    title: 'Skapa förmögenhetskategori',
+    description: 'Skapar en förmögenhetskategori (label = namn, key = valfri nyckel; skapas annars från namnet).',
+    write: true,
+    inputSchema: { type: 'object', required: ['label'], properties: { label: { type: 'string' }, key: { type: 'string', pattern: '^[a-z0-9_]{1,30}$' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['cats_nw']);
+      const label = String(a.label).trim(); if (!label) throw new UserError('Ange ett namn');
+      const key = a.key || label.toLowerCase().replace(/[åä]/g, 'a').replace(/ö/g, 'o').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30) || 'cat_' + Date.now().toString(36);
+      if (s.cats_nw.some((x: Obj) => x.key === key || x.label.toLowerCase() === label.toLowerCase())) throw new UserError(`Kategorin "${label}" (${key}) finns redan`);
+      const cats = [...s.cats_nw, { key, label }];
+      await saveState(c, 'cats_nw', cats);
+      return { created: { key, label }, categories: cats };
+    },
+  },
+  {
+    name: 'rename_net_worth_category',
+    title: 'Byt namn på förmögenhetskategori',
+    description: 'Byter namn på en förmögenhetskategori. Nyckeln (och därmed historiken) behålls.',
+    write: true,
+    inputSchema: { type: 'object', required: ['category', 'label'], properties: { category: { type: 'string', description: 'Nyckel eller nuvarande namn' }, label: { type: 'string' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['cats_nw']);
+      const v = String(a.category).trim().toLowerCase(); const label = String(a.label).trim(); if (!label) throw new UserError('Ange ett namn');
+      const cat = s.cats_nw.find((x: Obj) => x.key.toLowerCase() === v || x.label.toLowerCase() === v);
+      if (!cat) throw new UserError(`Okänd förmögenhetskategori "${a.category}"`);
+      const cats = s.cats_nw.map((x: Obj) => (x.key === cat.key ? { ...x, label } : x));
+      await saveState(c, 'cats_nw', cats);
+      return { renamed: { key: cat.key, from: cat.label, to: label } };
+    },
+  },
+  {
+    name: 'delete_net_worth_category',
+    title: 'Ta bort förmögenhetskategori',
+    description: 'Tar bort en förmögenhetskategori ur listan. Gamla förmögenhetsbilder behåller sina värden (historiken ändras inte), men kategorin räknas inte i nya. Kräver confirm: true om kategorin har ett värde i senaste bilden.',
+    write: true,
+    inputSchema: { type: 'object', required: ['category'], properties: { category: { type: 'string' }, confirm: { type: 'boolean', default: false } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['cats_nw']);
+      const v = String(a.category).trim().toLowerCase();
+      const cat = s.cats_nw.find((x: Obj) => x.key.toLowerCase() === v || x.label.toLowerCase() === v);
+      if (!cat) throw new UserError(`Okänd förmögenhetskategori "${a.category}"`);
+      const last = (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,amounts').eq('deleted', false).order('period', { ascending: false }).limit(1)))[0];
+      const val = Number(last?.amounts?.[cat.key] || 0);
+      if (val && !a.confirm) throw new UserError(`${cat.label} har ${round(val)} kr i förmögenhetsbilden ${last.period}. Kör igen med confirm: true för att ta bort ändå (historiken behålls).`);
+      await saveState(c, 'cats_nw', s.cats_nw.filter((x: Obj) => x.key !== cat.key));
+      return { deleted: { key: cat.key, label: cat.label }, note: 'Gamla förmögenhetsbilder är oförändrade.' };
     },
   },
 
@@ -878,7 +1027,8 @@ export const TOOLS: Tool[] = [
       properties: {
         ids: { type: 'array', items: { type: 'integer' }, minItems: 1, maxItems: 2000 },
         filter: { type: 'object', properties: FILTERS, description: 'Samma filter som list_transactions. Minst ett villkor.' },
-        changes: { type: 'object', properties: { type: S.type, category: { type: 'string' }, account: { type: 'string', description: 'Kontots id, namn eller nummer' }, description: { type: 'string' } } },
+        changes: { type: 'object', properties: { type: S.type, category: { type: 'string' }, account: { type: 'string', description: 'Kontots id, namn eller nummer' }, description: { type: 'string' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Ersätter taggarna' }, add_tags: { type: 'array', items: { type: 'string' } }, remove_tags: { type: 'array', items: { type: 'string' } } } },
         dry_run: { type: 'boolean', default: true, description: 'Standard true. Bara false sparar.' },
         expected_count: { type: 'integer', minimum: 0, description: 'would_update från dry_run. Krävs när dry_run är false.' },
       },
@@ -913,6 +1063,7 @@ export const TOOLS: Tool[] = [
         if (ch.category && ch.category !== t.category) { before.category = t.category; after.category = ch.category; }
         if (acc && acc !== t._acc) { before.account = t.account ?? null; after.account = accountName(s, acc); }
         if (desc != null && desc !== t.description) { before.description = t.description; after.description = desc; }
+        if (ch.tags || ch.add_tags || ch.remove_tags) { const nt = nextTags(t.tags, ch); if (JSON.stringify(nt) !== JSON.stringify(t.tags || [])) { before.tags = t.tags || []; after.tags = nt; } }
         return { t, view: { id: t.id, date: t.date, description: t.description, amount: t.amount, before, after } };
       }).filter((x) => Object.keys(x.view.after).length);
       const res = { matched: txs.length, would_update: items.length, unchanged: txs.length - items.length, ...(notFound.length ? { not_found: notFound } : {}) };
@@ -928,7 +1079,12 @@ export const TOOLS: Tool[] = [
       if (acc) patch.account = acc;
       if (desc != null) patch.description = desc;
       const ids = items.map((x) => x.t.id);
-      for (let i = 0; i < ids.length; i += 200) await must(c.db.from('transactions').update(patch).eq('user_id', c.uid).eq('deleted', false).in('id', ids.slice(i, i + 200)));
+      if (Object.keys(patch).length) for (let i = 0; i < ids.length; i += 200) await must(c.db.from('transactions').update(patch).eq('user_id', c.uid).eq('deleted', false).in('id', ids.slice(i, i + 200)));
+      // Taggar ligger i extra: skrivs per rad
+      for (const { t, view } of items) if (view.after.tags) {
+        const extra = { ...t._extra }; if (view.after.tags.length) extra.tags = view.after.tags; else delete extra.tags;
+        await must(c.db.from('transactions').update({ extra }).eq('user_id', c.uid).eq('id', t.id)); t._extra = extra;
+      }
       // En överföring som blir något annat tappar sina sidor och sin motpart (som i update_transaction)
       if (ch.type && ch.type !== 'transfer') {
         for (const { t } of items) {
@@ -1301,6 +1457,14 @@ async function unlinkPair(c: Ctx, id: number) {
   if (!rows[0]?.extra?.transfer_pair_id) return;
   const { transfer_pair_id, ...extra } = rows[0].extra;
   await must(c.db.from('transactions').update({ extra }).eq('user_id', c.uid).eq('id', id));
+}
+// Taggar: tags ersätter, add_tags/remove_tags ändrar (unika, i ordning)
+function nextTags(cur: any, a: Obj) {
+  const clean = (l: any) => (Array.isArray(l) ? l : []).map((x: any) => String(x).trim()).filter(Boolean);
+  let t = a.tags ? clean(a.tags) : clean(cur);
+  for (const x of clean(a.add_tags)) if (!t.some((y: string) => y.toLowerCase() === x.toLowerCase())) t.push(x);
+  const rm = clean(a.remove_tags).map((x: string) => x.toLowerCase());
+  return [...new Set(t.filter((x: string) => !rm.includes(x.toLowerCase())))];
 }
 function checkTx(s: Obj, t: Obj, keepCat = false) {
   if (!TYPES.includes(t.type)) throw new UserError(`Ogiltig typ "${t.type}"`);

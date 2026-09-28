@@ -96,6 +96,9 @@ utgift och sparande positivt = pengar ut, inkomst positivt = in, överföring ne
 | Regler | `list_rules`, ✏️ `update_rule`, ✏️ `delete_rule` |
 | Kategorier | ✏️ `create_category`, ✏️ `rename_category`, ✏️ `merge_categories` |
 | Swish-namn | `list_contacts`, ✏️ `set_contact` |
+| Mål | `get_goal_progress` (krav per månad, plan mot utfall, scenarier), ✏️ `set_net_worth_goal` |
+| Förmögenhet | `list_net_worth_categories`, ✏️ `set_asset_value`, ✏️ `create_net_worth_category`, ✏️ `rename_net_worth_category`, ✏️ `delete_net_worth_category`; `get_net_worth` har uppdelningen (`breakdown`) |
+| Taggar | `tag` i filtren, `group_by: "tag"` i `summarize_transactions`, `tags`/`add_tags`/`remove_tags` i `update_transaction` och `bulk_update_transactions` |
 
 Verktyg som ändrar många rader har förhandsgranskning: `bulk_update_transactions` sparar bara med
 `dry_run: false` och rätt `expected_count`, och `match_transfers` länkar bara med `confirm: true`.
@@ -113,10 +116,8 @@ tar emot `dry_run: true`.
    npx supabase link --project-ref qchasvatuhndtswxlucr
    npx supabase functions deploy mcp --no-verify-jwt
    ```
-   Du kan också använda panelen: *Edge Functions* → *Deploy a new function* → *Via Editor*.
-   Döp funktionen till `mcp`, ersätt allt i `index.ts` med [`functions/mcp/index.ts`](functions/mcp/index.ts)
-   (hela servern är en fil) och tryck *Deploy*. Stäng sedan av *Enforce JWT verification* under
-   funktionens *Details*.
+   Servern använder de delade modulerna i [`functions/_shared`](functions/_shared) (mål och förmögenhet),
+   så den driftsätts med CLI:n (inte genom att klistra in en fil i panelen).
    Funktionen hittar själv projektets URL och hemliga nyckel. Du behöver inte lägga in några secrets.
 3. **Skapa en nyckel** i appen under Inställningar → *Databas (Supabase)* → *AI-koppling (MCP)*.
    Du får en adress som `https://qchasvatuhndtswxlucr.supabase.co/functions/v1/mcp/pkm_…`.

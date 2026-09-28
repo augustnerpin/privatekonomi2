@@ -67,8 +67,8 @@ test('verktygslistan: läsnyckel ser bara läsverktyg, alla skrivverktyg nekas',
   const w = await world();
   const all = (await w.rpc(W, 'tools/list')).body.result.tools;
   const read = (await w.rpc(R, 'tools/list')).body.result.tools.map((t) => t.name);
-  assert.equal(all.length, 27);
-  assert.deepEqual(read.sort(), ['get_account_balances', 'get_loans', 'get_month_summary', 'get_net_worth', 'get_settings', 'list_contacts', 'list_rules', 'list_transactions', 'summarize_transactions']);
+  assert.equal(all.length, 34);
+  assert.deepEqual(read.sort(), ['get_account_balances', 'get_goal_progress', 'get_loans', 'get_month_summary', 'get_net_worth', 'get_settings', 'list_contacts', 'list_net_worth_categories', 'list_rules', 'list_transactions', 'summarize_transactions']);
   for (const t of all) {
     assert.ok(t.description.length > 60 && /[åäö]/.test(t.description), `${t.name} har en svensk beskrivning`);
     assert.equal(t.inputSchema.type, 'object');
