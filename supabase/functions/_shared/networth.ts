@@ -36,12 +36,14 @@ export function shiftMonthDay(d: string, n: number) {
 }
 // Skuld på ett lån vid ett datum: senaste saldo på/före datumet. Före första kända saldot räknas bakåt med
 // amorteringen: varje månatlig dragning (samma dag i månaden som första saldot) mellan datumet och första
-// saldot lägger tillbaka amortization. estimated = true när värdet är bakåträknat.
+// saldot lägger tillbaka amortization. estimated = true när värdet är bakåträknat. Lån utan amortering räknas inte
+// bakåt (startdatumet är okänt, t.ex. ett nytt billån): före första saldot finns ingen skuld.
 export function debtAt(l: Obj, date: string) {
   const h = (l.history || []).map((x: Obj) => ({ date: x.date || x.bal_date, value: Number(x.value) })).filter((x: Obj) => x.date).sort((a: Obj, b: Obj) => a.date.localeCompare(b.date));
   if (!h.length) return null;
   const v = valueAt(h, date); if (v) return { ...v, estimated: false };
   const am = Number(l.amortization) || 0;
+  if (!(am > 0)) return null;
   let n = 0, t = h[0].date;
   while (t > date && n < 600) { n++; t = shiftMonthDay(t, -1); }
   return { date, value: Math.round((h[0].value + am * n) * 100) / 100, estimated: true };

@@ -67,3 +67,20 @@ test('taggar: filter, summering per tagg, update_transaction och bulk_update_tra
   await w.call('bulk_update_transactions', { ids: [61], changes: { tags: [] }, dry_run: false, expected_count: 1 });
   assert.equal(w.txRow(61).extra.tags, undefined);
 });
+
+test('get_net_worth: skulder per förmögenhetsbild vid periodstart, bakåträknade som i breakdown', async () => {
+  const loans = [['A', 648491, 1167], ['B', 650300, 1100], ['C', 213605, 279]].map(([id, v, am], i) => ({ user_id: U, id, name: `Del ${i + 1}`, amortization: am, secured_by: 'apt', netted_in_assets: true, extra: {}, deleted: false }));
+  const loan_balances = [['A', 648491], ['B', 650300], ['C', 213605]].map(([loan_id, value]) => ({ user_id: U, loan_id, bal_date: '2026-09-28', value, deleted: false }));
+  const w = await world({ loans, loan_balances, net_worth_snapshots: [
+    { user_id: U, period: '2026-08', total: 639000, amounts: { apt: 134000, cash: 505000 }, deleted: false }, ...snaps] });
+  const n = await w.call('get_net_worth', {}, R);
+  const by = Object.fromEntries(n.snapshots.map((x) => [x.period, x]));
+  const now = 648491 + 650300 + 213605, am = 2546;
+  // 2026-08 börjar 24/7: tre dragningar (28/7, 28/8, 28/9) före första saldot; 2026-09 (25/8): två; 2026-10 (25/9): en
+  assert.equal(by['2026-08'].liabilities, now + 3 * am); assert.equal(by['2026-09'].liabilities, now + 2 * am); assert.equal(by['2026-10'].liabilities, now + am);
+  assert.equal(by['2026-10'].liabilities_date, '2026-09-25'); assert.equal(by['2026-10'].liabilities_estimated, true);
+  assert.equal(by['2026-10'].liabilities_by_loan['Del 1'], 648491 + 1167);
+  assert.equal(by['2026-10'].gross_assets, 707104 + now + am); assert.equal(by['2026-10'].net, 707104);
+  // Samma skuldförändring som breakdown räknar som amortering
+  assert.equal(by['2026-09'].liabilities - by['2026-10'].liabilities, n.breakdown.steps.at(-1).amortering);
+});

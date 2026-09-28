@@ -2,7 +2,7 @@
 // klistra in direkt i Supabase-panelen. Driftsätt: supabase functions deploy mcp --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { goalProgress, avgSavings12 } from '../_shared/goal.ts';
-import { decompose } from '../_shared/networth.ts';
+import { decompose, debtAt as debtAtStart } from '../_shared/networth.ts';
 
 // Privatekonomi som MCP-server (Model Context Protocol, "Streamable HTTP", tillståndslös).
 // Låter Claude och andra AI-appar läsa och ändra din ekonomi i Supabase.
@@ -420,7 +420,7 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: 'object', properties: { month_from: FILTERS.month_from, month_to: FILTERS.month_to } },
     annotations: RO,
     async run(c, a) {
-      const s = await loadState(c, ['cats_nw', 'goal']);
+      const s = await loadState(c, ['cats_nw', 'goal', 'pay_periods']);
       let q = uq(c, 'net_worth_snapshots', 'period,total,amounts').eq('deleted', false);
       if (a.month_from) q = q.gte('period', a.month_from);
       if (a.month_to) q = q.lte('period', a.month_to);
@@ -451,15 +451,17 @@ export const TOOLS: Tool[] = [
         extra.breakdown_explanation = 'Förmögenhetsbilden för P = läget när P börjar. warnings = aktier/pension saknar värde inom 5 dagar från periodgränsen (avkastningen kan då vara missvisande). Skulden före första kända lånesaldot räknas bakåt med amorteringen. sparande = sparandetransaktioner utom Amortering; amortering = minskad skuld (eller kategorin Amortering); avkastning = aktier/fonder + pension minus insättningar; omvärdering = övriga tillgångar minus amortering (engångsposter); övrigt = resten.';
       }
       if (loans?.length) {
-        // Skulder vid kalendermånadens slut; lån markerade netted_in_assets är redan avdragna i tillgången
+        // Skulder vid periodens start (samma som breakdown): senaste saldo på/före startdatumet, före första kända
+        // saldot bakåträknat med amorteringen. Lån markerade netted_in_assets är redan avdragna i tillgången.
         for (const o of snaps) {
-          const [y, m] = o.period.split('-').map(Number); const end = ymd(new Date(y, m, 0));
-          let all = 0, netted = 0; const by: Obj = {};
-          for (const l of loans) { const d = debtAt(l, end); if (d == null) continue; all += d; if (l.netted_in_assets) netted += d; by[l.name] = d; }
-          Object.assign(o, { assets: o.total, liabilities: round(all), liabilities_already_in_assets: round(netted), net: round(o.total - (all - netted)), gross_assets: round(o.total + netted), liabilities_by_loan: by });
+          const start = periodStart(o.period, s.pay_periods || []);
+          let all = 0, netted = 0, estimated = false; const by: Obj = {};
+          for (const l of loans) { const d = debtAtStart(l, start); if (!d) continue; all += d.value; if (l.netted_in_assets) netted += d.value; by[l.name] = round(d.value); if (d.estimated) estimated = true; }
+          Object.assign(o, { assets: o.total, liabilities: round(all), liabilities_already_in_assets: round(netted), net: round(o.total - (all - netted)), gross_assets: round(o.total + netted), liabilities_by_loan: by,
+            liabilities_date: start, ...(estimated ? { liabilities_estimated: true } : {}) });
         }
         extra.loans = loans.map((l) => loanView(l, s));
-        extra.explanation = 'assets = inmatade förmögenhetsvärden (samma som total). liabilities = lånens skuld vid månadens slut. Lån med netted_in_assets är redan avdragna i tillgången de hör till (secured_by) och dras inte av igen: net = assets − (liabilities − liabilities_already_in_assets). gross_assets = assets + liabilities_already_in_assets.';
+        extra.explanation = 'assets = inmatade förmögenhetsvärden (samma som total). liabilities = lånens skuld när perioden börjar (liabilities_date; liabilities_estimated = bakåträknad med amorteringen före första kända saldot). Lån med netted_in_assets är redan avdragna i tillgången de hör till (secured_by) och dras inte av igen: net = assets − (liabilities − liabilities_already_in_assets). gross_assets = assets + liabilities_already_in_assets.';
       } else if (loans === null) extra.loans_note = 'Lån visas när schema.sql körts igen.';
       const latest = last ? { period: last.period, total: last.total, goal_progress_pct: Math.round((last.total / s.goal) * 1000) / 10, left_to_goal: round(s.goal - last.total),
         ...(last.net != null ? { assets: last.assets, liabilities: last.liabilities, liabilities_already_in_assets: last.liabilities_already_in_assets, net: last.net, gross_assets: last.gross_assets } : {}) } : null;

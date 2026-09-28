@@ -2606,6 +2606,7 @@ const pensionPerMonth=()=>{const k=ld('known_inflows',[]);return Array.isArray(k
 // för varje månatlig dragning (samma dag i månaden) däremellan
 function shiftMD(d,n){const[y,m,day]=d.split('-').map(Number);const last=new Date(Date.UTC(y,m-1+n+1,0)).getUTCDate();return new Date(Date.UTC(y,m-1+n,Math.min(day,last))).toISOString().slice(0,10)}
 function debtAtApp(l,date){const h=[...(l.history||[])].sort((a,b)=>a.date.localeCompare(b.date));if(!h.length)return null;const v=latestOf(h,date);if(v)return{...v,estimated:false};
+  if(!(+l.amortization>0))return null; // lån utan amortering: startdatum okänt, ingen skuld före första saldot
   let n=0,t=h[0].date;while(t>date&&n<600){n++;t=shiftMD(t,-1)}return{date,value:h[0].value+(+l.amortization||0)*n,estimated:true}}
 // Datum då aktier/fonder och pension har ett känt värde (saldon på konton i kategorin + manuella värden)
 function investValueDates(){const out={};NW_INVEST.forEach(k=>{const accs=getAccounts().filter(a=>nwCatOfAcc(a)===k).map(a=>a.id);

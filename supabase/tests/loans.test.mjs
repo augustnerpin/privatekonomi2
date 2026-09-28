@@ -45,11 +45,13 @@ test('get_net_worth: tillgångar, skulder och netto när Lägenhet är netto', a
   await setupLoans(w);
   const nw = await w.call('get_net_worth', {}, R);
   const [jul, sep] = nw.snapshots.filter((s) => s.period !== '2026-08');
-  // Juli: bara bolånet finns (billånet startar i augusti). Bolånet är redan avdraget i Lägenhet.
-  assert.deepEqual([jul.assets, jul.liabilities, jul.liabilities_already_in_assets, jul.net, jul.gross_assets], [1590000, 2010000, 2010000, 1590000, 3600000]);
-  // September: skuld per 30/9. Billånet (inte avdraget någonstans) dras av.
-  assert.deepEqual([sep.assets, sep.liabilities, sep.net, sep.gross_assets], [1610000, 2100940, 1510000, 3610940]);
-  assert.deepEqual(sep.liabilities_by_loan, { Billån: 100000, Bolån: 2000940 });
+  // Skulden när perioden börjar. Juli (25/6): bolånets första saldo är 31/7, så skulden räknas bakåt med två
+  // amorteringar (30/6, 31/7); billånet (ingen amortering) finns inte än. Bolånet är redan avdraget i Lägenhet.
+  assert.deepEqual([jul.assets, jul.liabilities, jul.liabilities_already_in_assets, jul.net, jul.gross_assets], [1590000, 2019060, 2019060, 1590000, 3609060]);
+  assert.equal(jul.liabilities_estimated, true);
+  // September (25/8): bolånet 2 010 000 (31/7), billånet 100 000 (15/8, inte avdraget någonstans) dras av.
+  assert.deepEqual([sep.assets, sep.liabilities, sep.net, sep.gross_assets], [1610000, 2110000, 1510000, 3620000]);
+  assert.deepEqual(sep.liabilities_by_loan, { Billån: 100000, Bolån: 2010000 });
   assert.equal(sep.total, 1610000, 'total är oförändrad (som i appen)');
   assert.equal(nw.latest.net, 1510000); assert.equal(nw.latest.total, 1610000);
   assert.match(nw.explanation, /dras inte av igen/);
