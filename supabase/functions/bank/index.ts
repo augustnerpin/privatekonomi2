@@ -7,7 +7,8 @@
 // Driftsätt: npx supabase functions deploy bank --no-verify-jwt   (inloggningen kontrolleras här)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, periodForDate, periodRange } from '../_shared/finance.ts';
+import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff, periodForDate, periodRange, periodShift } from '../_shared/finance.ts';
+import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
 import { buildDigest } from './notify.ts';
 import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals, loanUpdates } from './core.ts';
@@ -270,7 +271,11 @@ async function notify(uid: string, r: Obj) {
     const target = Number(await loadKey(uid, 'goal')) || 700000;
     if (nws.length) goal = { target, date: gdate, latest: nws[nws.length - 1], avg: nws.length > 1 ? (Number(nws[nws.length - 1].total) - Number(nws[0].total)) / (nws.length - 1) : null };
   }
-  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal };
+  // Takt: utgifter hittills i perioden mot samma antal dagar i de tre föregående perioderna
+  const pm = [pid, periodShift(pid, -1), periodShift(pid, -2), periodShift(pid, -3)];
+  const starts: Obj = Object.fromEntries(pm.map((p) => [p, periodRange(p, s.pay_periods || []).start]));
+  const paceRows = await pages(() => db.from('transactions').select('month,type,amount,tx_date').eq('user_id', uid).eq('deleted', false).eq('type', 'expense').in('month', pm).order('id'));
+  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal, pace: pace(paceRows, pid, starts, day) };
   const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
   const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
   const d = buildDigest({ ...input, sent });
@@ -278,6 +283,72 @@ async function notify(uid: string, r: Obj) {
   const out = await pushTo(uid, { title: d.title, body: d.body, url: APP_URL, tag: 'digest-' + day });
   if (out.sent) await must(db.from('notifications').upsert(d.keys.map((key) => ({ user_id: uid, key, title: d.title, body: d.body })), { onConflict: 'user_id,key' }));
   return out;
+}
+
+// ── Månadsbokslut och veckobrev (nattjobbet) ───────────────────────────
+// Sparas i user_state (month_closings = {period: bokslut}, weekly_letters = [brev]) så att appen visar dem,
+// och skickas som notis. Bokslutet skrivs dag 2 i en ny löneperiod, veckobrevet på söndagar.
+async function claudeJson(model: string, effort: string, system: string, user: string, schema: Obj, max_tokens = 4000) {
+  const key = Deno.env.get('ANTHROPIC_API_KEY'); if (!key) throw new Error('ANTHROPIC_API_KEY saknas');
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model, max_tokens, output_config: { effort, format: { type: 'json_schema', schema } }, system, messages: [{ role: 'user', content: user }] }),
+  });
+  const j = await r.json(); if (!r.ok) throw new Error(j.error?.message || 'HTTP ' + r.status);
+  return JSON.parse((j.content || []).filter((b: Obj) => b.type === 'text').map((b: Obj) => b.text).join(''));
+}
+async function reviewContext(uid: string) {
+  const [profile, memory, goal, goalDate] = await Promise.all([loadKey(uid, 'ai_profile'), loadKey(uid, 'ai_memory'), loadKey(uid, 'goal'), loadKey(uid, 'goal_date')]);
+  const nws = await must<Obj[]>(db.from('net_worth_snapshots').select('period,total').eq('user_id', uid).eq('deleted', false).order('period'));
+  const last = nws[nws.length - 1];
+  const target = Number(goal) || 700000;
+  const goalTxt = last ? `${Math.round(target)} kr${goalDate ? ` senast ${goalDate}` : ''}, förmögenhet ${Math.round(Number(last.total))} kr (${last.period})` : '';
+  return { profile: profileText(profile), memory: Array.isArray(memory) ? memory.slice(-20) : [], goal: goalTxt };
+}
+const kr0 = (n: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(Math.round(n)).replace(/[  ]/g, ' ') + ' kr';
+const ML = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+const monthName = (ym: string) => ML[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4);
+
+async function periodRows(uid: string, months: string[]) {
+  return await pages(() => db.from('transactions').select('month,type,category,amount,description,tx_date').eq('user_id', uid).eq('deleted', false).in('month', months).neq('type', 'transfer').order('id'));
+}
+export async function maybeClosing(uid: string, s: Obj, force = false) {
+  const day = today(), pid = periodForDate(day, s.pay_periods || []), prev = periodShift(pid, -1);
+  const start = periodRange(pid, s.pay_periods || []).start;
+  if (!force && dayDiff(start, day) < 1) return null; // vänta minst en dag in i nya perioden (sena bokningar)
+  const closings = (await loadKey(uid, 'month_closings')) || {};
+  if (closings[prev] && !force) return null;
+  const rows = await periodRows(uid, [prev, periodShift(prev, -1), periodShift(prev, -2), periodShift(prev, -3)]);
+  const facts = periodFacts(rows, prev, s.cat_budgets || {});
+  if (facts.transactions < 10) return null;
+  const previous = closings[periodShift(prev, -1)] ? { period: periodShift(prev, -1), ...closings[periodShift(prev, -1)] } : null;
+  const ctx = await reviewContext(uid);
+  const d = await claudeJson('claude-opus-5-5', 'medium', closingPrompt({ ...ctx, previous }), `BOKSLUT FÖR LÖNEPERIODEN ${prev}:\n${JSON.stringify(facts)}`, CLOSING_SCHEMA, 6000);
+  const fresh = (await loadKey(uid, 'month_closings')) || {};
+  fresh[prev] = { ...d, facts: { income: facts.income, expense: facts.expense, savings: facts.savings, left: facts.left, savings_rate_pct: facts.savings_rate_pct }, created: new Date().toISOString() };
+  for (const k of Object.keys(fresh).sort().slice(0, -12)) delete fresh[k]; // behåll ett år
+  await saveState(uid, 'month_closings', fresh);
+  const push = await pushTo(uid, { title: `Bokslut ${monthName(prev)}: ${d.grade}`, body: `${d.headline}\n${(d.actions || []).slice(0, 3).map((a: Obj, i: number) => `${i + 1}. ${a.title}`).join('\n')}`, url: APP_URL, tag: 'closing-' + prev });
+  return { period: prev, grade: d.grade, push };
+}
+export async function maybeWeekly(uid: string, s: Obj, force = false) {
+  const day = today();
+  if (!force && new Date(day + 'T12:00:00Z').getUTCDay() !== 0) return null; // söndagar
+  const letters: Obj[] = Array.isArray(await loadKey(uid, 'weekly_letters')) ? await loadKey(uid, 'weekly_letters') : [];
+  if (letters.some((l) => l.date === day) && !force) return null;
+  const pid = periodForDate(day, s.pay_periods || []);
+  const rows = await periodRows(uid, [pid, periodShift(pid, -1), periodShift(pid, -2)]);
+  const facts = weekFacts(rows, day);
+  if (!facts.spent && !facts.usual_week) return null;
+  const closings = (await loadKey(uid, 'month_closings')) || {};
+  const closing = closings[periodShift(pid, -1)] || null;
+  const ctx = await reviewContext(uid);
+  const d = await claudeJson('claude-sonnet-5', 'low', weeklyPrompt({ ...ctx, closing }), `VECKAN ${facts.from} – ${facts.to}:\n${JSON.stringify(facts)}`, WEEKLY_SCHEMA, 2000);
+  const fresh: Obj[] = Array.isArray(await loadKey(uid, 'weekly_letters')) ? await loadKey(uid, 'weekly_letters') : [];
+  fresh.push({ date: day, from: facts.from, to: facts.to, spent: facts.spent, usual: facts.usual_week, ...d });
+  await saveState(uid, 'weekly_letters', fresh.slice(-8));
+  const push = await pushTo(uid, { title: d.title, body: `${d.body}\n💡 ${d.tip}`, url: APP_URL, tag: 'weekly-' + day });
+  return { date: day, push, spent: kr0(facts.spent) };
 }
 
 // ── Rutter ─────────────────────────────────────────────────────────────
@@ -312,12 +383,18 @@ Deno.serve(async (req) => {
     if (route === 'cron') {
       const secret = Deno.env.get('CRON_SECRET');
       if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'Unauthorized' }, 401);
+      const body = await req.json().catch(() => ({})); // {force: ['closing','weekly']} kör bokslut/veckobrev direkt (test)
       const users = [...new Set((await must<Obj[]>(db.from('bank_connections').select('user_id').eq('status', 'active'))).map((r) => r.user_id))];
       const out: Obj = {};
       for (const u of users) {
         try {
           const r = await syncUser(u);
-          out[u] = r.busy ? { busy: true } : { ...pub(r), push: await notify(u, r).catch((e) => ({ error: (e as Error).message })) };
+          const force: string[] = Array.isArray(body.force) ? body.force : [];
+          out[u] = r.busy ? { busy: true } : {
+            ...pub(r), push: await notify(u, r).catch((e) => ({ error: (e as Error).message })),
+            closing: await maybeClosing(u, r.state, force.includes('closing')).catch((e) => ({ error: (e as Error).message })),
+            weekly: await maybeWeekly(u, r.state, force.includes('weekly')).catch((e) => ({ error: (e as Error).message })),
+          };
         }
         catch (e) { out[u] = { error: (e as Error).message }; }
       }

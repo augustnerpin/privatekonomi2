@@ -19,7 +19,7 @@ export function goalPlan(latest: Obj | null, goal: number, avgMonthly: number | 
   return { months, left, need: left / months, eta, diff: eta != null ? months - eta : null };
 }
 
-export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[]; goal?: Obj }) {
+export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[]; goal?: Obj; pace?: Obj | null }) {
   const items: Obj[] = [];
   const add = (key: string, line: string, kind: string) => { if (!p.sent.has(key)) items.push({ key, line, kind }); };
   const rows = p.newRows.filter((r) => !r.deleted);
@@ -58,6 +58,9 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
       add(`lan:${l.id}:${date}:${step}`, `🏠 ${l.name}: ${what} ${date} (om ${days} ${days === 1 ? 'dag' : 'dagar'}) – dags att jämföra räntor`, 'loan');
     }
   }
+  // Takt: klart mer utgifter än vanligt vid samma dag i perioden (högst en gång per vecka)
+  if (p.pace && p.pace.day >= 5 && p.pace.cur > p.pace.avg * 1.25 && p.pace.cur - p.pace.avg >= 1000)
+    add(`takt:${p.period.id}:${Math.floor((p.pace.day - 1) / 7)}`, `📈 ${kr(p.pace.cur)} i utgifter hittills, ${kr(p.pace.cur - p.pace.avg)} mer än vanligt vid dag ${p.pace.day}`, 'pace');
   // Förmögenhetsmålet: säg till en gång per löneperiod om du ligger efter planen
   if (p.goal) {
     const g = goalPlan(p.goal.latest, p.goal.target, p.goal.avg, p.goal.date);
@@ -65,9 +68,9 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
       add(`mal:${p.period.id}`, `🎯 Målet ${kr(p.goal.target)} till ${p.goal.date}: behöver +${kr(g.need!)}/mån, snittet är ${kr(p.goal.avg || 0)}/mån`, 'goal');
   }
   if (!items.length) return null;
-  const order = ['salary', 'budget', 'goal', 'loan', 'consent', 'big', 'day', 'review'];
+  const order = ['salary', 'budget', 'pace', 'goal', 'loan', 'consent', 'big', 'day', 'review'];
   items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
-  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget') ? 'Koll på budgeten' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
+  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget' || i.kind === 'pace') ? 'Koll på budgeten' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
   const lines = items.slice(0, 4).map((i) => i.line);
   if (items.length > 4) lines.push(`+ ${items.length - 4} till i appen`);
   return { title, body: lines.join('\n'), keys: items.map((i) => i.key) };

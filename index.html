@@ -1396,6 +1396,18 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
 </div>
 <input type="file" id="loan-doc" accept="application/pdf,image/*" style="display:none" onchange="readLoanDoc(this)">
 
+<!-- ═══ BOKSLUT ═══ -->
+<div class="overlay" id="closing-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="closing-title">Bokslut</div>
+    <div id="closing-body"></div>
+    <button class="btn-s" onclick="closeOverlay('closing-modal');showScreen('ai');setTimeout(()=>sendChip('Hjälp mig med åtgärderna från senaste bokslutet: hur gör jag konkret den här perioden?'),300)">Prata med AI:n om bokslutet</button>
+    <button class="btn-s" onclick="closeOverlay('closing-modal')">Stäng</button>
+  </div>
+</div>
+<input type="file" id="payslip-doc" accept="application/pdf,image/*" style="display:none" onchange="readPayslip(this)">
+
 <!-- ═══ PAY PERIOD MODAL ═══ -->
 <div class="overlay" id="pp-modal">
   <div class="modal">
@@ -1466,6 +1478,11 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
         <input type="password" id="s-apikey" placeholder="sk-ant-..." oninput="saveApiKey(this.value)">
       </div>
     </div>
+  </div>
+
+  <div class="s-sec">
+    <div class="s-lbl">🧠 AI-profil <span style="font-size:10px;color:var(--sub2);font-weight:400">— det AI:n vet om dig</span></div>
+    <div class="s-card" id="profile-card"></div>
   </div>
 
   <div class="s-sec">
@@ -2921,6 +2938,14 @@ function renderHome(){
   // ── Händelsekort (prio: lägre = högre upp) ──
   const cards=[];
   const add=(prio,h)=>cards.push({prio,h});
+  // Prognos för pågående period
+  if(isCur){const f=forecast(month);if(f&&f.inc>0)add(0.5,forecastCard(f))}
+  // Bokslut (överst första veckan i nya perioden) och senaste veckobrevet
+  const cl=getClosings(),clP=periodShift(currentPayPeriod(),-1);
+  if(cl[clP]&&(isCur||month===clP))add(Date.now()-Date.parse(cl[clP].created||0)<7*864e5?0.2:6,closingCardHtml(clP,cl[clP]));
+  else if(cl[month]&&!isCur)add(0.2,closingCardHtml(month,cl[month]));
+  const lt=getLetters().slice(-1)[0];
+  if(lt&&isCur&&Date.now()-parseLocalDate(lt.date)<6*864e5)add(0.8,letterCardHtml(lt));
   // Import
   const prevP=periodShift(currentPayPeriod(),-1);
   if(!all.some(t=>t.month===prevP&&t.source==='import')&&(month===prevP||isCur))
@@ -3858,6 +3883,7 @@ function renderSettings(){
   renderCatList('sav-cats',getSavCats(),'savings');
   renderCatList('trf-cats',getTrfCats(),'transfer');
   renderAccountSettings();
+  renderProfileSettings();
   renderNWCatList();
   renderGroupList();
   renderSyncSettings();
@@ -4123,7 +4149,7 @@ function addCat(type){
 function buildBackup(){
   return{version:2,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
     ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
-    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
+    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),ai_profile:getProfile(),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
       cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
       accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{}),
       owner_name:getOwnerName(),ai_import_notes:getImportNotes(),cat_budgets:getBudgets(),contact_names:getContacts()}};
@@ -4168,7 +4194,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date','ai_profile'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -4187,7 +4213,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -5647,7 +5673,10 @@ function persistAiHistory(){sv('ai_history',aiHistory.slice(-80))}
 
 // ── Träna AI — intervjuläge ────────────────
 function trainAi(){
-  sendChip('Starta träningsläget: intervjua mig för att lära känna min ekonomi. Ställ EN fråga i taget (max 12 frågor totalt) om sådant du inte redan vet: min livssituation, boende, familj, inkomster, fasta kostnader, sparmål, riskprofil, pension, lån, vanor och vad jag vill få ut av min ekonomi. Spara allt viktigt med <memory>-taggar. Börja nu med din första fråga.');
+  // Intervjun fyller profilen: fråga om det som saknas
+  const p=getProfile();
+  const missing=PROFILE_SECTIONS.flatMap(s=>s.f.filter(([k])=>!p[s.k]?.[k]).map(([,l])=>`${s.label}: ${l}`));
+  sendChip(`Starta träningsläget: intervjua mig för att fylla i min ekonomiska profil. Ställ EN fråga i taget (max 12 frågor) och spara varje svar direkt med verktyget update_profile. Det här saknas i profilen: ${missing.join('; ')||'inget — fråga om det som kan ha ändrats'}. Fråga också om lån, fasta kostnader och vad jag vill få ut av min ekonomi, och spara sådant som inte passar i profilen med <memory>. Börja nu med din första fråga.`);
 }
 
 // ── Minne ──────────────────────────────────
@@ -5801,6 +5830,7 @@ function buildCtx(){
   const ins=getInsights()[state.month];
   const gym=String(ld('goal_date','')||''),gp=goalPlan(ln,goal,nws.length>1?(nws[nws.length-1].total-nws[0].total)/(nws.length-1):null,gym);
   const goalPlanTxt=!gp?'':gp.done?' — målet är nått':gp.late?` — måldatumet ${gym} har passerat`:` — ska nås senast ${gym} (${gp.months} mån): behöver öka ${Math.round(gp.need)} kr/mån${gp.diff==null?', nås inte i nuvarande takt':gp.diff>=0?`, i nuvarande takt ${gp.diff} mån före planen`:`, i nuvarande takt ${-gp.diff} mån efter planen`}`;
+  const prof=profileCtx();const profileSection=prof?`\n\nEKONOMISK PROFIL:\n${prof}`:'';
   // Lån: skuld, ränta, villkor (från Supabase, cachat lokalt)
   const loanSection=_loans.length?`\n\nLÅN:\n${_loans.map(l=>{const d=loanDebt(l),x=l.extra||{},im=loanInterestMonth(l);return`- ${l.name}${l.lender?` (${l.lender})`:''}: skuld ${d?Math.round(d.value)+' kr ('+d.date+')':'okänd'}, ränta ${l.interest_pct!=null?l.interest_pct+' %':'okänd'}${x.rate_type?' '+x.rate_type:''}${im!=null?` ≈ ${Math.round(im)} kr/mån`:''}, amortering ${l.amortization?Math.round(l.amortization)+' kr/mån':'okänd'}${x.fixed_until?`, bunden till ${x.fixed_until}`:''}${x.rate_change_date?`, villkorsändring ${x.rate_change_date}`:''}${l.netted_in_assets?' (redan avdragen i förmögenheten)':''}`}).join('\n')}`:'';
   const merchantSection=topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'';
@@ -5841,6 +5871,8 @@ Regler:
 - Håll textdelar korta, låt widgets visa data
 - Avsluta med <memory>["..."]</memory> VARJE gång du lär dig något nytt om användaren (mål, familj, boende, lån, vanor, preferenser, riskprofil) — var generös med att spara
 - Använd dina sparade minnen aktivt för personliga råd; ställ gärna en kort följdfråga när information saknas
+- Fakta om hushåll, boende, arbete/lön, mål/risk och livssituation sparar du med verktyget update_profile (ett fält per anrop); <memory> använder du för allt annat
+- Utgå från PROGNOS och SENASTE BOKSLUT när användaren frågar hur det går; följ upp bokslutets åtgärder
 
 TRANSAKTIONSHISTORIK (${allMonths.length} månader):
 ${monthSums.join('\n')}
@@ -5852,8 +5884,8 @@ FÖRMÖGENHETSUTVECKLING:
 ${nwHistory||'Ingen data'}
 ${ln?`Senaste: Total ${Math.round(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${Math.round(ln[c.key])}`).join(' | ')}`:''}
 
-MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${goalPlanTxt}${loanSection}${merchantSection}`;
-  const live=`${memSection}${coachExtraCtx()}${monthSection}`.replace(/^\n+/,'');
+MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${goalPlanTxt}${profileSection}${loanSection}${merchantSection}`;
+  const live=`${memSection}${coachExtraCtx()}${monthSection}${forecastCtx()}${closingCtx()}`.replace(/^\n+/,'');
   return{fixed,live};
 }
 // Samma bakgrund som importen använder: namn, förklaringar, budget och hur överföringar räknas
@@ -5889,7 +5921,159 @@ function extractAndSaveMemory(reply){
   return reply.replace(/<memory>[\s\S]*?<\/memory>/g,'').trim();
 }
 
-// ── Verktyg för AI-chatten: sök och summera bland alla transaktioner ──
+// ── Verktyg för AI-chatten: sök och summera bland alla transaktioner ──// ═══════════════════════════════════════════
+// PROGNOS — resten av löneperioden: vad som finns kvar, kommande fasta dragningar och vad du kan lägga per dag
+// ═══════════════════════════════════════════
+function periodEndDate(ym){const d=parseLocalDate(getPeriodStart(periodShift(ym,1)));d.setDate(d.getDate()-1);return d}
+const ymdOf=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+// Fasta kategorier: dras varje period med ungefär samma belopp och få rader (t.ex. boende), oavsett hur
+// raderna är märkta (äldre rader saknar ofta text, så butiksnyckeln räcker inte). off = typisk dag i perioden.
+function fixedCats(ym){
+  const txs=getTxs(),prev=[1,2,3,4].map(i=>periodShift(ym,-i)),out={};
+  const cats=new Set(txs.filter(t=>t.type==='expense'&&prev.includes(t.month)).map(t=>t.cat));
+  cats.delete(PENDING_CARD_CAT);
+  for(const c of cats){
+    const per=prev.map(p=>txs.filter(t=>t.month===p&&t.type==='expense'&&t.cat===c&&t.amount>0));
+    const vals=per.map(a=>a.reduce((s,t)=>s+t.amount,0)).filter(v=>v>0);
+    if(vals.length<3||median(per.filter(a=>a.length).map(a=>a.length))>2)continue;
+    const med=median(vals);if(vals.filter(v=>v>=med*0.7&&v<=med*1.3).length<vals.length-1)continue;
+    const offs=per.map((a,i)=>a.length?Math.round((parseLocalDate([...a].sort((x,y)=>y.amount-x.amount)[0].date)-parseLocalDate(getPeriodStart(prev[i])))/864e5):null).filter(v=>v!=null);
+    out[c]={typical:Math.round(med),off:median(offs)};
+  }
+  return out;
+}
+const ONE_OFF=2500; // enskilda köp från detta belopp räknas inte in i den vanliga dagstakten
+function forecast(ym=currentPayPeriod()){
+  const txs=getTxs(),start=parseLocalDate(getPeriodStart(ym)),end=periodEndDate(ym),today=parseLocalDate(todayLocal());
+  if(today<start||today>end)return null;
+  const day=Math.round((today-start)/864e5)+1,days=Math.round((end-start)/864e5)+1,left=days-day+1; // dagar kvar inkl. idag
+  const inP=p=>txs.filter(t=>t.month===p),sum=(a,ty)=>a.filter(t=>t.type===ty).reduce((s,t)=>s+t.amount,0);
+  const prev=[1,2,3].map(i=>periodShift(ym,-i)).filter(p=>inP(p).length);
+  // Inkomst: periodens, eller snittet av tidigare perioder om lönen inte kommit in än
+  let inc=sum(inP(ym),'income'),incEst=false;
+  const prevInc=prev.map(p=>sum(inP(p),'income')).filter(v=>v>0);
+  if(inc<=0&&prevInc.length){inc=prevInc.reduce((a,b)=>a+b,0)/prevInc.length;incEst=true}
+  const spent=sum(inP(ym),'expense')+sum(inP(ym),'savings');
+  // Fasta kostnader som inte dragits än, med ungefärligt datum (samma dag i perioden som de brukar dras):
+  // fasta kategorier + återkommande butiker i övriga kategorier
+  const fixed=fixedCats(ym),recAll=detectRecurring(ym).filter(r=>!fixed[r.cat]),recKeys=new Set(recAll.map(r=>r.key));
+  const dateAt=off=>{if(off==null)return null;const d=new Date(start.getTime()+off*864e5);return d>=today&&d<=end?ymdOf(d):null};
+  const fromCats=Object.entries(fixed).map(([c,x])=>{const now=inP(ym).filter(t=>t.type==='expense'&&t.cat===c).reduce((s,t)=>s+t.amount,0);
+    return now<x.typical*0.5?{name:c,cat:c,amount:Math.round(x.typical-now),date:dateAt(x.off)}:null}).filter(Boolean);
+  const upcoming=[...fromCats,...recAll.filter(r=>r.status==='ej dragen än').map(r=>{
+    const offs=prev.map(p=>{const t=inP(p).find(x=>x.type==='expense'&&mkeyBase(x)===r.key);return t?Math.round((parseLocalDate(t.date)-parseLocalDate(getPeriodStart(p)))/864e5):null}).filter(v=>v!=null);
+    const d=offs.length?new Date(start.getTime()+median(offs)*864e5):null;
+    return{name:r.name,cat:r.cat,amount:r.typical,date:d&&d>=today&&d<=end?ymdOf(d):null};
+  })].sort((a,b)=>(a.date||'9').localeCompare(b.date||'9'));
+  const up=upcoming.reduce((s,u)=>s+u.amount,0);
+  // Vanlig dagstakt för rörliga utgifter i tidigare perioder: utan fasta kostnader och utan engångsköp (median av perioderna)
+  const varDaily=prev.map(p=>{const pd=Math.round((periodEndDate(p)-parseLocalDate(getPeriodStart(p)))/864e5)+1;
+    return inP(p).filter(t=>t.type==='expense'&&!fixed[t.cat]&&!recKeys.has(mkeyBase(t))&&t.amount<ONE_OFF).reduce((s,t)=>s+t.amount,0)/pd});
+  const usual=varDaily.length?median(varDaily):null;
+  const free=inc-spent-up;
+  return{ym,day,days,left,inc,incEst,spent,upcoming,up,free,perDay:free/left,usual,projected:usual!=null?free-usual*left:null,end:ymdOf(end)};
+}
+function forecastCard(f){
+  const tone=f.free<0?'bad':f.projected!=null&&f.projected<0?'warn':'good';
+  const title=f.free<0?`Perioden ligger ${fmt(-f.free)} kr back`:`Du kan lägga ca ${fmt(Math.max(0,f.perDay))} kr/dag till ${shortDate(parseLocalDate(f.end))}`;
+  const proj=f.projected==null?'':f.projected>=0?` I din vanliga takt blir det ca <b>+${fmt(f.projected)} kr</b> kvar vid periodens slut.`:` I din vanliga takt går perioden <b>${fmt(f.projected)} kr</b> back.`;
+  const text=`${f.left} ${f.left===1?'dag':'dagar'} kvar · ${fmtSigned(f.free)} kr kvar ${f.upcoming.length?`efter ${f.upcoming.length} kommande fasta dragningar (${fmt(f.up)} kr)`:'(de fasta kostnaderna är redan dragna)'}.${proj}${f.incEst?' <span style="color:var(--sub2)">(Inkomsten är uppskattad från snittet.)</span>':''}`;
+  const fg={good:'var(--green)',warn:'var(--amber)',bad:'var(--red)'}[tone];
+  const list=f.upcoming.length?`<div style="padding:8px 0 0 40px">${f.upcoming.slice(0,8).map(u=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:4px 0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${u.date?shortDate(parseLocalDate(u.date))+' · ':''}${esc(u.name)}</span><span style="font-family:var(--mono)">${fmt(u.amount)}</span></div>`).join('')}</div>`:'';
+  return`<details class="fc"><summary style="list-style:none;cursor:pointer"><div class="fc-hd"><div class="fc-ic" style="background:${fg};color:#fff">${fcIcon('gauge')}</div><div style="flex:1;min-width:0"><div class="fc-t">${title}</div><div class="fc-x">${text}</div></div>${f.upcoming.length?'<span class="fc-chev">›</span>':''}</div></summary>${list}</details>`;
+}
+
+// ═══════════════════════════════════════════
+// EKONOMISK PROFIL — strukturerad bild av användaren som AI:n fyller i (update_profile) och som följer med i varje svar
+// ═══════════════════════════════════════════
+const PROFILE_SECTIONS=[
+  {k:'household',label:'Hushåll',f:[['people','Antal i hushållet'],['children','Barn'],['city','Ort']]},
+  {k:'housing',label:'Boende',f:[['type','Boendeform'],['value','Bostadens värde (kr)'],['fee','Avgift/hyra (kr/mån)']]},
+  {k:'work',label:'Arbete & lön',f:[['employer','Arbetsgivare'],['gross','Bruttolön (kr/mån)'],['net','Nettolön (kr/mån)'],['tax','Skatt (kr/mån)'],['pension','Tjänstepension (kr/mån)'],['vacation','Semesterdagar kvar'],['payslip','Senaste lönespec']]},
+  {k:'goals',label:'Mål & risk',f:[['short','Kortsiktiga mål'],['long','Långsiktiga mål'],['risk','Risknivå'],['horizon','Placeringshorisont']]},
+  {k:'life',label:'Livssituation & vanor',f:[['situation','Livssituation'],['habits','Vanor'],['priorities','Vad som är viktigt']]},
+];
+function getProfile(){const p=ld('ai_profile',{});return p&&typeof p==='object'&&!Array.isArray(p)?p:{}}
+function setProfileField(sec,key,val){
+  const p=getProfile();p[sec]={...(p[sec]||{})};const v=String(val??'').trim();
+  if(v)p[sec][key]=v;else delete p[sec][key];
+  if(!Object.keys(p[sec]).length)delete p[sec];
+  p.updated=todayLocal();sv('ai_profile',p);
+}
+function profileCtx(){
+  const p=getProfile();
+  return PROFILE_SECTIONS.map(s=>{const v=p[s.k]||{};const f=s.f.filter(([k])=>v[k]).map(([k,l])=>`${l}: ${v[k]}`);return f.length?`- ${s.label}: ${f.join('; ')}`:''}).filter(Boolean).join('\n');
+}
+function renderProfileSettings(){
+  const el=document.getElementById('profile-card');if(!el)return;
+  const p=getProfile();
+  el.innerHTML=PROFILE_SECTIONS.map(s=>`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:6px">
+    <div class="s-row-lbl">${s.label}</div>
+    ${s.f.map(([k,l])=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)"><span style="width:44%;flex-shrink:0">${l}</span><input type="text" class="sb-inp" style="flex:1;margin:0" value="${esc(p[s.k]?.[k]||'')}" onchange="setProfileField(${jsArg(s.k)},${jsArg(k)},this.value)"></label>`).join('')}
+  </div>`).join('')+`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px">
+    <div class="s-row-sub">${p.updated?`Senast uppdaterad ${esc(p.updated)}. `:''}AI:n fyller i profilen när du berättar saker i chatten. Du kan också rätta här.</div>
+    <div style="display:flex;gap:8px"><button class="sb-btn sb-btn2" style="flex:1" onclick="document.getElementById('payslip-doc').click()">📄 Läs lönespec</button><button class="sb-btn sb-btn2" style="flex:1" onclick="closeSettings();showScreen('ai');setTimeout(trainAi,300)">Låt AI:n intervjua mig</button></div>
+  </div>`;
+}
+// Lönespec (PDF/bild) → arbete & lön i profilen
+async function readPayslip(input){
+  const file=input.files?.[0];input.value='';if(!file)return;
+  if(!aiReady()){toast('Logga in under Inställningar → Databas för att använda AI','warn');return}
+  if(file.size>20*1024*1024){toast('Filen är för stor (max 20 MB)','warn');return}
+  toast('Läser lönespecen…');
+  try{
+    const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=()=>rej(new Error('Kunde inte läsa filen'));r.readAsDataURL(file)});
+    const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+    const block=pdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:IMG_TYPES.includes(file.type)?file.type:'image/jpeg',data:b64}};
+    const S={type:'string'},N={type:'number'};
+    const schema={type:'object',additionalProperties:false,required:['employer','period','gross','net','tax','pension','vacation_days'],properties:{employer:S,period:S,gross:N,net:N,tax:N,pension:N,vacation_days:N}};
+    const r=await callClaude({messages:[{role:'user',content:[block,{type:'text',text:'Detta är en lönespecifikation. employer = arbetsgivaren. period = löneperioden/utbetalningsmånaden som YYYY-MM. gross = bruttolön för månaden i kr (grundlön + tillägg, före skatt). net = utbetalt belopp. tax = dragen preliminärskatt. pension = tjänstepension/pensionsavsättning om den står (annars 0). vacation_days = kvarvarande betalda semesterdagar (annars 0). Hitta aldrig på värden; 0 eller tom sträng om uppgiften saknas.'}]}],effort:'low',max_tokens:2000,schema});
+    const d=JSON.parse(r.text);
+    const set=(k,v)=>{if(v)setProfileField('work',k,String(v))};
+    set('employer',d.employer);set('gross',d.gross&&Math.round(d.gross));set('net',d.net&&Math.round(d.net));set('tax',d.tax&&Math.round(d.tax));
+    set('pension',d.pension&&Math.round(d.pension));set('vacation',d.vacation_days);set('payslip',d.period);
+    renderProfileSettings();toast(`Lönespecen inläst ✓ ${d.net?`Netto ${fmt(d.net)} kr`:''}`);
+  }catch(e){toast('Kunde inte läsa lönespecen: '+(e.message||e),'err')}
+}
+
+// ═══════════════════════════════════════════
+// BOKSLUT OCH VECKOBREV — skrivs av nattjobbet (supabase/functions/bank/review.ts), synkas via user_state
+// ═══════════════════════════════════════════
+const getClosings=()=>{const c=ld('month_closings',{});return c&&typeof c==='object'?c:{}};
+const getLetters=()=>{const l=ld('weekly_letters',[]);return Array.isArray(l)?l:[]};
+const GRADE_TONE={A:'good',B:'good',C:'info',D:'warn',E:'bad'};
+function closingCardHtml(p,c){
+  return fcHtml({icon:'check',tone:GRADE_TONE[c.grade]||'pro',title:`Bokslut ${mLabel(p)}: ${esc(c.grade)} — ${esc(c.headline)}`,text:esc(c.summary)+`<br><span style="color:var(--sub2)">3 åtgärder för nästa period ›</span>`,onclick:`openClosing(${jsArg(p)})`});
+}
+function openClosing(p){
+  const c=getClosings()[p];if(!c)return;
+  const li=a=>a.map(x=>`<li style="margin:4px 0">${x}</li>`).join('');
+  const RES={gjort:'✅',delvis:'🟡',inte:'❌'};
+  document.getElementById('closing-body').innerHTML=`
+    <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:12px">${esc(c.summary)}</div>
+    ${c.facts?`<div class="home-stats" style="margin:0 0 14px"><div>Inkomst<b>${fmt(c.facts.income)}</b></div><div>Utgifter<b>${fmt(c.facts.expense)}</b></div><div>Sparat<b>${fmt(c.facts.savings)}</b></div><div>Kvar<b>${fmtSigned(c.facts.left)}</b></div></div>`:''}
+    ${c.wins?.length?`<div class="card-lbl">Bra</div><ul style="font-size:13px;padding-left:18px;margin:4px 0 12px">${li(c.wins.map(esc))}</ul>`:''}
+    ${c.concerns?.length?`<div class="card-lbl">Att se över</div><ul style="font-size:13px;padding-left:18px;margin:4px 0 12px">${li(c.concerns.map(esc))}</ul>`:''}
+    <div class="card-lbl">Åtgärder för nästa period</div>
+    <ol style="font-size:13px;padding-left:18px;margin:4px 0 12px">${li((c.actions||[]).map(a=>`<b>${esc(a.title)}</b> — ${esc(a.detail)}<br><span style="color:var(--acc)">Mål: ${esc(a.target)}</span>`))}</ol>
+    ${c.followup?.length?`<div class="card-lbl">Uppföljning av förra periodens åtgärder</div><ul style="font-size:13px;padding-left:0;list-style:none;margin:4px 0 12px">${li(c.followup.map(f=>`${RES[f.result]||'•'} <b>${esc(f.action)}</b> — ${esc(f.comment)}`))}</ul>`:''}`;
+  document.getElementById('closing-title').textContent=`Bokslut ${mLabel(p)} · betyg ${c.grade}`;
+  openOverlay('closing-modal');
+}
+function letterCardHtml(l){
+  return fcHtml({icon:'spark',tone:'info',title:esc(l.title),text:`${esc(l.body)}${l.tip?`<br><span style="color:var(--acc)">💡 ${esc(l.tip)}</span>`:''}`});
+}
+
+// Rörlig kontext för AI:n: prognosen för pågående period och senaste bokslutets åtgärder
+function forecastCtx(){
+  const f=forecast();if(!f||!(f.inc>0))return'';
+  return`\n\nPROGNOS (${mLabel(f.ym)}, dag ${f.day} av ${f.days}): ${Math.round(f.free)} kr kvar efter ${Math.round(f.up)} kr i kommande fasta dragningar (${f.upcoming.map(u=>`${u.name} ${u.amount} kr${u.date?' ~'+u.date:''}`).join(', ')||'inga'}), ca ${Math.round(f.perDay)} kr/dag i ${f.left} dagar${f.projected!=null?`; i vanlig takt ${Math.round(f.projected)} kr kvar vid periodens slut`:''}${f.incEst?' (inkomsten uppskattad)':''}.`;
+}
+function closingCtx(){
+  const c=getClosings(),p=Object.keys(c).sort().pop();if(!p)return'';
+  const x=c[p];return`\n\nSENASTE BOKSLUT (${mLabel(p)}, betyg ${x.grade}): ${x.headline}\nÅtgärder för perioden efter: ${(x.actions||[]).map((a,i)=>`${i+1}. ${a.title} (${a.target})`).join(' ')}`;
+}
+
 const COACH_TOOLS=[
   {name:'search_transactions',
    description:'Söker bland användarens alla transaktioner (importerade och manuella). Returnerar matchande transaktioner (upp till limit) samt antal och summa för ALLA träffar. Belopp: utgift/sparande positivt = pengar ut, negativt = retur/återbetalning; inkomst positivt = pengar in.',
@@ -5909,7 +6093,11 @@ const COACH_TOOLS=[
      type:{type:'string',enum:['expense','income','savings','transfer'],description:'Standard: expense'},
      category:{type:'string'},query:{type:'string'},
      from:{type:'string',description:'YYYY-MM-DD'},to:{type:'string',description:'YYYY-MM-DD'},
-     top:{type:'integer',description:'Max antal grupper (standard 25)'}}}}
+     top:{type:'integer',description:'Max antal grupper (standard 25)'}}}},
+  {name:'update_profile',
+   description:'Sparar ett faktum i användarens ekonomiska profil (visas i varje samtal och i inställningarna). Använd när användaren berättar om hushåll, boende, arbete/lön, mål/risk eller livssituation/vanor. Ett fält per anrop; tomt värde tar bort fältet. Fält per sektion: '+PROFILE_SECTIONS.map(s=>`${s.k}: ${s.f.map(f=>f[0]).join(', ')}`).join(' | '),
+   input_schema:{type:'object',additionalProperties:false,required:['section','field','value'],properties:{
+     section:{type:'string',enum:PROFILE_SECTIONS.map(s=>s.k)},field:{type:'string'},value:{type:'string',description:'Kort och konkret, t.ex. "2 vuxna" eller "42 000"'}}}}
 ];
 function coachFilter(inp){
   const q=String(inp.query||'').toLowerCase().trim();
@@ -5939,6 +6127,13 @@ function runCoachTool(name,inp){
     rows.sort(inp.group_by==='month'?(a,b)=>a.key.localeCompare(b.key):(a,b)=>b.sum-a.sum);
     rows=rows.slice(0,Math.min(inp.top||25,60)).map(x=>({[inp.group_by]:inp.group_by==='month'?`${x.key} (${mLabel(x.key)})`:x.key,sum:Math.round(x.sum),count:x.count}));
     return{total:Math.round(r.reduce((s,t)=>s+t.amount,0)),transactions:r.length,groups:rows};
+  }
+  if(name==='update_profile'){
+    const s=PROFILE_SECTIONS.find(x=>x.k===inp.section);
+    if(!s)return{error:'okänd sektion'};
+    if(!s.f.some(f=>f[0]===inp.field))return{error:`okänt fält för ${s.k}; finns: ${s.f.map(f=>f[0]).join(', ')}`};
+    setProfileField(s.k,inp.field,inp.value);renderProfileSettings();
+    return{ok:true,section:s.k,profile:getProfile()[s.k]||{}};
   }
   return{error:'okänt verktyg'};
 }
@@ -5996,7 +6191,7 @@ async function sendAi(){
       convo.push({role:'assistant',content});
       const calls=content.filter(b=>b.type==='tool_use');
       const el=document.getElementById(tid);
-      if(el)el.textContent=calls.map(c=>c.name==='search_transactions'?`🔎 Söker${c.input?.query?` "${c.input.query}"`:''}${c.input?.category?` i ${c.input.category}`:''}…`:`📊 Summerar per ${({category:'kategori',merchant:'butik',month:'månad'})[c.input?.group_by]||'kategori'}…`).join(' ');
+      if(el)el.textContent=calls.map(c=>c.name==='update_profile'?'🧠 Uppdaterar profilen…':c.name==='search_transactions'?`🔎 Söker${c.input?.query?` "${c.input.query}"`:''}${c.input?.category?` i ${c.input.category}`:''}…`:`📊 Summerar per ${({category:'kategori',merchant:'butik',month:'månad'})[c.input?.group_by]||'kategori'}…`).join(' ');
       convo.push({role:'user',content:calls.map(c=>{
         let out;try{out=JSON.stringify(runCoachTool(c.name,c.input||{}))}catch(e){out=JSON.stringify({error:e.message})}
         return{type:'tool_result',tool_use_id:c.id,content:out.slice(0,20000)};
