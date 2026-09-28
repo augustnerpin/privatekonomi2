@@ -190,6 +190,7 @@ function txView(r: Obj, s: Obj) {
   const x = r.extra || {};
   if (x.note) t.note = x.note;
   if (Array.isArray(x.tags) && x.tags.length) t.tags = x.tags;
+  if (x.once && r.type === 'income') t.one_off = true; // engångsinkomst: inte i snitt, prognoser, sparkvot
   if (x.parent_id) { t.parent_id = Number(x.parent_id); t.split = `${x.split_index}/${x.split_of}`; }
   if (r.type === 'transfer') {
     // Negativt belopp = pengar ut från radens konto. Motkontot sparas i extra när det är känt.
@@ -374,7 +375,10 @@ export const TOOLS: Tool[] = [
       groups.sort(by === 'month' || by === 'category_month' ? (x, y) => x.key.localeCompare(y.key) : (x, y) => y.sum - x.sum);
       const months = new Set(txs.map((t) => t.month)).size;
       groups = groups.slice(0, Math.min(a.limit || 50, 500));
-      return { group_by: by, transactions: txs.length, months, total: round(total), avg_per_month: months ? round(total / months) : 0, groups };
+      // Snittet per månad räknas utan engångsinkomster (one_off)
+      const oneOff = txs.filter((t) => t.one_off), regular = total - oneOff.reduce((x, t) => x + t.amount, 0);
+      return { group_by: by, transactions: txs.length, months, total: round(total), avg_per_month: months ? round(regular / months) : 0,
+        ...(oneOff.length ? { one_off_income: { sum: round(total - regular), count: oneOff.length, note: 'Ingår i total och groups men inte i avg_per_month.' } } : {}), groups };
     },
   },
   {
@@ -390,6 +394,7 @@ export const TOOLS: Tool[] = [
       const cur = txs.filter((t) => t.month === month);
       const sum = (ty: string) => cur.filter((t) => t.type === ty).reduce((x, t) => x + t.amount, 0);
       const income = sum('income'), expense = sum('expense'), savings = sum('savings');
+      const oneOff = cur.filter((t) => t.one_off).reduce((x, t) => x + t.amount, 0), incomeR = income - oneOff;
       const moved = -cur.filter((t) => t.type === 'transfer' && t.category !== CARD_PAYMENT).reduce((x, t) => x + t.amount, 0);
       // Snitt per kategori för de 3 senaste perioderna före med data (som catAverages i appen)
       const prev: Obj[][] = [];
@@ -410,7 +415,8 @@ export const TOOLS: Tool[] = [
       return {
         month, ...range, in_progress: today() <= range.end && today() >= range.start,
         income: round(income), expense: round(expense), savings: round(savings),
-        balance: round(income - expense - savings), savings_rate_pct: income > 0 ? Math.round((savings / income) * 100) : 0,
+        balance: round(income - expense - savings), savings_rate_pct: incomeR > 0 ? Math.round((savings / incomeR) * 100) : 0,
+        ...(oneOff ? { one_off_income: round(oneOff), one_off_note: 'Engångsinkomster ingår i income och balance men inte i savings_rate_pct, snitt eller prognoser.' } : {}),
         moved_to_own_accounts: round(moved), balance_incl_moved: round(income - expense - savings + moved),
         ...(pend.length ? { pending_card: { amount: round(pend.reduce((x, t) => x + t.amount, 0)), count: pend.length, note: 'Ingår i expense. Ersätts av kortköpen när AMEX-utdraget för perioden importeras.' } } : {}),
         budget_total: bsum || undefined, compared_months: prev.length,
@@ -539,6 +545,7 @@ export const TOOLS: Tool[] = [
         from_account: TRF_SIDE.from, to_account: TRF_SIDE.to,
         tags: { type: 'array', items: { type: 'string' }, description: 'Ersätter taggarna ([] tar bort alla)' },
         add_tags: { type: 'array', items: { type: 'string' } }, remove_tags: { type: 'array', items: { type: 'string' } },
+        one_off: { type: 'boolean', description: 'Bara inkomster: true = engångsinkomst (t.ex. skatteåterbäring, gåva) som inte räknas i snitt, prognoser, sparkvot eller kvar per dag; false = vanlig inkomst' },
         apply_to_same_merchant: { type: 'boolean', default: false },
         dry_run: { type: 'boolean', default: false, description: 'true = visa ändringarna utan att spara' },
       },
@@ -569,6 +576,12 @@ export const TOOLS: Tool[] = [
         const base = patch.extra || { ...(r.extra || {}) };
         const tags = nextTags(base.tags, a);
         if (tags.length) base.tags = tags; else delete base.tags;
+        patch.extra = base;
+      }
+      if (a.one_off != null || (r.extra?.once && next.type !== 'income')) {
+        if (a.one_off && next.type !== 'income') throw new UserError('one_off gäller bara inkomster (type: income)');
+        const base = patch.extra || { ...(r.extra || {}) };
+        if (a.one_off && next.type === 'income') base.once = true; else delete base.once;
         patch.extra = base;
       }
       const changedCat = next.category !== r.category || next.type !== r.type;

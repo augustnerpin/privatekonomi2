@@ -2,7 +2,7 @@
 // Ren logik utan nätverk (testas i supabase/tests/review.test.mjs). rows = transaktioner som i tabellen
 // (type, category, amount, description, tx_date, month); expense/savings positivt = pengar ut.
 // deno-lint-ignore-file no-explicit-any
-import { type Obj, addDays, dayDiff, periodShift } from '../_shared/finance.ts';
+import { type Obj, addDays, dayDiff, periodShift, recurringIncome, oneOffIncome } from '../_shared/finance.ts';
 
 const r0 = (n: number) => Math.round(n);
 const sumType = (rows: Obj[], t: string) => rows.filter((r) => r.type === t).reduce((s, r) => s + Number(r.amount), 0);
@@ -11,7 +11,7 @@ const sumType = (rows: Obj[], t: string) => rows.filter((r) => r.type === t).red
 export function periodFacts(rows: Obj[], pid: string, budgets: Obj = {}) {
   const cur = rows.filter((r) => r.month === pid);
   const prev = [1, 2, 3].map((i) => periodShift(pid, -i)).filter((p) => rows.some((r) => r.month === p));
-  const inc = sumType(cur, 'income'), exp = sumType(cur, 'expense'), sav = sumType(cur, 'savings');
+  const inc = sumType(cur, 'income'), incR = recurringIncome(cur), once = oneOffIncome(cur), exp = sumType(cur, 'expense'), sav = sumType(cur, 'savings');
   const cats: Obj = {};
   for (const r of cur.filter((r) => r.type === 'expense')) cats[r.category] = (cats[r.category] || 0) + Number(r.amount);
   const avg: Obj = {};
@@ -24,7 +24,8 @@ export function periodFacts(rows: Obj[], pid: string, budgets: Obj = {}) {
     .map((r) => ({ date: r.tx_date, description: r.description, category: r.category, amount: r0(Number(r.amount)) }));
   return {
     period: pid, transactions: cur.length, income: r0(inc), expense: r0(exp), savings: r0(sav), left: r0(inc - exp - sav),
-    savings_rate_pct: inc > 0 ? Math.round((sav / inc) * 100) : null, expense_avg3: prevExp != null ? r0(prevExp) : null,
+    // Sparkvoten räknas utan engångsinkomster (skatteåterbäring, gåvor)
+    savings_rate_pct: incR > 0 ? Math.round((sav / incR) * 100) : null, ...(once ? { one_off_income: r0(once), one_off_note: 'Engångsinkomster ingår i income men inte i sparkvoten; räkna inte med dem framåt.' } : {}), expense_avg3: prevExp != null ? r0(prevExp) : null,
     by_category, top_expenses: top,
   };
 }

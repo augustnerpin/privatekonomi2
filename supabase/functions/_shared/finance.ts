@@ -17,6 +17,11 @@ export const TYPES = ['expense', 'income', 'savings', 'transfer'];
 export const SWISH_CAT = 'Swish (privat)';
 // Överföring till kontot som betalar kreditkortet = kortköp som inte importerats än. Räknas som utgift
 // tills kortfakturan för perioden importeras; då blir raden en kortbetalning (se saveImport i appen).
+// Engångsinkomster (extra.once på en inkomst, t.ex. skatteåterbäring eller gåva): räknas i periodens inkomst men inte
+// i snitt, prognoser, sparkvot eller kvar per dag. Samma regel som recInc/onceInc i appen.
+export const isOneOff = (r: Obj) => r.type === 'income' && !!(r.extra?.once ?? r.once ?? r.one_off);
+export const recurringIncome = (rows: Obj[]) => rows.reduce((s, r) => s + (r.type === 'income' && !isOneOff(r) ? Number(r.amount) : 0), 0);
+export const oneOffIncome = (rows: Obj[]) => rows.reduce((s, r) => s + (isOneOff(r) ? Number(r.amount) : 0), 0);
 export const PENDING_CARD_CAT = 'AMEX (väntande)';
 // När kortutdraget för en löneperiod är importerat ersätts periodens AMEX (väntande)-rader av utdragets köp:
 // de blir kortbetalningar (överföring, räknas inte som utgift), annars räknas samma pengar två gånger.

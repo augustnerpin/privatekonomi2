@@ -1348,6 +1348,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
     <div class="field"><label>Kategori</label><select id="tx-cat"></select></div>
     <div class="field"><label>Taggar <span style="font-weight:400;color:var(--sub2)">(kommaseparerade, t.ex. London, Semester)</span></label><input type="text" id="tx-tags" list="tag-list" placeholder="Valfritt"><datalist id="tag-list"></datalist>
       <label id="tx-tag-rule-row" style="display:none;gap:8px;align-items:center;font-size:12px;color:var(--sub);margin-top:6px"><input type="checkbox" id="tx-tag-rule"> Tagga även framtida köp från samma butik</label></div>
+    <label class="field" id="tx-once-row" style="display:none;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--sub);line-height:1.5"><input type="checkbox" id="tx-once" style="margin-top:3px"> <span><b style="color:var(--text)">Engångsinkomst</b> (t.ex. skatteåterbäring, gåva). Räknas inte i snitt, prognos, sparkvot eller kvar per dag.</span></label>
     <div class="field" id="tx-contact-field" style="display:none"><label>Vem är <span id="tx-contact-nr"></span>?</label>
       <input type="text" id="tx-contact" placeholder="T.ex. Anna (sambo)">
       <div style="font-size:11px;color:var(--sub2);margin-top:5px;line-height:1.5">Namnet visas i stället för numret överallt och hjälper AI:n att kategorisera.</div></div>
@@ -1830,6 +1831,11 @@ const SWISH_CAT='Swish (privat)';
 // Överföringar till kontot som betalar kreditkortet räknas som utgift här tills kortfakturan för perioden
 // importeras; då blir de kortbetalningar och fakturans köp tar deras plats (se saveImport/undoImport)
 const PENDING_CARD_CAT='AMEX (väntande)';
+// Engångsinkomster (t.once, t.ex. skatteåterbäring, gåva): räknas i periodens inkomst men inte i snitt, prognoser,
+// sparkvot eller kvar per dag. Samma regel som recurringIncome i supabase/functions/_shared/finance.ts.
+const isOnceInc=t=>t.type==='income'&&!!t.once;
+const recInc=list=>list.reduce((s,t)=>s+(t.type==='income'&&!t.once?t.amount:0),0);
+const onceInc=list=>list.reduce((s,t)=>s+(isOnceInc(t)?t.amount:0),0);
 // Samma regel som settlePendingCard i supabase/functions/_shared/finance.ts: när kortutdraget för perioden importeras
 // blir periodens AMEX (väntande)-rader kortbetalningar (överföring), så att samma pengar inte räknas två gånger.
 function settlePendingCardApp(txs,month,trf){
@@ -2212,7 +2218,7 @@ function openManualAdd(){
   setType('expense');
   document.getElementById('tx-amt').value='';
   document.getElementById('tx-desc').value='';
-  document.getElementById('tx-tags').value='';document.getElementById('tx-tag-rule-row').style.display='none';
+  document.getElementById('tx-tags').value='';document.getElementById('tx-tag-rule-row').style.display='none';document.getElementById('tx-once').checked=false;
   document.getElementById('tag-list').innerHTML=allTags().map(x=>`<option value="${esc(x.tag)}">`).join('');
   fillAccountSelect(document.getElementById('tx-acc'));
   document.getElementById('tx-contact-field').style.display='none';
@@ -2233,6 +2239,7 @@ function openEdit(id){
   document.getElementById('tx-desc').value=tx.desc||'';
   document.getElementById('tx-date').value=tx.date;
   document.getElementById('tx-tags').value=(tx.tags||[]).join(', ');
+  document.getElementById('tx-once').checked=!!tx.once;
   document.getElementById('tag-list').innerHTML=allTags().map(x=>`<option value="${esc(x.tag)}">`).join('');
   document.getElementById('tx-tag-rule-row').style.display=tx.mkey?'flex':'none';
   document.getElementById('tx-tag-rule').checked=!!(tx.mkey&&getRules()[tx.mkey]?.tags?.length);
@@ -2256,6 +2263,7 @@ function setType(type){
     const b=document.getElementById('tbtn-'+t);
     b.className='tbtn'+(t===type?' t'+t[0]:'');
   });
+  document.getElementById('tx-once-row').style.display=type==='income'?'flex':'none';
   const cats=catsForType(type);
   document.getElementById('tx-cat').innerHTML=cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
 }
@@ -2280,6 +2288,7 @@ function saveTx(){
   };
   const tags=parseTags(document.getElementById('tx-tags').value);
   if(tags.length)obj.tags=tags;else delete obj.tags;
+  if(obj.type==='income'&&document.getElementById('tx-once').checked)obj.once=true;else delete obj.once;
   // Regel: tagga även framtida köp från samma butik
   if(obj.mkey&&document.getElementById('tx-tag-rule-row').style.display!=='none'){
     if(document.getElementById('tx-tag-rule').checked)setRuleTags(obj.mkey,tags);else if(getRules()[obj.mkey]?.tags)setRuleTags(obj.mkey,[]);
@@ -2849,7 +2858,7 @@ function txRowHtml(tx,clickable=true){
   return`<div class="txi${tx.type==='transfer'?' trf':''}"${clickable?` onclick="openEdit(${tx.id})"`:' style="cursor:default"'}>
     <div class="txav" style="background:${bg}">${tx.type==='transfer'?'⇄':esc(catIcon(tx.cat))}</div>
     <div class="txi-info">
-      <div class="txi-name">${esc(displayDesc(tx.desc)||tx.cat)}${accTag}${(tx.tags||[]).map(g=>`<span class="acc-tag" style="color:var(--acc)">#${esc(g)}</span>`).join('')}</div>
+      <div class="txi-name">${esc(displayDesc(tx.desc)||tx.cat)}${accTag}${isOnceInc(tx)?'<span class="acc-tag" style="color:var(--amber)">engång</span>':''}${(tx.tags||[]).map(g=>`<span class="acc-tag" style="color:var(--acc)">#${esc(g)}</span>`).join('')}</div>
       <div class="txi-meta">${esc(tx.cat)} · ${tx.date.slice(5)}${contactName(tx.desc)?` · ${esc(tx.desc)}`:''}</div>
     </div>
     <div class="txi-amt" style="color:${col}">${sign}${fmt(Math.abs(tx.amount))}</div>
@@ -2866,10 +2875,11 @@ function renderBudget(){
   const sumT=type=>txs.filter(t=>t.type===type).reduce((s,t)=>s+t.amount,0);
   const income=sumT('income'),expense=sumT('expense'),savings=sumT('savings');
   const balance=income-expense-savings;
-  const sRate=income>0?Math.round(savings/income*100):0;
+  const incR=recInc(txs),incOnce=onceInc(txs);
+  const sRate=incR>0?Math.round(savings/incR*100):0;
 
   document.getElementById('bgt-pills').innerHTML=`
-    <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green)">${fmt(income)} kr</div></div>
+    <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green)">${fmt(income)} kr</div>${incOnce?`<div style="font-size:10px;color:var(--sub2);margin-top:2px">varav ${fmt(incOnce)} kr engång (inte i sparkvoten)</div>`:''}</div>
     <div class="scard"><div class="scard-lbl">Utgifter</div><div class="scard-val" style="color:var(--red)">${fmt(expense)} kr</div>${pendingCardIn(month,allTx).sum?`<div style="font-size:10px;color:var(--amber);margin-top:2px">varav ${fmt(pendingCardIn(month,allTx).sum)} kr AMEX (väntande)</div>`:''}</div>
     <div class="scard"><div class="scard-lbl">Sparkvot</div><div class="scard-val" style="color:var(--blue)">${sRate}%</div></div>`;
 
@@ -3107,8 +3117,8 @@ function monthFacts(month){
   const moved=-txs.filter(t=>t.type==='transfer'&&t.cat!=='Kreditkortsbetalning').reduce((s,t)=>s+t.amount,0);
   const fmtT=t=>`${ref(t)}: ${t.date} "${displayDesc(t.desc)}" ${Math.round(t.amount)} kr (${t.cat}, ${accountName(t.account)})`;
   const text=`MÅNAD: ${mLabel(month)} (${payPeriodLabel(month)})${month===currentPayPeriod()?' — PÅGÅR fortfarande':''}
-Inkomst ${Math.round(sum('income'))} kr · Utgifter ${Math.round(sum('expense'))} kr · Sparande ${Math.round(sum('savings'))} kr · Flyttat till egna konton ${Math.round(moved)} kr
-Sparkvot ${sum('income')>0?Math.round(sum('savings')/sum('income')*100):0} %${months?` · jämförelse mot snitt av ${months} tidigare månader`:' · inga tidigare månader att jämföra med'}
+Inkomst ${Math.round(sum('income'))} kr${onceInc(txs)?` (varav ${Math.round(onceInc(txs))} kr engångsinkomster — räknas inte i sparkvot, snitt eller prognos)`:''} · Utgifter ${Math.round(sum('expense'))} kr · Sparande ${Math.round(sum('savings'))} kr · Flyttat till egna konton ${Math.round(moved)} kr
+Sparkvot ${recInc(txs)>0?Math.round(sum('savings')/recInc(txs)*100):0} %${months?` · jämförelse mot snitt av ${months} tidigare månader`:' · inga tidigare månader att jämföra med'}
 
 UTGIFTER PER KATEGORI (denna månad / snitt${Object.keys(B).length?' / budget':''}):
 ${Object.keys({...byCat,...avg}).sort((a,b)=>(byCat[b]||0)-(byCat[a]||0)).map(c=>`- ${c}: ${Math.round(byCat[c]||0)} / ${Math.round(avg[c]||0)}${B[c]?` / ${B[c]}`:''}`).join('\n')}
@@ -3267,7 +3277,7 @@ function renderHome(){
   document.getElementById('home-hello').textContent=first?`Hej ${first.charAt(0)+first.slice(1).toLowerCase()}`:'Hej';
   document.getElementById('home-month').textContent=mLabel(month);
   const sum=ty=>txs.filter(t=>t.type===ty).reduce((s,t)=>s+t.amount,0);
-  const inc=sum('income'),exp=sum('expense'),sav=sum('savings');
+  const inc=sum('income'),incR=recInc(txs),exp=sum('expense'),sav=sum('savings');
   const isCur=month===currentPayPeriod();
   const ins=getInsights()[month];
   const busy=window._analysing?.[month];
@@ -3298,7 +3308,7 @@ function renderHome(){
       <div>Utgifter<b>${fmt(exp)}</b></div>
       <div>Sparat<b>${fmt(sav)}</b></div>
       <div>Kvar<b style="color:${inc-exp-sav>=0?'var(--green)':'var(--red)'}">${fmtSigned(inc-exp-sav)}</b></div>
-      ${inc>0?`<div>Sparkvot<b>${Math.round(sav/inc*100)}%</b></div>`:''}
+      ${incR>0?`<div>Sparkvot<b>${Math.round(sav/incR*100)}%</b></div>`:''}
     </div>${pendingCardIn(month).sum?`<div style="font-size:11.5px;color:var(--amber);margin-top:6px">Varav AMEX (väntande): <b>${fmt(pendingCardIn(month).sum)} kr</b> (${pendingCardIn(month).n} betalning${pendingCardIn(month).n>1?'ar':''} till AMEX-kontot). Ersätts av köpen när AMEX-utdraget för perioden importeras.</div>`:''}`:''}
   </div>`;
 
@@ -3661,7 +3671,7 @@ function renderNetWorth(){
   if(allTxMonths.length>=2){
     const rates=allTxMonths.map(m=>{
       const mt=txs.filter(t=>t.month===m);
-      const inc=mt.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+      const inc=recInc(mt); // utan engångsinkomster
       const sav=mt.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
       return{m,rate:inc>0?Math.round(sav/inc*100):0,inc,sav};
     }).filter(r=>r.inc>0);
@@ -3984,15 +3994,15 @@ function renderYear(){
   document.getElementById('yr-title').textContent=year+'';
   const nx=document.getElementById('yr-next');if(nx)nx.style.visibility=year>=+currentPayPeriod().slice(0,4)?'hidden':'';
   const txs=getTxs().filter(t=>t.month.startsWith(year.toString()));
-  let totInc=0,totExp=0,totSav=0;
+  let totInc=0,totOnce=0,totExp=0,totSav=0;
   txs.forEach(t=>{
-    if(t.type==='income')totInc+=t.amount;
+    if(t.type==='income'){totInc+=t.amount;if(t.once)totOnce+=t.amount}
     else if(t.type==='expense')totExp+=t.amount;
     else if(t.type==='savings')totSav+=t.amount;
   });
   // Samma definition som budget- och månadsvyn: inkomst − utgifter − sparande
   const totKvar=totInc-totExp-totSav;
-  const sRate=totInc>0?Math.round(totSav/totInc*100):0;
+  const sRate=totInc-totOnce>0?Math.round(totSav/(totInc-totOnce)*100):0;
 
   document.getElementById('yr-pills').innerHTML=`
     <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green)">${fmt(totInc)}</div></div>
@@ -4026,7 +4036,7 @@ function renderYear(){
   }
 
   // ── 2. Årssammanfattning stats
-  const avgMonthlyInc=months.length?Math.round(totInc/months.length):0;
+  const avgMonthlyInc=months.length?Math.round((totInc-totOnce)/months.length):0; // utan engångsinkomster
   const avgMonthlyExp=months.length?Math.round(totExp/months.length):0;
   const bestMonth=months.map(m=>{
     const mt=txs.filter(t=>t.month===m);
@@ -6195,7 +6205,7 @@ function buildCtx(){
     const sav=mt.filter(t=>t.type==='savings').reduce((s,t)=>s+t.amount,0);
     const bc={};mt.filter(t=>t.type==='expense').forEach(t=>{bc[t.cat]=(bc[t.cat]||0)+t.amount});
     const topCats=Object.entries(bc).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,v])=>`${k}:${Math.round(v)}`).join(', ');
-    return`${mLabel(m)}: in=${Math.round(inc)} ut=${Math.round(exp)} spar=${Math.round(sav)} kvar=${Math.round(inc-exp-sav)}${topCats?` [${topCats}]`:''}`;
+    return`${mLabel(m)}: in=${Math.round(inc)}${onceInc(mt)?` (varav engång=${Math.round(onceInc(mt))}, räknas inte i snitt)`:''} ut=${Math.round(exp)} spar=${Math.round(sav)} kvar=${Math.round(inc-exp-sav)}${topCats?` [${topCats}]`:''}`;
   });
 
   const years=[...new Set(allMonths.map(m=>m.slice(0,4)))];
@@ -6352,8 +6362,9 @@ function forecast(ym=currentPayPeriod()){
   const inP=p=>txs.filter(t=>t.month===p),sum=(a,ty)=>a.filter(t=>t.type===ty).reduce((s,t)=>s+t.amount,0);
   const prev=[1,2,3].map(i=>periodShift(ym,-i)).filter(p=>inP(p).length);
   // Inkomst: periodens, eller snittet av tidigare perioder om lönen inte kommit in än
-  let inc=sum(inP(ym),'income'),incEst=false;
-  const prevInc=prev.map(p=>sum(inP(p),'income')).filter(v=>v>0);
+  // Engångsinkomster (skatteåterbäring, gåvor) räknas inte: de ska inte ge mer att spendera per dag
+  let inc=recInc(inP(ym)),incEst=false;
+  const prevInc=prev.map(p=>recInc(inP(p))).filter(v=>v>0);
   if(inc<=0&&prevInc.length){inc=prevInc.reduce((a,b)=>a+b,0)/prevInc.length;incEst=true}
   const spent=sum(inP(ym),'expense')+sum(inP(ym),'savings');
   // Fasta kostnader som inte dragits än, med ungefärligt datum (samma dag i perioden som de brukar dras):

@@ -413,7 +413,7 @@ const ML = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt'
 const monthName = (ym: string) => ML[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4);
 
 async function periodRows(uid: string, months: string[]) {
-  return await pages(() => db.from('transactions').select('month,type,category,amount,description,tx_date').eq('user_id', uid).eq('deleted', false).in('month', months).neq('type', 'transfer').order('id'));
+  return await pages(() => db.from('transactions').select('month,type,category,amount,description,tx_date,extra').eq('user_id', uid).eq('deleted', false).in('month', months).neq('type', 'transfer').order('id'));
 }
 export async function maybeClosing(uid: string, s: Obj, force = false) {
   const day = today(), pid = periodForDate(day, s.pay_periods || []), prev = periodShift(pid, -1);
