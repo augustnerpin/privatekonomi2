@@ -1419,6 +1419,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
     <div id="vm-hint" style="font-size:12px;color:var(--sub2);margin-bottom:12px"></div>
     <div class="field"><label>Belopp (kr)</label><input type="number" id="vm-value" inputmode="decimal"></div>
     <div class="field"><label>Datum</label><input type="date" id="vm-date"></div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--sub);margin:-4px 0 14px"><input type="checkbox" id="vm-confirmed"> Exakt värde (bekräftat, t.ex. avläst i bankens app). Annars visas det som uppskattat.</label>
     <button class="btn-p" onclick="saveValModal()">Spara</button>
     <button class="btn-s" onclick="closeOverlay('val-modal')">Avbryt</button>
   </div>
@@ -2405,7 +2406,7 @@ async function refreshLoans(){
   try{
     const sb=await sbClient();
     const[a,b,c,d]=await Promise.all([sb.from('loans').select('*').eq('deleted',false).order('name'),sb.from('loan_balances').select('loan_id,bal_date,value').eq('deleted',false).order('bal_date'),
-      sb.from('asset_values').select('asset,val_date,value').eq('deleted',false).order('val_date'),sb.from('account_balances').select('account,bal_date,value').eq('deleted',false).order('bal_date')]);
+      sb.from('asset_values').select('asset,val_date,value,confirmed').eq('deleted',false).order('val_date'),sb.from('account_balances').select('account,bal_date,value,source,confirmed').eq('deleted',false).order('bal_date')]);
     if(a.error||b.error)throw a.error||b.error;
     const next=a.data.map(l=>({...l,history:b.data.filter(x=>x.loan_id===l.id).map(x=>({date:x.bal_date,value:+x.value}))}));
     // Manuella värden och saldohistorik (tabellerna saknas tills schema.sql körts: då tomt)
@@ -2541,8 +2542,41 @@ Saknas en uppgift: tom sträng eller 0. Hitta aldrig på värden.`;
 let _assets=ld('assets_cache',[]),_balances=ld('balances_cache',[]);
 if(!Array.isArray(_assets))_assets=[];if(!Array.isArray(_balances))_balances=[];
 const nwCatOfAcc=a=>a.nw_cat!==undefined?(a.nw_cat||null):a.kind==='investment'?'stocks':a.kind==='card'?null:'cash';
-function latestOf(rows,date){let b=null;for(const r of rows){const d=r.bal_date||r.val_date||r.date;if(d&&(!date||d<=date)&&(!b||d>b.date))b={date:d,value:+r.value}}return b}
-const accBalance=a=>latestOf(_balances.filter(b=>b.account===a.id))||(a.balance?{date:a.balance.date,value:+a.balance.value}:null);
+function latestOf(rows,date){let b=null;for(const r of rows){const d=r.bal_date||r.val_date||r.date;if(d&&(!date||d<=date)&&(!b||d>b.date))b={date:d,value:+r.value,source:r.source,confirmed:!!r.confirmed}}return b}
+const accBalance=a=>latestOf(_balances.filter(b=>b.account===a.id))||(a.balance?{date:a.balance.date,value:+a.balance.value,source:a.manual?'manual':'bank'}:null);
+// Manuella värden (inte från banken/kontoimport) är uppskattade tills de bekräftats; äldre än 6 månader = gammalt.
+// Samma regler som valueStatus i supabase/functions/_shared/networth.ts.
+const STALE_MONTHS=6;
+function valueStatusApp(v,kind,today=todayLocal()){
+  const manual=kind==='asset'||!['bank','import'].includes(String(v.source||''));
+  const[y,m,d]=today.split('-').map(Number),last=new Date(y,m-1-STALE_MONTHS+1,0).getDate(),lim=ymdOf(new Date(y,m-1-STALE_MONTHS,Math.min(d,last)));
+  return{manual,estimated:manual&&!v.confirmed,stale:manual&&!!v.date&&v.date<lim};
+}
+// Senaste manuella värde per konto och tillgång med status
+function manualValuesApp(){
+  const out=[];
+  getAccounts().forEach(a=>{if(!nwCatOfAcc(a))return;const v=accBalance(a);if(!v)return;const st=valueStatusApp(v,'account');if(st.manual)out.push({kind:'acc',id:a.id,name:a.name,...v,...st})});
+  [...new Set(_assets.map(x=>x.asset))].forEach(k=>{const v=latestOf(_assets.filter(x=>x.asset===k));if(v)out.push({kind:'asset',id:k,name:getNWCats().find(c=>c.key===k)?.label||k,...v,...valueStatusApp(v,'asset')})});
+  return out;
+}
+const valueTag=(txt,col)=>`<span style="font-size:10px;color:${col};border:1px solid ${col};border-radius:6px;padding:0 5px;margin-left:4px;white-space:nowrap">${txt}</span>`;
+// Rad under värdet: senast uppdaterad + uppskattat / äldre än 6 mån, och Bekräfta
+function valueStatusHtml(v,kind,id){
+  const st=valueStatusApp(v,kind==='acc'?'account':'asset');if(!st.manual)return'';
+  return`<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11px;color:var(--sub2);padding:0 0 3px"><span>uppdaterad ${esc(v.date)}${st.estimated?valueTag('uppskattat','var(--amber)'):''}${st.stale?valueTag('äldre än 6 mån','var(--red)'):''}</span>${st.estimated?`<span class="chip" onclick="event.stopPropagation();confirmValue(${jsArg(kind)},${jsArg(id)},${jsArg(v.date)})">Bekräfta</span>`:''}</div>`;
+}
+// Bekräfta att ett manuellt värde är exakt (inte uppskattat)
+async function confirmValue(kind,id,date){
+  if(!_sbUser){toast('Logga in under Inställningar → Databas för att spara','warn');return}
+  try{
+    const sb=await sbClient();
+    const q=kind==='acc'?sb.from('account_balances').update({confirmed:true}).eq('account',id).eq('bal_date',date):sb.from('asset_values').update({confirmed:true}).eq('asset',id).eq('val_date',date);
+    const{data,error}=await q.select('confirmed');if(error)throw error;
+    // Saldot fanns bara i kontolistan (ingen rad i saldohistoriken): spara det som bekräftat
+    if(!data.length&&kind==='acc'){const b=accBalance(getAccounts().find(a=>a.id===id)||{});if(b){const r=await sb.from('account_balances').upsert({account:id,bal_date:date,value:b.value,source:'manual',confirmed:true,deleted:false},{onConflict:'user_id,account,bal_date'});if(r.error)throw r.error}}
+    toast('Bekräftat ✓');await refreshLoans();renderNetWorth();
+  }catch(e){toast('Kunde inte spara: '+(e.message||e),'err')}
+}
 // Avkastning: senaste värde − första värde − insättningar i kontots sparkategori däremellan
 function accReturn(a){
   if(!a.sav_cat)return null;
@@ -2557,16 +2591,19 @@ function wealthSourcesHtml(){
   const blocks=cats.map(c=>{
     const lines=[];
     accs.filter(a=>nwCatOfAcc(a)===c.key).forEach(a=>{const b=accBalance(a),r=accReturn(a);
-      lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}${b?` <span style="color:var(--sub2);font-size:11px">${esc(b.date)}</span>`:''}</span>
-        <span style="display:flex;gap:6px;align-items:center;flex-shrink:0"><span style="font-family:var(--mono)">${b?fmt(b.value):'—'}</span>${btn('Saldo',`openValModal('acc',${jsArg(a.id)})`)}</span></div>`+
+      const man=b&&valueStatusApp(b,'account').manual;
+      lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}${b&&!man?` <span style="color:var(--sub2);font-size:11px">${esc(b.date)}</span>`:''}</span>
+        <span style="display:flex;gap:6px;align-items:center;flex-shrink:0"><span style="font-family:var(--mono)">${b?fmt(b.value):'—'}</span>${btn('Saldo',`openValModal('acc',${jsArg(a.id)})`)}</span></div>`+(man?valueStatusHtml(b,'acc',a.id):'')+
         (r?`<div style="font-size:11px;color:${r.ret>=0?'var(--green)':'var(--red)'};padding:0 0 3px">Avkastning sedan ${esc(r.from)}: ${fmtSigned(r.ret)} kr (insatt ${fmt(r.deposits)} kr)</div>`:''))});
     const av=latestOf(_assets.filter(x=>x.asset===c.key));
-    if(av)lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub)">Värde <span style="color:var(--sub2);font-size:11px">${esc(av.date)}</span></span><span style="display:flex;gap:6px;align-items:center"><span style="font-family:var(--mono)">${fmt(av.value)}</span>${btn('Uppdatera',`openValModal('asset',${jsArg(c.key)})`)}</span></div>`);
+    if(av)lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub)">Värde</span><span style="display:flex;gap:6px;align-items:center"><span style="font-family:var(--mono)">${fmt(av.value)}</span>${btn('Uppdatera',`openValModal('asset',${jsArg(c.key)})`)}</span></div>`);
     _loans.filter(l=>l.secured_by===c.key).forEach(l=>{const d=loanDebt(l);if(d)lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span style="color:var(--sub)">− ${esc(l.name)}</span><span style="font-family:var(--mono);color:var(--red)">−${fmt(d.value)}</span></div>`)});
     if(!lines.length)lines.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><span style="color:var(--sub2)">Ingen källa — tas från förra förmögenhetsbilden</span>${btn('Lägg in värde',`openValModal('asset',${jsArg(c.key)})`)}</div>`);
     return`<div style="padding:10px 17px;border-top:1px solid var(--line);font-size:12.5px"><div style="font-weight:600;margin-bottom:4px">${esc(c.label)}</div>${lines.join('')}</div>`;
   }).join('');
-  return`<div class="sec"><span class="sec-t">Konton & värden</span><span class="sec-sub">räknas in automatiskt</span></div><div class="txl" style="padding-top:0">${blocks}</div>`;
+  const mv=manualValuesApp(),est=mv.filter(x=>x.estimated).length,old=mv.filter(x=>x.stale).length;
+  const note=est||old?`<div style="padding:10px 17px;font-size:11.5px;color:var(--sub);line-height:1.5">${est?`${est} ${est===1?'värde är':'värden är'} <span style="color:var(--amber)">uppskattade</span> (inmatade för hand och inte bekräftade). `:''}${old?`${old} ${old===1?'är':'är'} <span style="color:var(--red)">äldre än 6 månader</span>. `:''}Uppdatera eller tryck Bekräfta när värdet stämmer exakt.</div>`:'';
+  return`<div class="sec"><span class="sec-t">Konton & värden</span><span class="sec-sub">räknas in automatiskt</span></div><div class="txl" style="padding-top:0">${note}${blocks}</div>`;
 }
 // Nytt saldo (konto) eller värde (tillgång) per datum
 let _valEdit=null;
@@ -2576,19 +2613,19 @@ function openValModal(kind,id){
   _valEdit={kind,id};
   document.getElementById('vm-title').textContent=acc?`Saldo: ${acc.name}`:`Värde: ${cat?.label||id}`;
   document.getElementById('vm-hint').textContent=acc?'Saldot sparas per datum och används när förmögenheten räknas ut.':`Bruttovärde. Lån som hör till ${cat?.label||id} dras av automatiskt.`;
-  document.getElementById('vm-value').value=cur?cur.value:'';document.getElementById('vm-date').value=todayLocal();
+  document.getElementById('vm-value').value=cur?cur.value:'';document.getElementById('vm-date').value=todayLocal();document.getElementById('vm-confirmed').checked=false;
   openOverlay('val-modal');
 }
 async function saveValModal(){
   if(!_sbUser){toast('Logga in under Inställningar → Databas för att spara','warn');return}
-  const v=loanNum(document.getElementById('vm-value').value),d=document.getElementById('vm-date').value||todayLocal();
+  const v=loanNum(document.getElementById('vm-value').value),d=document.getElementById('vm-date').value||todayLocal(),confirmed=document.getElementById('vm-confirmed').checked;
   if(v==null){toast('Ange ett belopp','warn');return}
   try{
     const sb=await sbClient();const e=_valEdit;let error;
     if(e.kind==='acc'){
-      ({error}=await sb.from('account_balances').upsert({account:e.id,bal_date:d,value:v,source:'manual',deleted:false},{onConflict:'user_id,account,bal_date'}));if(error)throw error;
+      ({error}=await sb.from('account_balances').upsert({account:e.id,bal_date:d,value:v,source:'manual',confirmed,deleted:false},{onConflict:'user_id,account,bal_date'}));if(error)throw error;
       const accs=getAccounts(),a=accs.find(x=>x.id===e.id);if(a&&(!a.balance||a.balance.date<=d)){a.balance={value:v,date:d};svAccounts(accs)}
-    }else{({error}=await sb.from('asset_values').upsert({asset:e.id,val_date:d,value:v,deleted:false},{onConflict:'user_id,asset,val_date'}));if(error)throw error}
+    }else{({error}=await sb.from('asset_values').upsert({asset:e.id,val_date:d,value:v,confirmed,deleted:false},{onConflict:'user_id,asset,val_date'}));if(error)throw error}
     closeOverlay('val-modal');toast('Sparat ✓');await refreshLoans();renderNetWorth();
   }catch(err){toast('Kunde inte spara: '+(err.message||err),'err')}
 }
@@ -3415,6 +3452,7 @@ function renderNetWorth(){
   if(change!==null){
     heroEl.innerHTML=`<span class="pill ${change>=0?'pill-g':'pill-r'}">${change>=0?'↑':'↓'} ${fmt(Math.abs(change))} kr vs förra</span>`;
   } else heroEl.innerHTML='';
+  {const mv=manualValuesApp().filter(x=>x.estimated||x.stale);if(mv.length)heroEl.innerHTML+=`<div style="font-size:11px;color:var(--amber);margin-top:6px">Uppskattade eller gamla värden: ${mv.map(x=>esc(x.name)+(x.stale?' (äldre än 6 mån)':'')).join(', ')} — se Konton & värden</div>`}
 
   const allChanges=nws.slice(1).map((n,i)=>n.total-nws[i].total);
   const bestChange=allChanges.length?Math.max(...allChanges):null;
@@ -6193,6 +6231,7 @@ function buildCtx(){
   const goalPlanTxt=gpp&&!gpp.done&&gpp.monthsLeft?` — senast ${gpp.gd} (${gpp.monthsLeft} mån kvar): behöver växa ${Math.round(gpp.need)} kr/mån; ${gpp.vsPlan>=0?Math.round(gpp.vsPlan)+' kr före':Math.round(-gpp.vsPlan)+' kr efter'} planlinjen. Prognos vid måldatumet: ${gpp.scenarios.map(s=>`${s.label} ${Math.round(s.projected)} kr (${Math.round(s.monthly)} kr/mån, ${s.rate} %)`).join(', ')}. Planerat sparande ${getPlannedSavings()} kr/mån`:!gp?'':gp.done?' — målet är nått':gp.late?` — måldatumet ${gym} har passerat`:` — ska nås senast ${gym} (${gp.months} mån): behöver öka ${Math.round(gp.need)} kr/mån${gp.diff==null?', nås inte i nuvarande takt':gp.diff>=0?`, i nuvarande takt ${gp.diff} mån före planen`:`, i nuvarande takt ${-gp.diff} mån efter planen`}`;
   const prof=profileCtx();const profileSection=prof?`\n\nEKONOMISK PROFIL:\n${prof}`:'';
   // Lån: skuld, ränta, villkor (från Supabase, cachat lokalt)
+  const mvals=manualValuesApp(),valuesSection=mvals.length?`\n\nMANUELLA VÄRDEN (inmatade för hand, inte från banken — säg "uppskattat" när du använder ett uppskattat värde):\n${mvals.map(x=>`- ${x.name}: ${Math.round(x.value)} kr, uppdaterad ${x.date}${x.estimated?', uppskattat (inte bekräftat)':', bekräftat'}${x.stale?', ÄLDRE ÄN 6 MÅNADER':''}`).join('\n')}`:'';
   const loanSection=_loans.length?`\n\nLÅN:\n${_loans.map(l=>{const d=loanDebt(l),x=l.extra||{},im=loanInterestMonth(l);return`- ${l.name}${l.lender?` (${l.lender})`:''}: skuld ${d?Math.round(d.value)+' kr ('+d.date+')':'okänd'}, ränta ${l.interest_pct!=null?l.interest_pct+' %':'okänd'}${x.rate_type?' '+x.rate_type:''}${im!=null?` ≈ ${Math.round(im)} kr/mån`:''}, amortering ${l.amortization?Math.round(l.amortization)+' kr/mån':'okänd'}${x.fixed_until?`, bunden till ${x.fixed_until}`:''}${x.rate_change_date?`, villkorsändring ${x.rate_change_date}`:''}${l.netted_in_assets?' (redan avdragen i förmögenheten)':''}`}).join('\n')}`:'';
   const merchantSection=topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'';
   const monthSection=(rec.length?`\n\nÅTERKOMMANDE KOSTNADER (typiskt/mån):\n${rec.map(r=>`- ${r.name} (${r.cat}): ${r.typical} kr${r.status==='dyrare'?` — nu ${r.current} kr (dyrare)`:''}`).join('\n')}`:'')+
@@ -6245,7 +6284,7 @@ FÖRMÖGENHETSUTVECKLING:
 ${nwHistory||'Ingen data'}
 ${ln?`Senaste: Total ${Math.round(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${Math.round(ln[c.key])}`).join(' | ')}`:''}
 
-MÅL: ${Math.round(goal)} kr${ln&&goalPctApp(ln.total)?` — ${goalPctTxt(goalPctApp(ln.total))}`:''}${goalPlanTxt}${profileSection}${loanSection}${merchantSection}`;
+MÅL: ${Math.round(goal)} kr${ln&&goalPctApp(ln.total)?` — ${goalPctTxt(goalPctApp(ln.total))}`:''}${goalPlanTxt}${profileSection}${loanSection}${valuesSection}${merchantSection}`;
   const live=`${memSection}${coachExtraCtx()}${monthSection}${forecastCtx()}${closingCtx()}`.replace(/^\n+/,'');
   return{fixed,live};
 }

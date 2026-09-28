@@ -332,3 +332,8 @@ alter table public.net_worth_snapshots add column if not exists auto boolean not
 
 -- MCP-nycklar kan ha ett utgångsdatum (valfritt; null = gäller tills den återkallas). Servern nekar utgångna nycklar.
 alter table public.mcp_tokens add column if not exists expires_at timestamptz;
+
+-- Manuella saldon och värden är uppskattade tills användaren bekräftat dem (bankens och kontoimportens saldon räknas
+-- alltid som bekräftade, se valueStatus i functions/_shared/networth.ts). Bakåtkompatibelt: standard false.
+alter table public.account_balances add column if not exists confirmed boolean not null default false;
+alter table public.asset_values add column if not exists confirmed boolean not null default false;

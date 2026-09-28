@@ -22,9 +22,33 @@ export function valueAt(rows: Obj[], date: string) {
   let best: Obj | null = null;
   for (const r of rows) {
     const d = r.date || r.bal_date || r.val_date;
-    if (d && d <= date && (!best || d > best.date)) best = { date: d, value: Number(r.value) };
+    if (d && d <= date && (!best || d > best.date)) best = { date: d, value: Number(r.value), ...(r.source != null ? { source: r.source } : {}), ...(r.confirmed != null ? { confirmed: !!r.confirmed } : {}) };
   }
   return best;
+}
+
+// Manuella värden (inmatade för hand eller via MCP, inte från banken eller en kontoimport) räknas som uppskattade tills
+// användaren bekräftat dem (confirmed). Äldre än STALE_MONTHS månader = gammalt. Samma regler som valueStatusApp i appen.
+export const STALE_MONTHS = 6;
+export function valueStatus(r: Obj, kind: 'account' | 'asset', today: string) {
+  const updated = r.date || r.bal_date || r.val_date || null;
+  const manual = kind === 'asset' || !['bank', 'import'].includes(String(r.source || ''));
+  return { updated, manual, estimated: manual && !r.confirmed, stale: manual && !!updated && updated < shiftMonthDay(today, -STALE_MONTHS) };
+}
+// Senaste manuella värde per konto och tillgång med status (uppskattat, senast uppdaterad, gammalt)
+export function manualValues(p: { accounts: Obj[]; balances: Obj[]; assets: Obj[]; cats?: Obj[]; today: string }) {
+  const out: Obj[] = [];
+  for (const a of p.accounts || []) {
+    const v = valueAt(p.balances.filter((x) => x.account === a.id), p.today); if (!v) continue;
+    const st = valueStatus(v, 'account', p.today); if (!st.manual) continue;
+    out.push({ kind: 'account', id: a.id, name: a.name, value: v.value, ...st });
+  }
+  const ids = [...new Set((p.assets || []).filter((r) => !r.deleted).map((r) => r.asset))];
+  for (const id of ids) {
+    const v = valueAt(p.assets.filter((r) => r.asset === id && !r.deleted), p.today); if (!v) continue;
+    out.push({ kind: 'asset', id, name: (p.cats || DEF_NW_CATS).find((c: Obj) => c.key === id)?.label || id, value: v.value, ...valueStatus(v, 'asset', p.today) });
+  }
+  return out;
 }
 
 // Samma dag en månad tidigare/senare (klämd till månadens sista dag)

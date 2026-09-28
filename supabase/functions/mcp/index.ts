@@ -2,7 +2,7 @@
 // klistra in direkt i Supabase-panelen. Driftsätt: supabase functions deploy mcp --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { goalProgress, avgSavings12, goalPct } from '../_shared/goal.ts';
-import { decompose, debtAt as debtAtStart } from '../_shared/networth.ts';
+import { decompose, debtAt as debtAtStart, manualValues } from '../_shared/networth.ts';
 
 // Privatekonomi som MCP-server (Model Context Protocol, "Streamable HTTP", tillståndslös).
 // Låter Claude och andra AI-appar läsa och ändra din ekonomi i Supabase.
@@ -203,13 +203,13 @@ function txView(r: Obj, s: Obj) {
 }
 const pub = (t: Obj) => { const { _mkey, _acc, _extra, ...rest } = t; return rest; };
 async function balanceRows(c: Ctx) {
-  const rows = await mayMust<Obj[]>(uq(c, 'account_balances', 'account,bal_date,value,source').eq('deleted', false).order('bal_date', { ascending: true }));
-  return { rows: (rows || []).map((r) => ({ account: r.account, date: r.bal_date, value: Number(r.value), source: r.source || null })), migrated: rows !== null };
+  const rows = await mayMust<Obj[]>(uq(c, 'account_balances', 'account,bal_date,value,source,confirmed').eq('deleted', false).order('bal_date', { ascending: true }));
+  return { rows: (rows || []).map((r) => ({ account: r.account, date: r.bal_date, value: Number(r.value), source: r.source || null, confirmed: !!r.confirmed })), migrated: rows !== null };
 }
 // Historik per konto; appens eget saldo (från senaste import) räknas med om det datumet saknas
 function balanceHistory(s: Obj, rows: Obj[]) {
   const by: Obj = {};
-  for (const r of rows) (by[r.account] ||= []).push({ date: r.date, value: r.value, source: r.source });
+  for (const r of rows) (by[r.account] ||= []).push({ date: r.date, value: r.value, source: r.source, ...(!['bank', 'import'].includes(r.source) ? { estimated: !r.confirmed } : {}) });
   for (const a of s.accounts) {
     if (!a.balance?.date) continue;
     const h = (by[a.id] ||= []);
@@ -473,7 +473,16 @@ export const TOOLS: Tool[] = [
       // Framsteg från förmögenheten när målet sattes (goal_start), inte från 0 kr; utan goal_start från första förmögenhetsbilden
       const gstart = s.goal_start && isFinite(Number(s.goal_start.total)) ? s.goal_start : (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).order('period', { ascending: true }).limit(1)))[0];
       const gp = last ? goalPct(Number(s.goal), gstart, last.total) : null;
-      const latest = last ? { period: last.period, total: last.total, goal_progress_pct: gp?.progress_pct ?? null, goal_start: gp?.start ?? null, moved_since_goal_start: gp?.moved_since_start ?? null,
+      // Manuella saldon och värden: uppskattat tills användaren bekräftat, senast uppdaterad, äldre än 6 månader
+      const ms = await loadState(c, ['accounts', 'cats_nw']);
+      const mb = (await mayMust<Obj[]>(uq(c, 'account_balances', 'account,bal_date,value,source,confirmed').eq('deleted', false))) || [];
+      const ma = (await mayMust<Obj[]>(uq(c, 'asset_values', 'asset,val_date,value,confirmed').eq('deleted', false))) || [];
+      const mv = manualValues({ accounts: ms.accounts, balances: mb, assets: ma, cats: ms.cats_nw, today: today() });
+      if (mv.length) {
+        extra.manual_values = mv;
+        extra.manual_values_note = 'Manuellt inmatade saldon/värden (inte från banken). estimated = uppskattat, inte bekräftat av användaren; updated = senast uppdaterad; stale = äldre än 6 månader. Säg det när du använder dem, t.ex. "Klarna 190 300 kr (uppskattat, 2026-09-29)".';
+      }
+      const latest = last ? { period: last.period, total: last.total, ...(mv.some((x) => x.estimated || x.stale) ? { contains_estimates: mv.filter((x) => x.estimated || x.stale).map((x) => x.name) } : {}), goal_progress_pct: gp?.progress_pct ?? null, goal_start: gp?.start ?? null, moved_since_goal_start: gp?.moved_since_start ?? null,
         goal_progress_note: 'goal_progress_pct = andel av vägen från goal_start.total till målet (0 % under startvärdet), inte total/mål.', left_to_goal: round(s.goal - last.total),
         ...(last.net != null ? { assets: last.assets, liabilities: last.liabilities, liabilities_already_in_assets: last.liabilities_already_in_assets, net: last.net, gross_assets: last.gross_assets } : {}) } : null;
       return { goal: +s.goal, latest, categories: s.cats_nw, snapshots: snaps, ...extra };
@@ -697,7 +706,8 @@ export const TOOLS: Tool[] = [
     title: 'Sätt värde på tillgång',
     description: 'Sparar värdet på en tillgång med manuellt värde per datum, t.ex. lägenheten (bruttovärde; lån som hör till tillgången dras av automatiskt när förmögenheten räknas ut), klockor, AB eller pension. asset = förmögenhetskategorins nyckel eller namn (se list_net_worth_categories).',
     write: true,
-    inputSchema: { type: 'object', required: ['asset', 'value'], properties: { asset: { type: 'string' }, value: { type: 'number' }, date: S.date, note: { type: 'string' } } },
+    inputSchema: { type: 'object', required: ['asset', 'value'], properties: { asset: { type: 'string' }, value: { type: 'number' }, date: S.date, note: { type: 'string' },
+      confirmed: { type: 'boolean', default: false, description: 'true bara när användaren sagt att värdet är exakt/bekräftat. Annars visas det som uppskattat.' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     async run(c, a) {
       const s = await loadState(c, ['cats_nw']);
@@ -706,8 +716,8 @@ export const TOOLS: Tool[] = [
       if (!cat) throw new UserError(`Okänd förmögenhetskategori "${a.asset}". Finns: ${s.cats_nw.map((x: Obj) => `${x.key} (${x.label})`).join(', ')}`);
       const date = a.date || today();
       if (!validDate(date)) throw new UserError(`Ogiltigt datum "${date}"`);
-      await mustNew(c.db.from('asset_values').upsert({ user_id: c.uid, asset: cat.key, val_date: date, value: a.value, note: a.note ?? null, deleted: false }, { onConflict: 'user_id,asset,val_date' }));
-      return { asset: cat.key, label: cat.label, value: a.value, date, note: 'Används när förmögenheten räknas ut (appen: Beräkna från saldon, nattjobbet vid ny löneperiod).' };
+      await mustNew(c.db.from('asset_values').upsert({ user_id: c.uid, asset: cat.key, val_date: date, value: a.value, note: a.note ?? null, confirmed: !!a.confirmed, deleted: false }, { onConflict: 'user_id,asset,val_date' }));
+      return { asset: cat.key, label: cat.label, value: a.value, date, estimated: !a.confirmed, note: 'Används när förmögenheten räknas ut (appen: Beräkna från saldon, nattjobbet vid ny löneperiod).' };
     },
   },
   {
@@ -845,18 +855,19 @@ export const TOOLS: Tool[] = [
     write: true,
     inputSchema: {
       type: 'object', required: ['account', 'value'],
-      properties: { account: { type: 'string', description: 'Kontots id eller namn' }, value: { type: 'number' }, date: { ...S.date, description: 'Datum, standard idag' } },
+      properties: { account: { type: 'string', description: 'Kontots id eller namn' }, value: { type: 'number' }, date: { ...S.date, description: 'Datum, standard idag' },
+        confirmed: { type: 'boolean', default: false, description: 'true bara när användaren sagt att saldot är exakt (t.ex. avläst i bankens app). Annars visas det som uppskattat.' } },
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     async run(c, a) {
       const s = await loadState(c, ['accounts']);
       const id = accountId(s, a.account); if (!id) throw new UserError(unknownAccount(s, a.account));
       const date = a.date || today();
-      await mustNew(c.db.from('account_balances').upsert({ user_id: c.uid, account: id, bal_date: date, value: a.value, source: 'mcp', deleted: false }, { onConflict: 'user_id,account,bal_date' }));
+      await mustNew(c.db.from('account_balances').upsert({ user_id: c.uid, account: id, bal_date: date, value: a.value, source: 'mcp', confirmed: !!a.confirmed, deleted: false }, { onConflict: 'user_id,account,bal_date' }));
       const acc = s.accounts.find((x: Obj) => x.id === id);
       const current = !acc.balance?.date || date >= acc.balance.date;
       if (current) { acc.balance = { value: a.value, date }; await saveState(c, 'accounts', s.accounts); }
-      return { account: acc.name, date, value: a.value, is_latest: current };
+      return { account: acc.name, date, value: a.value, is_latest: current, estimated: !a.confirmed };
     },
   },
 
