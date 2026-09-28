@@ -1,6 +1,10 @@
 // Låtsas-PostgREST med samma kedjeanrop som supabase-js. Räknar skrivningar (db.writes), så att
 // testerna kan visa att dry_run aldrig skriver. Tabeller i `missing` finns inte (som före migreringen).
+// updated_at sätts vid varje skrivning (som triggern touch_updated_at); user_state har unik nyckel (user_id, key).
 export function fakeDb(tables, { missing = [] } = {}) {
+  let clock = 0;
+  const stamp = () => new Date(Date.UTC(2026, 0, 1) + ++clock).toISOString();
+  const UNIQUE = { user_state: ['user_id', 'key'] };
   const db = {
     writes: 0,
     from(name) {
@@ -25,12 +29,16 @@ export function fakeDb(tables, { missing = [] } = {}) {
             const T = (tables[name] ||= []);
             const hit = () => T.filter((r) => filters.every((f) => f(r)));
             if (op !== 'select') db.writes++;
-            if (op === 'insert') { for (const r of [].concat(payload)) T.push(structuredClone(r)); return res({ data: null, error: null }); }
+            if (op === 'insert') {
+              const u = UNIQUE[name], add = [].concat(payload).map((r) => ({ ...structuredClone(r), updated_at: stamp() }));
+              if (u && add.some((r) => T.some((x) => u.every((k) => x[k] === r[k])))) return res({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } });
+              T.push(...add); return res({ data: ret ? add.map((r) => ({ ...r })) : null, error: null });
+            }
             if (op === 'upsert') {
-              for (const r of [].concat(payload)) { const i = T.findIndex((x) => conflict.every((k) => x[k] === r[k])); if (i >= 0) T[i] = { ...T[i], ...structuredClone(r) }; else T.push(structuredClone(r)); }
+              for (const r of [].concat(payload)) { const i = T.findIndex((x) => conflict.every((k) => x[k] === r[k])); if (i >= 0) T[i] = { ...T[i], ...structuredClone(r), updated_at: stamp() }; else T.push({ ...structuredClone(r), updated_at: stamp() }); }
               return res({ data: null, error: null });
             }
-            if (op === 'update') { const rows = hit(); rows.forEach((r) => Object.assign(r, structuredClone(payload))); return res({ data: ret ? rows.map((r) => ({ ...r })) : null, error: null }); }
+            if (op === 'update') { const rows = hit(); rows.forEach((r) => Object.assign(r, structuredClone(payload), { updated_at: stamp() })); return res({ data: ret ? rows.map((r) => ({ ...r })) : null, error: null }); }
             let rows = hit().map((r) => structuredClone(r));
             rows.sort((x, y) => { for (const [k, asc] of orders) { if (x[k] < y[k]) return asc ? -1 : 1; if (x[k] > y[k]) return asc ? 1 : -1; } return 0; });
             if (rng) rows = rows.slice(rng[0], rng[1] + 1);

@@ -4949,13 +4949,71 @@ const SB_TABLES=[
     // Inställningar sparas per nyckel direkt i localStorage (inte som en lista)
     applyState:true},
 ];
+// ── Inställningar sparas aldrig som hela värdet från en lokal kopia som kan vara gammal ──
+// Samma regler som supabase/functions/_shared/merge.ts. sh.base[key] = {v, at}: värdet och updated_at vid förra synken.
+// Före varje skrivning hämtas serverns version; har den ändrats sedan dess slås ändringarna ihop fält för fält (bara
+// det som ändrats lokalt läggs på serverns värde), och skrivningen är villkorad mot updated_at (annars görs det om).
+// Långa listor som servern och AI:n skriver (historik, insikter, bokslut, veckobrev) sparas som förut.
+const SB_MERGE_SKIP=new Set(['ai_history','ai_insights','month_closings','weekly_letters']);
+function mergeState3(base,local,server){
+  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),isObj=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+  const idList=x=>Array.isArray(x)&&x.every(o=>isObj(o)&&o.id!=null),scalarList=x=>Array.isArray(x)&&x.every(o=>o===null||typeof o!=='object');
+  if(same(local,base))return server;
+  if(server===undefined||same(server,base))return local;
+  if(isObj(local)&&isObj(server)){
+    const b=isObj(base)?base:{},out={...server};
+    for(const k of new Set([...Object.keys(b),...Object.keys(local)])){
+      if(same(local[k],b[k]))continue;
+      if(!(k in local)||local[k]===undefined)delete out[k];else out[k]=mergeState3(b[k],local[k],server[k]);
+    }
+    return out;
+  }
+  if(idList(local)&&idList(server)&&(base==null||idList(base))){
+    const bm=new Map((base||[]).map(o=>[String(o.id),o])),lm=new Map(local.map(o=>[String(o.id),o])),out=[],seen=new Set();
+    for(const s of server){const id=String(s.id);seen.add(id);if(bm.has(id)&&!lm.has(id))continue;out.push(lm.has(id)?mergeState3(bm.get(id),lm.get(id),s):s)}
+    for(const l of local){const id=String(l.id);if(seen.has(id))continue;if(bm.has(id)&&same(bm.get(id),l))continue;out.push(l)}
+    return out;
+  }
+  if(scalarList(local)&&scalarList(server)&&(base==null||scalarList(base))){
+    const b=new Set((base||[]).map(String)),l=new Set(local.map(String));
+    const out=server.filter(x=>!(b.has(String(x))&&!l.has(String(x))));
+    for(const x of local)if(!b.has(String(x))&&!out.some(y=>String(y)===String(x)))out.push(x);
+    return out;
+  }
+  return local;
+}
+// known(row) = serverns rad är samma som vid förra synken (då är den grundvärdet, t.ex. första gången efter uppdateringen)
+async function saveMergedApp(io,key,value,base,known){
+  for(let i=0;i<6;i++){
+    const row=await io.get(key),live=!!row&&!row.deleted;
+    if(!base&&live&&known?.(row))base={v:row.value,at:row.updated_at};
+    const next=live&&(!base||base.at!==row.updated_at)?mergeState3(base?.v,value,row.value):value;
+    const at=row?await io.update(key,next,row.updated_at):await io.insert(key,next);
+    if(at)return{value:next,at,merged:JSON.stringify(next)!==JSON.stringify(value)};
+  }
+  throw new Error(`Inställningen ${key} ändrades samtidigt flera gånger – försök igen`);
+}
+const sbStateIo=(sb,uid)=>({
+  async get(k){const{data,error}=await sb.from('user_state').select('value,updated_at,deleted').eq('key',k).limit(1);if(error)throw error;return data[0]||null},
+  async update(k,v,at){const{data,error}=await sb.from('user_state').update({value:v,deleted:false}).eq('key',k).eq('updated_at',at).select('updated_at');if(error)throw error;return data[0]?.updated_at||null},
+  async insert(k,v){const{data,error}=await sb.from('user_state').insert({user_id:uid,key:k,value:v,deleted:false}).select('updated_at');if(error){if(error.code==='23505')return null;throw error}return data[0]?.updated_at||null},
+});
 async function sbPush(sb,T,sh,uid){
-  const seen=new Set(),up=[];let bad=0;
+  const seen=new Set(),up=[],merge=[];let bad=0,merged=0;
   for(const o of T.list()){
     const k=T.key(o);seen.add(k);const f=sbFp(o);
     if(sh[T.sk][k]===f)continue;
     if(T.valid&&!T.valid(o)){bad++;continue}
-    up.push([k,f,T.toRow(o,uid)]);
+    if(T.applyState&&!SB_MERGE_SKIP.has(k))merge.push(o);else up.push([k,f,T.toRow(o,uid)]);
+  }
+  // Inställningar: hämta serverns version, slå ihop, skriv villkorat
+  if(merge.length){
+    const io=sbStateIo(sb,uid);sh.base||={};
+    for(const o of merge){
+      const r=await saveMergedApp(io,o.key,o.value,sh.base[o.key],row=>sbFp({key:o.key,value:row.value})===sh.st[o.key]);
+      sh.base[o.key]={v:r.value,at:r.at};sh.st[o.key]=sbFp({key:o.key,value:r.value});
+      if(r.merged){localStorage.setItem(o.key,JSON.stringify(r.value));merged++}
+    }
   }
   // Rader som fanns vid förra synken men inte längre lokalt = borttagna
   const del=Object.keys(sh[T.sk]).filter(k=>!seen.has(k));
@@ -4969,18 +5027,23 @@ async function sbPush(sb,T,sh,uid){
     const{error}=await sb.from(T.name).update({deleted:true}).in(T.pk,part.map(T.pkVal));if(error)throw error;
     part.forEach(k=>delete sh[T.sk][k]);
   }
-  return{up:up.length,del:del.length,bad};
+  return{up:up.length+merge.length,del:del.length,bad,merged};
 }
 // Returnerar hur många rader som faktiskt ändrades (överlappet i sbPull hämtar samma rader igen)
 function sbApply(T,rows,sh){
   let changed=0;
   if(T.applyState){
     rows.forEach(r=>{
-      if(r.deleted){if(localStorage.getItem(r.key)!==null)changed++;localStorage.removeItem(r.key);delete sh.st[r.key];if(r.key==='ai_history')reloadAiHistory();return}
-      const fp=sbFp(T.fromRow(r));if(sh.st[r.key]===fp)return;
-      // Ändrad lokalt sedan förra synken (t.ex. under pågående synk): behåll, nästa push vinner
-      if(r.key in sh.st&&localStorage.getItem(r.key)!==null&&sbFp({key:r.key,value:ld(r.key,null)})!==sh.st[r.key])return;
-      localStorage.setItem(r.key,JSON.stringify(r.value));sh.st[r.key]=fp;changed++;
+      sh.base||={};const mergeable=!SB_MERGE_SKIP.has(r.key);
+      if(r.deleted){if(localStorage.getItem(r.key)!==null)changed++;localStorage.removeItem(r.key);delete sh.st[r.key];delete sh.base[r.key];if(r.key==='ai_history')reloadAiHistory();return}
+      const fp=sbFp(T.fromRow(r));
+      if(sh.st[r.key]===fp){if(mergeable)sh.base[r.key]={v:r.value,at:r.updated_at};return}
+      // Ändrad lokalt sedan förra synken: slå ihop serverns version med de lokala ändringarna (nästa push skriver resultatet)
+      if(r.key in sh.st&&localStorage.getItem(r.key)!==null&&sbFp({key:r.key,value:ld(r.key,null)})!==sh.st[r.key]){
+        if(mergeable){const m=mergeState3(sh.base[r.key]?.v,ld(r.key,null),r.value);localStorage.setItem(r.key,JSON.stringify(m));sh.base[r.key]={v:r.value,at:r.updated_at};changed++}
+        return;
+      }
+      localStorage.setItem(r.key,JSON.stringify(r.value));sh.st[r.key]=fp;if(mergeable)sh.base[r.key]={v:r.value,at:r.updated_at};changed++;
       if(r.key==='ai_history')reloadAiHistory();
     });
     return changed;
@@ -5028,13 +5091,14 @@ async function sbSync(opts={}){
     const uid=_sbUser.id;
     let sh=ld('sb_shadow',null);
     const first=!sh||sh.uid!==uid;
-    if(first)sh={uid,tx:{},nw:{},st:{},cursor:{}};
+    if(first)sh={uid,tx:{},nw:{},st:{},cursor:{},base:{}};
+    sh.base||={};
     const save=()=>localStorage.setItem('sb_shadow',JSON.stringify(sh));
     let pulled=0,pushed=0,bad=0;
     // Första synken på en enhet (även efter utloggning): molnet vinner. Allt hämtas innan något skickas,
     // så att gamla lokala rader inte skriver över nyare ändringar eller väcker borttagna rader till liv.
     if(first)for(const T of SB_TABLES)pulled+=await sbPull(sb,T,sh);
-    for(const T of SB_TABLES){const r=await sbPush(sb,T,sh,uid);pushed+=r.up+r.del;bad+=r.bad;save()}
+    for(const T of SB_TABLES){const r=await sbPush(sb,T,sh,uid);pushed+=r.up+r.del;bad+=r.bad;pulled+=r.merged||0;save()}
     for(const T of SB_TABLES){pulled+=await sbPull(sb,T,sh);save()}
     const when=new Date().toLocaleString('sv-SE',{dateStyle:'short',timeStyle:'short'});
     sbStatus(`Synkad ${when} · ${getTxs().length} transaktioner i databasen`+(bad?` · ${bad} ogiltiga rader hoppades över`:''));

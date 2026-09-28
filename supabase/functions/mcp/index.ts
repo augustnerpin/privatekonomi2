@@ -2,6 +2,7 @@
 // klistra in direkt i Supabase-panelen. Driftsätt: supabase functions deploy mcp --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { goalProgress, avgSavings12, goalPct } from '../_shared/goal.ts';
+import { saveMerged, type StateIo } from '../_shared/merge.ts';
 import { decompose, debtAt as debtAtStart, manualValues } from '../_shared/networth.ts';
 
 // Privatekonomi som MCP-server (Model Context Protocol, "Streamable HTTP", tillståndslös).
@@ -20,7 +21,8 @@ import { decompose, debtAt as debtAtStart, manualValues } from '../_shared/netwo
 // deno-lint-ignore-file no-explicit-any
 type Db = any;
 type Obj = Record<string, any>;
-type Ctx = { db: Db; uid: string; scope: 'read' | 'write' };
+// st = inställningarna som de såg ut när de lästes (värde + updated_at), så att saveState kan slå ihop i stället för att skriva över
+type Ctx = { db: Db; uid: string; scope: 'read' | 'write'; st?: Obj };
 
 export const SERVER_NAME = 'privatekonomi';
 export const SERVER_VERSION = '2.0.0';
@@ -109,15 +111,30 @@ async function fetchAll(make: () => any) {
 }
 
 async function loadState(c: Ctx, keys: string[]) {
-  const rows = await must<Obj[]>(uq(c, 'user_state', 'key,value').eq('deleted', false).in('key', keys));
+  const rows = await must<Obj[]>(uq(c, 'user_state', 'key,value,updated_at').eq('deleted', false).in('key', keys));
+  c.st ||= {};
+  for (const k of keys) { const r = rows.find((x) => x.key === k); c.st[k] = { v: r ? structuredClone(r.value) : undefined, at: r?.updated_at ?? null }; }
   const s: Obj = {};
   for (const k of keys) { const r = rows.find((x) => x.key === k); s[k] = r && r.value != null ? r.value : structuredClone(DEF[k]); }
   if (!Array.isArray(s.accounts) || !s.accounts.length) s.accounts = structuredClone(DEF.accounts);
   if (keys.includes('goal') && !(+s.goal > 0)) s.goal = DEF.goal;
   return s;
 }
+// Sparar en inställning utan att skriva över ändringar som gjorts sedan den lästes (i appen eller av nattjobbet):
+// villkorad skrivning mot updated_at och sammanslagning fält för fält (_shared/merge.ts)
+const stateIo = (c: Ctx): StateIo => ({
+  async get(key) { return (await must<Obj[]>(uq(c, 'user_state', 'value,updated_at,deleted').eq('key', key)))[0] || null; },
+  async update(key, value, at) { return (await must<Obj[]>(c.db.from('user_state').update({ value, deleted: false }).eq('user_id', c.uid).eq('key', key).eq('updated_at', at).select('updated_at')))[0]?.updated_at || null; },
+  async insert(key, value) {
+    const { data, error } = await c.db.from('user_state').insert({ user_id: c.uid, key, value, deleted: false }).select('updated_at');
+    if (error) { if (error.code === '23505') return null; throw new Error('Databasfel: ' + error.message); }
+    return data?.[0]?.updated_at || null;
+  },
+});
 async function saveState(c: Ctx, key: string, value: any) {
-  await must(c.db.from('user_state').upsert({ user_id: c.uid, key, value, deleted: false }, { onConflict: 'user_id,key' }));
+  const r = await saveMerged(stateIo(c), key, value, c.st?.[key]);
+  (c.st ||= {})[key] = { v: structuredClone(r.value), at: r.at };
+  return r.value;
 }
 const SETTINGS = ['cats_exp', 'cats_inc', 'cats_sav', 'cats_trf', 'cats_nw', 'cat_groups', 'cat_budgets', 'accounts', 'goal', 'goal_date', 'ai_profile', 'salary', 'pay_periods', 'contact_names', 'owner_name'];
 

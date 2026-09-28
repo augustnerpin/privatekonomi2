@@ -7,6 +7,7 @@
 // Driftsätt: npx supabase functions deploy bank --no-verify-jwt   (inloggningen kontrolleras här)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { saveMerged, type StateIo } from '../_shared/merge.ts';
 import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff, periodForDate, periodRange, periodShift, PENDING_CARD_CAT, settlePendingCard } from '../_shared/finance.ts';
 import { computeNetWorth, DEF_NW_CATS, shiftMonthDay } from '../_shared/networth.ts';
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
@@ -57,14 +58,31 @@ async function eb(method: string, path: string, body?: Obj, psu?: { ip?: string;
 
 // ── Användarens inställningar ──────────────────────────────────────────
 const STATE_KEYS = ['accounts', 'merchant_rules', 'pay_periods', 'owner_name', 'contact_names', 'ai_memory', 'ai_import_notes', 'cat_budgets', ...Object.values(CAT_KEY) as string[]];
+// Inställningarna som de såg ut när de lästes (värde + updated_at) per användare och nyckel: saveState slår ihop
+// med det som ändrats sedan dess i stället för att skriva över (_shared/merge.ts)
+const READ = new Map<string, { v: any; at: string | null }>();
 async function loadState(uid: string) {
-  const rows = await must<Obj[]>(db.from('user_state').select('key,value').eq('user_id', uid).eq('deleted', false).in('key', STATE_KEYS));
+  const rows = await must<Obj[]>(db.from('user_state').select('key,value,updated_at').eq('user_id', uid).eq('deleted', false).in('key', STATE_KEYS));
+  for (const k of STATE_KEYS) { const r = rows.find((x) => x.key === k); READ.set(`${uid}|${k}`, { v: r ? structuredClone(r.value) : undefined, at: r?.updated_at ?? null }); }
   const s: Obj = {};
   for (const k of STATE_KEYS) { const r = rows.find((x) => x.key === k); s[k] = r && r.value != null ? r.value : structuredClone(DEF[k]); }
   if (!Array.isArray(s.accounts) || !s.accounts.length) s.accounts = structuredClone(DEF.accounts);
   return s;
 }
-const saveState = (uid: string, key: string, value: unknown) => must(db.from('user_state').upsert({ user_id: uid, key, value, deleted: false }, { onConflict: 'user_id,key' }));
+const stateIo = (uid: string): StateIo => ({
+  async get(key) { return (await must<Obj[]>(db.from('user_state').select('value,updated_at,deleted').eq('user_id', uid).eq('key', key)))[0] || null; },
+  async update(key, value, at) { return (await must<Obj[]>(db.from('user_state').update({ value, deleted: false }).eq('user_id', uid).eq('key', key).eq('updated_at', at).select('updated_at')))[0]?.updated_at || null; },
+  async insert(key, value) {
+    const { data, error } = await db.from('user_state').insert({ user_id: uid, key, value, deleted: false }).select('updated_at');
+    if (error) { if (error.code === '23505') return null; throw new Error('Databasfel: ' + error.message); }
+    return data?.[0]?.updated_at || null;
+  },
+});
+async function saveState(uid: string, key: string, value: unknown) {
+  const r = await saveMerged(stateIo(uid), key, value, READ.get(`${uid}|${key}`));
+  READ.set(`${uid}|${key}`, { v: structuredClone(r.value), at: r.at });
+  return r.value;
+}
 
 async function userFrom(req: Request) {
   const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -126,7 +144,8 @@ async function existingRows(uid: string, account: string, fromDate: string) {
   return [...near, ...refs];
 }
 async function loadKey(uid: string, key: string) {
-  const r = await must<Obj[]>(db.from('user_state').select('value').eq('user_id', uid).eq('key', key).eq('deleted', false));
+  const r = await must<Obj[]>(db.from('user_state').select('value,updated_at').eq('user_id', uid).eq('key', key).eq('deleted', false));
+  READ.set(`${uid}|${key}`, { v: r[0] ? structuredClone(r[0].value) : undefined, at: r[0]?.updated_at ?? null });
   return r[0]?.value ?? null;
 }
 // Lån med skuldhistorik (tabellerna loans + loan_balances, samma som appen och MCP-servern)
