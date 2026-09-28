@@ -2602,7 +2602,18 @@ async function nwFromBalances(){
 // ═══════════════════════════════════════════
 const NW_LIQUID=['cash','kontanter'],NW_INVEST=['stocks','pension'],AMORT_CAT='Amortering';
 const pensionPerMonth=()=>{const k=ld('known_inflows',[]);return Array.isArray(k)?k.filter(x=>x.monthly&&x.nw_cat==='pension').reduce((s,x)=>s+(+x.amount||0),0):0};
+// Skuld vid datum (samma som debtAt i _shared/networth.ts): före första kända saldot läggs amorteringen tillbaka
+// för varje månatlig dragning (samma dag i månaden) däremellan
+function shiftMD(d,n){const[y,m,day]=d.split('-').map(Number);const last=new Date(Date.UTC(y,m-1+n+1,0)).getUTCDate();return new Date(Date.UTC(y,m-1+n,Math.min(day,last))).toISOString().slice(0,10)}
+function debtAtApp(l,date){const h=[...(l.history||[])].sort((a,b)=>a.date.localeCompare(b.date));if(!h.length)return null;const v=latestOf(h,date);if(v)return{...v,estimated:false};
+  let n=0,t=h[0].date;while(t>date&&n<600){n++;t=shiftMD(t,-1)}return{date,value:h[0].value+(+l.amortization||0)*n,estimated:true}}
+// Datum då aktier/fonder och pension har ett känt värde (saldon på konton i kategorin + manuella värden)
+function investValueDates(){const out={};NW_INVEST.forEach(k=>{const accs=getAccounts().filter(a=>nwCatOfAcc(a)===k).map(a=>a.id);
+  out[k]=[..._balances.filter(b=>accs.includes(b.account)).map(b=>b.bal_date),..._assets.filter(x=>x.asset===k).map(x=>x.val_date)]});return out}
+function valueGapWarningsApp(vd,boundary,period){return NW_INVEST.map(cat=>{const g=(vd[cat]||[]).map(d=>Math.abs(parseLocalDate(d)-parseLocalDate(boundary))/864e5);const gap=g.length?Math.round(Math.min(...g)):null;
+  return gap==null||gap>5?{cat,period,boundary,gap_days:gap}:null}).filter(Boolean)}
 function decomposeNW(){
+  const vd=investValueDates();
   const snaps=[...getNWs()].sort((a,b)=>a.period.localeCompare(b.period)),txs=getTxs();
   const investCats=getAccounts().filter(a=>a.kind==='investment'&&a.sav_cat).map(a=>a.sav_cat);
   const keys=s=>Object.keys(s).filter(k=>!['period','total','auto'].includes(k)),amt=(s,k)=>+s[k]||0;
@@ -2613,7 +2624,8 @@ function decomposeNW(){
     const sparande=sav(t=>t.cat!==AMORT_CAT);
     const dA=getPeriodStart(A.period),dB=getPeriodStart(B.period);
     let amortering=0,fromLoans=false;
-    _loans.forEach(l=>{const a=latestOf(l.history||[],dA),b=latestOf(l.history||[],dB);if(a&&b&&a.date!==b.date){amortering+=a.value-b.value;fromLoans=true}});
+    // Skulden vid respektive periods start (bakåträknad med amorteringen när historik saknas)
+    _loans.forEach(l=>{const a=debtAtApp(l,dA),b=debtAtApp(l,dB);if(a&&b&&(a.estimated||b.estimated||a.date!==b.date)){amortering+=a.value-b.value;fromLoans=true}});
     if(!fromLoans)amortering=sav(t=>t.cat===AMORT_CAT);
     amortering=Math.round(amortering);
     const n=new Set(months.map(t=>t.month)).size||1;
@@ -2623,7 +2635,8 @@ function decomposeNW(){
     const manual=[...new Set([...keys(A),...keys(B)])].filter(k=>!NW_LIQUID.includes(k)&&!NW_INVEST.includes(k));
     const omvardering=Math.round(manual.reduce((x,k)=>x+amt(B,k)-amt(A,k),0)-amortering);
     const change=Math.round(B.total-A.total);
-    steps.push({from:A.period,to:B.period,start:Math.round(A.total),end:Math.round(B.total),change,sparande,amortering,avkastning,omvardering,ovrigt:change-sparande-amortering-avkastning-omvardering});
+    const warnings=[...valueGapWarningsApp(vd,dA,A.period),...valueGapWarningsApp(vd,dB,B.period)];
+    steps.push({from:A.period,to:B.period,start:Math.round(A.total),end:Math.round(B.total),change,sparande,amortering,avkastning,omvardering,ovrigt:change-sparande-amortering-avkastning-omvardering,warnings});
   }
   const sum=k=>steps.reduce((s,x)=>s+x[k],0);
   const total=steps.length?{from:steps[0].from,to:steps[steps.length-1].to,start:steps[0].start,end:steps[steps.length-1].end,change:sum('change'),
@@ -2663,6 +2676,9 @@ function changeHtml(){
     ${waterfallSvg(s)}
     <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">${rows}
       <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0 0;border-top:1px solid var(--line);margin-top:4px"><b>Förändring</b><b style="font-family:var(--mono)">${fmtSigned(s.change)} kr</b></div></div>
+    ${(()=>{const w=_chgSel==='total'?d.steps.flatMap(x=>x.warnings):s.warnings;if(!w?.length)return'';const lbl={stocks:'Aktier/fonder',pension:'Pension'};
+      const uniq=[...new Map(w.map(x=>[x.cat+x.boundary,x])).values()].slice(0,4);
+      return`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--amber2);font-size:11.5px;line-height:1.5;color:var(--text)">⚠️ Avkastningen kan vara missvisande: ${uniq.map(x=>`${lbl[x.cat]} saknar värde nära ${esc(x.boundary)}${x.gap_days!=null?` (närmast ${x.gap_days} dagar ifrån)`:''}`).join('; ')}${w.length>uniq.length?' m.fl.':''}. Uppdatera värdet runt lönedagen (Konton & värden → Saldo).</div>`})()}
     <div style="font-size:11px;color:var(--sub2);line-height:1.5;margin-top:8px">Avkastning = aktier/fonder + pension minus insättningar. Omvärdering = ändrat värde på lägenhet och andra manuella tillgångar. Övrigt = det som blev kvar av inkomsten (eller togs från bufferten).</div>
   </div></div>`;
 }
@@ -3234,6 +3250,10 @@ function renderHome(){
   const add=(prio,h)=>cards.push({prio,h});
   // Prognos för pågående period
   if(db&&db.inc>0)add(0.5,dailyCardHtml(db));
+  // Lönen har kommit: påminn om att uppdatera manuella investeringskonton (t.ex. Avanza) om värdet är äldre än lönen
+  if(isCur){const sal=txs.filter(t=>t.type==='income'&&t.cat==='Lön').map(t=>t.date).sort()[0];
+    if(sal)getAccounts().filter(a=>a.manual&&(a.kind==='investment'||nwCatOfAcc(a)==='stocks')).forEach(a=>{const b=accBalance(a);
+      if(!b||b.date<sal)add(0.7,fcHtml({icon:'wealth',tone:'info',title:`Uppdatera värdet på ${esc(a.name)}`,text:`Lönen kom ${esc(sal)}. Senaste värdet är från ${b?esc(b.date):'—'}; ett aktuellt värde gör avkastningen och förmögenheten rätt.`,actions:`<span class="chip on" onclick="openValModal('acc',${jsArg(a.id)})">Uppdatera</span>`}))})}
   // Bokslut (överst första veckan i nya perioden) och senaste veckobrevet
   const cl=getClosings(),clP=periodShift(currentPayPeriod(),-1);
   if(cl[clP]&&(isCur||month===clP))add(Date.now()-Date.parse(cl[clP].created||0)<7*864e5?0.2:6,closingCardHtml(clP,cl[clP]));
@@ -6456,11 +6476,14 @@ function addFixedCost(){const g=k=>document.getElementById(k),name=g('fx-name').
 // ═══════════════════════════════════════════
 const getExpected=()=>{const l=ld('expected_tx',[]);return Array.isArray(l)?l:[]};
 // Hur ofta posten uteblev eller kom sent de senaste 12 perioderna (perioder där lönen kom in)
+// Första gången dag X infaller i perioden (samma som dueDateIn i bank/notify.ts)
+function dueDateInApp(start,day){const[y,m]=start.split('-').map(Number);const at=(yy,mm)=>{const last=new Date(yy,mm,0).getDate();return`${yy}-${String(mm).padStart(2,'0')}-${String(Math.min(day,last)).padStart(2,'0')}`};
+  const d=at(y,m);return d>=start?d:m===12?at(y+1,1):at(y,m+1)}
 function expectedHistory(e){
   const txs=getTxs(),cur=currentPayPeriod();let periods=0,missed=0;
   for(let i=1;i<=12;i++){const p=periodShift(cur,-i),pt=txs.filter(t=>t.month===p);
-    const sal=pt.filter(t=>t.type==='income'&&t.cat==='Lön').map(t=>t.date).sort()[0];if(!sal)continue;periods++;
-    const limit=new Date(parseLocalDate(sal).getTime()+(+e.days||5)*864e5),q=String(e.match||'').toLowerCase();
+    const sal=pt.filter(t=>t.type==='income'&&t.cat==='Lön').map(t=>t.date).sort()[0];if(!sal&&!e.due_day)continue;periods++;
+    const limit=e.due_day?parseLocalDate(dueDateInApp(getPeriodStart(p),+e.due_day)):new Date(parseLocalDate(sal).getTime()+(+e.days||5)*864e5),q=String(e.match||'').toLowerCase();
     if(!pt.some(t=>t.type===e.type&&(!e.cat||t.cat===e.cat)&&(!q||(t.desc||'').toLowerCase().includes(q))&&parseLocalDate(t.date)<=limit))missed++}
   return{periods,missed};
 }
@@ -6468,19 +6491,19 @@ function renderExpectedSettings(){
   const el=document.getElementById('expected-list');if(!el)return;
   const TL={expense:'Utgift',income:'Inkomst',savings:'Sparande',transfer:'Överföring'};
   el.innerHTML=(getExpected().map((e,i)=>{const h=expectedHistory(e);return`<div class="s-row"><div style="min-width:0;flex:1"><div class="s-row-lbl">${esc(e.name)}</div>
-      <div class="s-row-sub">${TL[e.type]||e.type}${e.cat?' · '+esc(e.cat):''}${e.match?` · text "${esc(e.match)}"`:''} · senast ${e.days||5} dagar efter lönen${h.periods?` · uteblev/sent ${h.missed} av ${h.periods} perioder`:''}</div></div>
+      <div class="s-row-sub">${TL[e.type]||e.type}${e.cat?' · '+esc(e.cat):''}${e.match?` · text "${esc(e.match)}"`:''} · ${e.due_day?`senast den ${e.due_day}:e`:`senast ${e.days||5} dagar efter lönen`}${h.periods?` · uteblev/sent ${h.missed} av ${h.periods} perioder`:''}</div></div>
       <label class="toggle"><input type="checkbox"${e.enabled!==false?' checked':''} onchange="setExpected(${i},'enabled',this.checked)"><span class="tsl"></span></label><button class="tag-rm" onclick="removeExpected(${i})">×</button></div>`}).join('')||'<div style="padding:12px 16px;font-size:13px;color:var(--sub2)">Inga ännu.</div>')+
     `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px 12px"><input id="ex-name" class="sb-inp" placeholder="Namn, t.ex. Hyra från inneboende" style="flex:1 1 140px;margin:0">
       <select id="ex-type" class="sb-inp" style="width:auto;margin:0" onchange="document.getElementById('ex-cat').innerHTML=catsForType(this.value).map(c=>'<option>'+esc(c)+'</option>').join('')">${Object.entries(TL).map(([k,l])=>`<option value="${k}"${k==='savings'?' selected':''}>${l}</option>`).join('')}</select>
       <select id="ex-cat" class="sb-inp" style="width:auto;margin:0">${catsForType('savings').map(c=>`<option>${esc(c)}</option>`).join('')}</select>
-      <input id="ex-match" class="sb-inp" placeholder="Text (valfri)" style="width:110px;margin:0"><input id="ex-days" type="number" class="sb-inp" value="5" style="width:60px;margin:0" title="Dagar efter lönen">
+      <input id="ex-match" class="sb-inp" placeholder="Text (valfri)" style="width:110px;margin:0"><select id="ex-mode" class="sb-inp" style="width:auto;margin:0"><option value="days">dagar efter lönen</option><option value="due">senast dag i månaden</option></select><input id="ex-days" type="number" class="sb-inp" value="5" min="0" max="31" style="width:60px;margin:0" title="Antal dagar efter lönen, eller dag i månaden">
       <button class="sb-btn sb-btn2" onclick="addExpected()">Lägg till</button></div>`;
 }
 const saveExpected=l=>{sv('expected_tx',l);renderExpectedSettings()};
 function setExpected(i,k,v){const l=getExpected();if(!l[i])return;l[i][k]=v;saveExpected(l)}
 function removeExpected(i){const l=getExpected();l.splice(i,1);saveExpected(l)}
 function addExpected(){const g=k=>document.getElementById(k),name=g('ex-name').value.trim();if(!name){toast('Ange ett namn','warn');return}
-  const l=getExpected();l.push({id:'exp_'+Date.now().toString(36),name,type:g('ex-type').value,cat:g('ex-cat').value,...(g('ex-match').value.trim()?{match:g('ex-match').value.trim()}:{}),days:Math.max(0,+g('ex-days').value||5),enabled:true});
+  const l=getExpected();l.push({id:'exp_'+Date.now().toString(36),name,type:g('ex-type').value,cat:g('ex-cat').value,...(g('ex-match').value.trim()?{match:g('ex-match').value.trim()}:{}),...(g('ex-mode').value==='due'?{due_day:Math.min(31,Math.max(1,+g('ex-days').value||28))}:{days:Math.max(0,+g('ex-days').value||5)}),enabled:true});
   g('ex-name').value='';g('ex-match').value='';saveExpected(l);toast('Notis när den uteblir ✓')}
 // Från listan med fasta kostnader: markera som förväntad
 function expectFixed(i){const x=getFixedCosts()[i];if(!x)return;const l=getExpected();

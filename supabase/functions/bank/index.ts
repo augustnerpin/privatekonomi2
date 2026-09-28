@@ -8,7 +8,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff, periodForDate, periodRange, periodShift } from '../_shared/finance.ts';
-import { computeNetWorth, DEF_NW_CATS } from '../_shared/networth.ts';
+import { computeNetWorth, DEF_NW_CATS, shiftMonthDay } from '../_shared/networth.ts';
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
 import { buildDigest, missingExpected } from './notify.ts';
@@ -136,6 +136,21 @@ async function loadLoansFor(uid: string) {
   const bal = await pages(() => db.from('loan_balances').select('loan_id,bal_date,value').eq('user_id', uid).eq('deleted', false).order('bal_date'));
   return loans.map((l) => ({ ...l, history: bal.filter((b) => b.loan_id === l.id).map((b) => ({ date: b.bal_date, value: Number(b.value) })) }));
 }
+// Ett lånesaldo per löneperiod: saknas ett saldo i perioden sparas det senaste, framräknat med amorteringen för
+// varje månatlig dragning (samma dag i månaden som senaste saldot) som passerats sedan dess.
+async function recordLoanPeriodBalances(uid: string, s: Obj) {
+  const loans = await loadLoansFor(uid); if (!loans.length) return;
+  const day = today(), start = periodRange(periodForDate(day, s.pay_periods || []), s.pay_periods || []).start;
+  const rows: Obj[] = [];
+  for (const l of loans) {
+    const h = [...l.history].sort((a, b) => a.date.localeCompare(b.date)), last = h[h.length - 1];
+    if (!last || last.date >= start) continue;
+    let v = last.value, t = shiftMonthDay(last.date, 1);
+    while (t <= day) { v = Math.max(0, v - (Number(l.amortization) || 0)); t = shiftMonthDay(t, 1); }
+    rows.push({ user_id: uid, loan_id: l.id, bal_date: day, value: Math.round(v * 100) / 100, deleted: false });
+  }
+  if (rows.length) await must(db.from('loan_balances').upsert(rows, { onConflict: 'user_id,loan_id,bal_date' }));
+}
 // Amortering från bolånekontot sänker skulden; räntedragningen sparas som senaste räntekostnad
 async function applyLoanUpdates(uid: string, rows: Obj[], s: Obj) {
   const loans = await loadLoansFor(uid); if (!loans.length) return;
@@ -228,6 +243,8 @@ async function syncLocked(uid: string, psu: Psu) {
     let n = 0; for (const [k, v] of Object.entries(learned)) if (!fresh[k]) { fresh[k] = v; n++; }
     if (n) await saveState(uid, 'merchant_rules', fresh);
   }
+  // Lånens saldo sparas en gång per löneperiod (historik för förmögenhetens uppdelning)
+  await recordLoanPeriodBalances(uid, s).catch((e) => console.error('Lånesaldo:', e));
   // 3. Sist: var hämtningen kom (last_date). Sparas först när raderna ovan är sparade.
   for (const u of connUpdates) await must(db.from('bank_connections').update(u.patch).eq('id', u.id));
   return { added, review, accounts: summary, rows: saved, state: s };
@@ -281,8 +298,16 @@ async function notify(uid: string, r: Obj) {
   const paceRows = await pages(() => db.from('transactions').select('month,type,amount,tx_date').eq('user_id', uid).eq('deleted', false).eq('type', 'expense').in('month', pm).order('id'));
   // Förväntade transaktioner (t.ex. sparandet till Avanza inom 5 dagar efter lönen)
   const expected = await loadKey(uid, 'expected_tx');
-  const curRows = Array.isArray(expected) && expected.length ? await pages(() => db.from('transactions').select('type,category,description,tx_date').eq('user_id', uid).eq('deleted', false).eq('month', pid).order('id')) : [];
-  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal, pace: pace(paceRows, pid, starts, day), missing: missingExpected(Array.isArray(expected) ? expected : [], curRows, day) };
+  const curRows = await pages(() => db.from('transactions').select('type,category,description,tx_date').eq('user_id', uid).eq('deleted', false).eq('month', pid).order('id'));
+  const salaryDate = curRows.filter((x) => x.type === 'income' && x.category === 'Lön').map((x) => x.tx_date).sort()[0] || null;
+  // Manuella investeringskonton (t.ex. Avanza) vars värde inte uppdaterats sedan lönen kom
+  const stale: Obj[] = [];
+  if (salaryDate) for (const a of s.accounts.filter((x: Obj) => x.manual && (x.kind === 'investment' || x.nw_cat === 'stocks'))) {
+    const last = (await must<Obj[]>(db.from('account_balances').select('bal_date').eq('user_id', uid).eq('account', a.id).eq('deleted', false).order('bal_date', { ascending: false }).limit(1)))[0];
+    if (!last || last.bal_date < salaryDate) stale.push({ id: a.id, name: a.name, date: last?.bal_date || null });
+  }
+  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal, pace: pace(paceRows, pid, starts, day),
+    missing: missingExpected(Array.isArray(expected) ? expected : [], curRows, day, range.start), salaryDate, stale };
   const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
   const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
   const d = buildDigest({ ...input, sent });

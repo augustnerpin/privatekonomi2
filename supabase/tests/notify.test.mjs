@@ -116,3 +116,17 @@ test('förväntade transaktioner: Avanza-sparandet 5 dagar efter lönen', async 
   assert.equal(d.title, 'Något har inte kommit'); assert.deepEqual(d.keys, ['forvantad:exp_avanza:2026-10']);
   assert.match(d.body, /Sparande till Avanza har inte kommit – 5 dagar sedan lönen/);
 });
+
+test('förväntade transaktioner med fast dag ("senast den 28:e") och påminnelse om Avanza-värdet', async () => {
+  const { missingExpected, dueDateIn } = await import('../functions/bank/notify.ts');
+  assert.equal(dueDateIn('2026-09-25', 28), '2026-09-28'); assert.equal(dueDateIn('2026-09-25', 20), '2026-10-20');
+  assert.equal(dueDateIn('2027-02-01', 30), '2027-02-28'); assert.equal(dueDateIn('2026-12-24', 5), '2027-01-05');
+  const exp = [{ id: 'hyra', name: 'Hyra från inneboende', type: 'income', cat: 'Övrigt', due_day: 28 }];
+  assert.deepEqual(missingExpected(exp, [], '2026-09-27', '2026-09-25'), []);           // före den 28:e
+  const m = missingExpected(exp, [], '2026-09-28', '2026-09-25');                       // ingen lön behövs
+  assert.deepEqual(m.map((e) => [e.id, e.due]), [['hyra', '2026-09-28']]);
+  assert.deepEqual(missingExpected(exp, [{ type: 'income', category: 'Övrigt', tx_date: '2026-09-26' }], '2026-09-30', '2026-09-25'), []);
+  const d = buildDigest({ newRows: [], spent: {}, budgets: {}, period, today: '2026-09-28', conns: [], sent: new Set(), missing: m, salaryDate: '2026-09-25', stale: [{ name: 'Avanza ISK', date: '2026-09-20' }] });
+  assert.deepEqual(d.keys.sort(), ['forvantad:hyra:2026-10', 'uppdatera:2026-10']);
+  assert.match(d.body, /skulle senast den 28:e/); assert.match(d.body, /uppdatera Avanza ISK \(senast 2026-09-20\)/);
+});

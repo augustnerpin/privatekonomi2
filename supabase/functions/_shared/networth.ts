@@ -27,6 +27,26 @@ export function valueAt(rows: Obj[], date: string) {
   return best;
 }
 
+// Samma dag en månad tidigare/senare (klämd till månadens sista dag)
+export function shiftMonthDay(d: string, n: number) {
+  const [y, m, day] = d.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m - 1 + n + 1, 0)).getUTCDate();
+  const x = new Date(Date.UTC(y, m - 1 + n, Math.min(day, last)));
+  return x.toISOString().slice(0, 10);
+}
+// Skuld på ett lån vid ett datum: senaste saldo på/före datumet. Före första kända saldot räknas bakåt med
+// amorteringen: varje månatlig dragning (samma dag i månaden som första saldot) mellan datumet och första
+// saldot lägger tillbaka amortization. estimated = true när värdet är bakåträknat.
+export function debtAt(l: Obj, date: string) {
+  const h = (l.history || []).map((x: Obj) => ({ date: x.date || x.bal_date, value: Number(x.value) })).filter((x: Obj) => x.date).sort((a: Obj, b: Obj) => a.date.localeCompare(b.date));
+  if (!h.length) return null;
+  const v = valueAt(h, date); if (v) return { ...v, estimated: false };
+  const am = Number(l.amortization) || 0;
+  let n = 0, t = h[0].date;
+  while (t > date && n < 600) { n++; t = shiftMonthDay(t, -1); }
+  return { date, value: Math.round((h[0].value + am * n) * 100) / 100, estimated: true };
+}
+
 export function computeNetWorth(p: { accounts: Obj[]; balances: Obj[]; assets: Obj[]; loans: Obj[]; cats?: Obj[]; prev?: Obj | null; date: string }) {
   const cats = p.cats?.length ? p.cats : DEF_NW_CATS;
   const amounts: Obj = {}, sources: Obj = {}, detail: Obj[] = [];
@@ -46,7 +66,7 @@ export function computeNetWorth(p: { accounts: Obj[]; balances: Obj[]; assets: O
     amounts[k] += v.value; src(k, 'värde'); detail.push({ kind: 'asset', cat: k, value: v.value, date: v.date });
   }
   for (const l of p.loans || []) {
-    const d = valueAt(l.history || [], p.date); if (!d) continue;
+    const d = debtAt(l, p.date); if (!d) continue;
     const k = l.secured_by && l.secured_by in amounts ? l.secured_by : 'other' in amounts ? 'other' : cats[0].key;
     amounts[k] -= d.value; src(k, 'lån'); detail.push({ kind: 'loan', id: l.id, name: l.name, cat: k, value: -d.value, date: d.date });
   }
@@ -77,7 +97,21 @@ export function accountReturn(a: Obj, balances: Obj[], txs: Obj[]) {
 //  övrigt     = resten (t.ex. pengar som blev kvar eller togs från bufferten), så att summan stämmer exakt
 export const LIQUID = ['cash', 'kontanter'], INVEST = ['stocks', 'pension'];
 export const AMORT_CAT = 'Amortering';
-export function decompose(p: { snaps: Obj[]; txs: Obj[]; loans: Obj[]; starts: Obj; investCats: string[]; pensionPerMonth?: number }) {
+// valueDates = datum då aktier/fonder respektive pension har ett känt värde (saldon/manuella värden). Ligger inget
+// värde inom 5 dagar från periodgränsen får steget en varning: avkastningen kan då vara missvisande.
+export const VALUE_GAP_DAYS = 5;
+export function valueGapWarnings(valueDates: Obj | undefined, boundary: string, period: string) {
+  if (!valueDates) return [];
+  const out: Obj[] = [];
+  for (const cat of INVEST) {
+    const ds: string[] = valueDates[cat] || [];
+    const gaps = ds.map((d) => Math.abs(Date.parse(d + 'T00:00:00Z') - Date.parse(boundary + 'T00:00:00Z')) / 864e5);
+    const gap = gaps.length ? Math.round(Math.min(...gaps)) : null;
+    if (gap == null || gap > VALUE_GAP_DAYS) out.push({ cat, period, boundary, gap_days: gap });
+  }
+  return out;
+}
+export function decompose(p: { snaps: Obj[]; txs: Obj[]; loans: Obj[]; starts: Obj; investCats: string[]; pensionPerMonth?: number; valueDates?: Obj }) {
   const snaps = [...p.snaps].sort((a, b) => a.period.localeCompare(b.period));
   const steps: Obj[] = [];
   const amt = (s: Obj, k: string) => Number((s.amounts || s)[k] || 0);
@@ -90,9 +124,10 @@ export function decompose(p: { snaps: Obj[]; txs: Obj[]; loans: Obj[]; starts: O
     const sparande = sav((t) => cat(t) !== AMORT_CAT);
     const dA = p.starts[A.period], dB = p.starts[B.period];
     let amortering = 0, fromLoans = false;
+    // Skulden vid respektive periods start (bakåträknad med amorteringen när historik saknas)
     if (dA && dB) for (const l of p.loans) {
-      const a = valueAt(l.history || [], dA), b = valueAt(l.history || [], dB);
-      if (a && b && a.date >= (l.history?.[0]?.date || '') && a.date !== b.date) { amortering += a.value - b.value; fromLoans = true; }
+      const a = debtAt(l, dA), b = debtAt(l, dB);
+      if (a && b && (a.estimated || b.estimated || a.date !== b.date)) { amortering += a.value - b.value; fromLoans = true; }
     }
     if (!fromLoans) amortering = sav((t) => cat(t) === AMORT_CAT);
     amortering = Math.round(amortering);
@@ -104,10 +139,11 @@ export function decompose(p: { snaps: Obj[]; txs: Obj[]; loans: Obj[]; starts: O
     const omvardering = Math.round(manual.reduce((x, k) => x + amt(B, k) - amt(A, k), 0) - amortering);
     const change = Math.round(Number(B.total) - Number(A.total));
     const ovrigt = change - sparande - amortering - avkastning - omvardering;
-    steps.push({ from: A.period, to: B.period, start: Math.round(Number(A.total)), end: Math.round(Number(B.total)), change, sparande, amortering, avkastning, omvardering, ovrigt });
+    const warnings = dA && dB ? [...valueGapWarnings(p.valueDates, dA, A.period), ...valueGapWarnings(p.valueDates, dB, B.period)] : [];
+    steps.push({ from: A.period, to: B.period, start: Math.round(Number(A.total)), end: Math.round(Number(B.total)), change, sparande, amortering, avkastning, omvardering, ovrigt, ...(warnings.length ? { warnings } : {}) });
   }
   const sum = (k: string) => steps.reduce((s, x) => s + x[k], 0);
   const total = steps.length ? { from: steps[0].from, to: steps[steps.length - 1].to, start: steps[0].start, end: steps[steps.length - 1].end, change: sum('change'),
-    sparande: sum('sparande'), amortering: sum('amortering'), avkastning: sum('avkastning'), omvardering: sum('omvardering'), ovrigt: sum('ovrigt') } : null;
+    sparande: sum('sparande'), amortering: sum('amortering'), avkastning: sum('avkastning'), omvardering: sum('omvardering'), ovrigt: sum('ovrigt'), ...(steps.some((s) => s.warnings) ? { warnings: steps.flatMap((s) => s.warnings || []) } : {}) } : null;
   return { steps, total };
 }

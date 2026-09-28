@@ -441,8 +441,14 @@ export const TOOLS: Tool[] = [
         const starts = Object.fromEntries(rows.map((r) => [r.period, periodStart(r.period, st.pay_periods)]));
         const investCats = st.accounts.filter((x: Obj) => x.kind === 'investment' && x.sav_cat).map((x: Obj) => x.sav_cat);
         const pension = (st.known_inflows || []).filter((x: Obj) => x.monthly && x.nw_cat === 'pension').reduce((x: number, y: Obj) => x + (Number(y.amount) || 0), 0);
-        extra.breakdown = decompose({ snaps: rows.map((r) => ({ period: r.period, total: Number(r.total), amounts: r.amounts || {} })), txs: sav, loans: loans || [], starts, investCats, pensionPerMonth: pension });
-        extra.breakdown_explanation = 'Förmögenhetsbilden för P = läget när P börjar. sparande = sparandetransaktioner utom Amortering; amortering = minskad skuld (eller kategorin Amortering); avkastning = aktier/fonder + pension minus insättningar; omvärdering = övriga tillgångar minus amortering (engångsposter); övrigt = resten.';
+        // Datum då aktier/fonder och pension har kända värden (varning om inget ligger nära periodgränsen)
+        const nwOf = (x: Obj) => (x.nw_cat !== undefined ? x.nw_cat : x.kind === 'investment' ? 'stocks' : x.kind === 'card' ? null : 'cash');
+        const bal = (await mayMust<Obj[]>(uq(c, 'account_balances', 'account,bal_date').eq('deleted', false))) || [];
+        const av = (await mayMust<Obj[]>(uq(c, 'asset_values', 'asset,val_date').eq('deleted', false))) || [];
+        const valueDates: Obj = {};
+        for (const k of ['stocks', 'pension']) { const ids = st.accounts.filter((x: Obj) => nwOf(x) === k).map((x: Obj) => x.id); valueDates[k] = [...bal.filter((b) => ids.includes(b.account)).map((b) => b.bal_date), ...av.filter((x) => x.asset === k).map((x) => x.val_date)]; }
+        extra.breakdown = decompose({ snaps: rows.map((r) => ({ period: r.period, total: Number(r.total), amounts: r.amounts || {} })), txs: sav, loans: loans || [], starts, investCats, pensionPerMonth: pension, valueDates });
+        extra.breakdown_explanation = 'Förmögenhetsbilden för P = läget när P börjar. warnings = aktier/pension saknar värde inom 5 dagar från periodgränsen (avkastningen kan då vara missvisande). Skulden före första kända lånesaldot räknas bakåt med amorteringen. sparande = sparandetransaktioner utom Amortering; amortering = minskad skuld (eller kategorin Amortering); avkastning = aktier/fonder + pension minus insättningar; omvärdering = övriga tillgångar minus amortering (engångsposter); övrigt = resten.';
       }
       if (loans?.length) {
         // Skulder vid kalendermånadens slut; lån markerade netted_in_assets är redan avdragna i tillgången
