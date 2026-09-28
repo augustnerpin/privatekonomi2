@@ -1500,6 +1500,11 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
   </div>
 
   <div class="s-sec">
+    <div class="s-lbl">📌 Fasta kostnader <span style="font-size:10px;color:var(--sub2);font-weight:400">— dras av i kvar per dag</span></div>
+    <div class="s-card" id="fixed-list"></div>
+  </div>
+
+  <div class="s-sec">
     <div class="s-lbl">Konton <span style="font-size:10px;color:var(--sub2);font-weight:400">— som du importerar kontoutdrag från</span></div>
     <div class="s-card" id="acc-list"></div>
     <div class="tag-add" style="padding:0;margin-top:-6px;margin-bottom:16px">
@@ -3175,7 +3180,8 @@ function renderHome(){
     storySub=key?`<span style="color:var(--acc);cursor:pointer" onclick="runMonthAnalysis('${month}')">Låt AI:n analysera månaden ›</span>`:'Logga in under Inställningar → Databas så får du en AI-analys av varje månad.';
   }
   const eyebrow=ins&&!busy?'AI-sammanfattning':busy?'Analyserar':`${mLabel(month)}`;
-  let html=`<div class="home-hero">
+  const db=isCur?dailyBudget(month):null;
+  let html=`<div class="home-hero">${db&&db.inc>0?dailyHeroHtml(db):''}
     <div class="home-eyebrow">${fcIcon('spark')}${eyebrow}</div>
     <div class="home-story">${story}</div>
     ${storySub?`<div class="home-story-sub">${storySub}</div>`:''}
@@ -3191,7 +3197,7 @@ function renderHome(){
   const cards=[];
   const add=(prio,h)=>cards.push({prio,h});
   // Prognos för pågående period
-  if(isCur){const f=forecast(month);if(f&&f.inc>0)add(0.5,forecastCard(f))}
+  if(db&&db.inc>0)add(0.5,dailyCardHtml(db));
   // Bokslut (överst första veckan i nya perioden) och senaste veckobrevet
   const cl=getClosings(),clP=periodShift(currentPayPeriod(),-1);
   if(cl[clP]&&(isCur||month===clP))add(Date.now()-Date.parse(cl[clP].created||0)<7*864e5?0.2:6,closingCardHtml(clP,cl[clP]));
@@ -4132,6 +4138,7 @@ function renderSettings(){
   renderCatList('trf-cats',getTrfCats(),'transfer');
   renderAccountSettings();
   renderProfileSettings();
+  renderFixedSettings();
   renderNWCatList();
   renderGroupList();
   renderSyncSettings();
@@ -4397,7 +4404,7 @@ function addCat(type){
 function buildBackup(){
   return{version:2,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
     ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
-    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),ai_profile:getProfile(),planned_savings:getPlannedSavings(),known_inflows:getInflows(),goal_start:ld('goal_start',null),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
+    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),ai_profile:getProfile(),planned_savings:getPlannedSavings(),known_inflows:getInflows(),goal_start:ld('goal_start',null),fixed_costs:ld('fixed_costs',null),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
       cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
       accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{}),
       owner_name:getOwnerName(),ai_import_notes:getImportNotes(),cat_budgets:getBudgets(),contact_names:getContacts()}};
@@ -4442,7 +4449,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date','ai_profile','planned_savings','known_inflows','goal_start'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date','ai_profile','planned_savings','known_inflows','goal_start','fixed_costs'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -4461,7 +4468,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters','planned_savings','known_inflows','goal_start']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters','planned_savings','known_inflows','goal_start','fixed_costs']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -6321,12 +6328,72 @@ function letterCardHtml(l){
 // Rörlig kontext för AI:n: prognosen för pågående period och senaste bokslutets åtgärder
 function forecastCtx(){
   const f=forecast();if(!f||!(f.inc>0))return'';
+  const d=dailyBudget();
+  if(d)return`\n\nKVAR ATT SPENDERA (${mLabel(d.ym)}, dag ${d.day} av ${d.days}): ${Math.round(d.perDayBudget)} kr/dag i ${d.left} dagar = inkomst ${Math.round(d.inc)}${d.incEst?' (uppskattad)':''} − fasta ${Math.round(d.fixed)} (${d.fixedList.map(x=>x.name+' '+Math.round(x.amount)).join(', ')}) − planerat sparande ${Math.round(d.planned)} − rörligt hittills ${Math.round(d.variable)}. Vanlig takt för rörliga utgifter ca ${Math.round(d.usual||0)} kr/dag.`;
   return`\n\nPROGNOS (${mLabel(f.ym)}, dag ${f.day} av ${f.days}): ${Math.round(f.free)} kr kvar efter ${Math.round(f.up)} kr i kommande fasta dragningar (${f.upcoming.map(u=>`${u.name} ${u.amount} kr${u.date?' ~'+u.date:''}`).join(', ')||'inga'}), ca ${Math.round(f.perDay)} kr/dag i ${f.left} dagar${f.projected!=null?`; i vanlig takt ${Math.round(f.projected)} kr kvar vid periodens slut`:''}${f.incEst?' (inkomsten uppskattad)':''}.`;
 }
 function closingCtx(){
   const c=getClosings(),p=Object.keys(c).sort().pop();if(!p)return'';
   const x=c[p];return`\n\nSENASTE BOKSLUT (${mLabel(p)}, betyg ${x.grade}): ${x.headline}\nÅtgärder för perioden efter: ${(x.actions||[]).map((a,i)=>`${i+1}. ${a.title} (${a.target})`).join(' ')}`;
 }
+
+// ═══════════════════════════════════════════
+// KVAR ATT SPENDERA PER DAG
+// (inkomst i perioden − fasta kostnader − planerat sparande − rörliga utgifter hittills) / dagar kvar
+// Fasta kostnader = listan fixed_costs (du kan ändra den); tom lista = förslag från historiken.
+// En utgift är fast om den matchar en post: samma butik (key) eller, för poster utan butik, samma kategori.
+// ═══════════════════════════════════════════
+function suggestFixedCosts(ym=currentPayPeriod()){
+  const fc=fixedCats(ym),rec=detectRecurring(ym).filter(r=>!fc[r.cat]);
+  return[...Object.entries(fc).map(([c,x])=>({id:'fc_'+c,name:c,cat:c,amount:x.typical})),...rec.map(r=>({id:'fr_'+r.key,name:r.name,cat:r.cat,key:r.key,amount:r.typical}))]
+    .sort((a,b)=>b.amount-a.amount);
+}
+function getFixedCosts(){const l=ld('fixed_costs',null);return Array.isArray(l)?l:suggestFixedCosts()}
+const isFixedTx=(t,list)=>list.some(f=>f.key?mkeyBase(t)===f.key:f.cat===t.cat);
+function dailyBudget(ym=currentPayPeriod()){
+  const f=forecast(ym);if(!f)return null;
+  const list=getFixedCosts(),fixed=list.reduce((s,x)=>s+(+x.amount||0),0),planned=getPlannedSavings();
+  const variable=getTxs().filter(t=>t.month===ym&&t.type==='expense'&&!isFixedTx(t,list)).reduce((s,t)=>s+t.amount,0);
+  const free=f.inc-fixed-planned-variable;
+  return{...f,fixed,fixedList:list,planned,variable,freeBudget:free,perDayBudget:free/f.left,pct:Math.round((f.day-1)/f.days*100)};
+}
+function dailyHeroHtml(d){
+  const neg=d.perDayBudget<0;
+  return`<div style="margin-bottom:14px">
+    <div class="home-eyebrow">${fcIcon('gauge')}Kvar att spendera</div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin:2px 0 6px"><span style="font-size:40px;font-weight:700;letter-spacing:-.02em;font-family:var(--mono);color:${neg?'var(--red)':'var(--text)'}">${fmt(Math.max(d.perDayBudget,neg?d.perDayBudget:0))}</span><span style="font-size:15px;color:var(--sub)">kr/dag</span></div>
+    <div style="height:5px;background:var(--line);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.min(100,d.pct)}%;background:var(--acc)"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--sub2);margin-top:4px"><span>Dag ${d.day} av ${d.days} · ${d.pct} % av perioden</span><span>${d.left} dagar kvar · ${fmtSigned(d.freeBudget)} kr</span></div>
+  </div>`;
+}
+function dailyCardHtml(d){
+  const row=(l,v,c='')=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span style="color:var(--sub)">${l}</span><span style="font-family:var(--mono)${c?';color:'+c:''}">${v}</span></div>`;
+  const fixedRows=d.fixedList.map(x=>{const paid=getTxs().filter(t=>t.month===d.ym&&t.type!=='transfer'&&(x.key?mkeyBase(t)===x.key:t.cat===x.cat)).reduce((s,t)=>s+t.amount,0);
+    return`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0 2px 10px"><span style="color:var(--sub2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${paid>=x.amount*0.5?'✓':'○'} ${esc(x.name)}</span><span style="font-family:var(--mono)">${fmt(x.amount)}</span></div>`}).join('');
+  return`<details class="fc"><summary style="list-style:none;cursor:pointer"><div class="fc-hd"><div class="fc-ic" style="background:var(--acc);color:#fff">${fcIcon('gauge')}</div><div style="flex:1;min-width:0"><div class="fc-t">Så räknas kvar per dag</div><div class="fc-x">${fmt(d.inc)} − ${fmt(d.fixed)} fasta − ${fmt(d.planned)} sparande − ${fmt(d.variable)} rörligt = ${fmtSigned(d.freeBudget)} kr på ${d.left} dagar.${d.incEst?' (Inkomsten uppskattad.)':''}</div></div><span class="fc-chev">›</span></div></summary>
+    <div style="padding:8px 0 0 40px">
+      ${row(`Inkomst${d.incEst?' (uppskattad)':''}`,fmt(d.inc)+' kr')}${row('Fasta kostnader',`−${fmt(d.fixed)} kr`)}${fixedRows}
+      ${row('Planerat sparande',`−${fmt(d.planned)} kr`)}${row('Rörliga utgifter hittills',`−${fmt(d.variable)} kr`)}
+      <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px">${row('Kvar',fmtSigned(d.freeBudget)+' kr',d.freeBudget<0?'var(--red)':'var(--green)')}</div>
+      ${d.projected!=null?`<div style="font-size:11.5px;color:var(--sub2);margin-top:6px">Din vanliga takt för rörliga utgifter: ca ${fmt(d.usual)} kr/dag.</div>`:''}
+      <div style="margin-top:8px"><span class="chip" onclick="openSettings();setTimeout(()=>document.getElementById('fixed-list')?.scrollIntoView({behavior:'smooth'}),350)">Ändra fasta kostnader</span></div>
+    </div></details>`;
+}
+// Inställningar → Fasta kostnader
+function renderFixedSettings(){
+  const el=document.getElementById('fixed-list');if(!el)return;
+  const saved=Array.isArray(ld('fixed_costs',null)),list=getFixedCosts();
+  el.innerHTML=(saved?'':'<div class="s-row-sub" style="padding:10px 16px 0">Förslag från historiken. Ändra ett belopp eller ta bort en rad så sparas listan.</div>')+
+    list.map((x,i)=>`<div class="s-row"><div style="min-width:0;flex:1"><div class="s-row-lbl" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</div><div class="s-row-sub">${esc(x.cat)}${x.key?' · butik':' · hela kategorin'}</div></div>
+      <input type="number" value="${Math.round(x.amount)}" style="width:90px" onchange="setFixedCost(${i},this.value)"><button class="tag-rm" onclick="removeFixedCost(${i})">×</button></div>`).join('')+
+    `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px"><input id="fx-name" class="sb-inp" placeholder="Namn, t.ex. Hemförsäkring" style="flex:1 1 140px;margin:0"><select id="fx-cat" class="sb-inp" style="width:auto;margin:0">${[...getExpCats(),...getSavCats()].map(c=>`<option>${esc(c)}</option>`).join('')}</select><input id="fx-amount" type="number" class="sb-inp" placeholder="kr/mån" style="width:90px;margin:0"><button class="sb-btn sb-btn2" onclick="addFixedCost()">Lägg till</button></div>
+     <div style="padding:0 16px 12px"><span class="chip" onclick="if(confirm('Ersätt listan med förslag från historiken?')){localStorage.removeItem('fixed_costs');sv('fixed_costs',suggestFixedCosts());renderFixedSettings();render()}">Föreslå från historiken</span></div>`;
+}
+const saveFixed=l=>{sv('fixed_costs',l);renderFixedSettings();render()};
+function setFixedCost(i,v){const l=getFixedCosts();if(!l[i])return;l[i].amount=Math.max(0,+v||0);saveFixed(l)}
+function removeFixedCost(i){const l=getFixedCosts();l.splice(i,1);saveFixed(l)}
+function addFixedCost(){const g=k=>document.getElementById(k),name=g('fx-name').value.trim(),amount=+g('fx-amount').value;if(!name||!(amount>0)){toast('Ange namn och belopp','warn');return}
+  const l=getFixedCosts();l.push({id:'fx_'+Date.now().toString(36),name,cat:g('fx-cat').value,amount});g('fx-name').value='';g('fx-amount').value='';saveFixed(l)}
 
 const COACH_TOOLS=[
   {name:'search_transactions',
