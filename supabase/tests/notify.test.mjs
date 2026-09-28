@@ -102,3 +102,17 @@ test('måldatum: behövd ökning, före/efter plan och notis bara när du ligger
   assert.match(behind.body, /Målet 700 000 kr till 2027-08: behöver \+4 045 kr\/mån, snittet är 2 000 kr\/mån/);
   assert.equal(buildDigest({ ...base, goal: { target: 700000, date: '2027-08', latest, avg: 10000 } }), null); // före plan → tyst
 });
+
+test('förväntade transaktioner: Avanza-sparandet 5 dagar efter lönen', async () => {
+  const { missingExpected } = await import('../functions/bank/notify.ts');
+  const exp = [{ id: 'exp_avanza', name: 'Sparande till Avanza', type: 'savings', cat: 'Avanza', days: 5 }, { id: 'x', name: 'Av', type: 'expense', cat: 'Gym', days: 5, enabled: false }];
+  const salary = { type: 'income', category: 'Lön', tx_date: '2026-09-25' };
+  assert.deepEqual(missingExpected(exp, [salary], '2026-09-29'), []);                       // bara 4 dagar
+  const m = missingExpected(exp, [salary], '2026-09-30');
+  assert.deepEqual(m.map((e) => e.id), ['exp_avanza']);                                     // 5 dagar, inget sparande
+  assert.deepEqual(missingExpected(exp, [salary, { type: 'savings', category: 'Avanza', tx_date: '2026-09-27' }], '2026-10-05'), []);
+  assert.deepEqual(missingExpected(exp, [], '2026-10-05'), []);                              // ingen lön än → vänta
+  const d = buildDigest({ newRows: [], spent: {}, budgets: {}, period, today: '2026-09-30', conns: [], sent: new Set(), missing: m });
+  assert.equal(d.title, 'Något har inte kommit'); assert.deepEqual(d.keys, ['forvantad:exp_avanza:2026-10']);
+  assert.match(d.body, /Sparande till Avanza har inte kommit – 5 dagar sedan lönen/);
+});

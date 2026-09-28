@@ -11,7 +11,7 @@ import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff
 import { computeNetWorth, DEF_NW_CATS } from '../_shared/networth.ts';
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
-import { buildDigest } from './notify.ts';
+import { buildDigest, missingExpected } from './notify.ts';
 import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals, loanUpdates } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
@@ -276,7 +276,10 @@ async function notify(uid: string, r: Obj) {
   const pm = [pid, periodShift(pid, -1), periodShift(pid, -2), periodShift(pid, -3)];
   const starts: Obj = Object.fromEntries(pm.map((p) => [p, periodRange(p, s.pay_periods || []).start]));
   const paceRows = await pages(() => db.from('transactions').select('month,type,amount,tx_date').eq('user_id', uid).eq('deleted', false).eq('type', 'expense').in('month', pm).order('id'));
-  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal, pace: pace(paceRows, pid, starts, day) };
+  // Förväntade transaktioner (t.ex. sparandet till Avanza inom 5 dagar efter lönen)
+  const expected = await loadKey(uid, 'expected_tx');
+  const curRows = Array.isArray(expected) && expected.length ? await pages(() => db.from('transactions').select('type,category,description,tx_date').eq('user_id', uid).eq('deleted', false).eq('month', pid).order('id')) : [];
+  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal, pace: pace(paceRows, pid, starts, day), missing: missingExpected(Array.isArray(expected) ? expected : [], curRows, day) };
   const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
   const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
   const d = buildDigest({ ...input, sent });

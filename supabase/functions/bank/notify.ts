@@ -19,7 +19,7 @@ export function goalPlan(latest: Obj | null, goal: number, avgMonthly: number | 
   return { months, left, need: left / months, eta, diff: eta != null ? months - eta : null };
 }
 
-export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[]; goal?: Obj; pace?: Obj | null }) {
+export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[]; goal?: Obj; pace?: Obj | null; missing?: Obj[] }) {
   const items: Obj[] = [];
   const add = (key: string, line: string, kind: string) => { if (!p.sent.has(key)) items.push({ key, line, kind }); };
   const rows = p.newRows.filter((r) => !r.deleted);
@@ -58,6 +58,8 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
       add(`lan:${l.id}:${date}:${step}`, `🏠 ${l.name}: ${what} ${date} (om ${days} ${days === 1 ? 'dag' : 'dagar'}) – dags att jämföra räntor`, 'loan');
     }
   }
+  // Förväntade transaktioner som uteblivit (en gång per period)
+  for (const e of p.missing || []) add(`forvantad:${e.id}:${p.period.id}`, `⏰ ${e.name} har inte kommit – ${Math.round(dayDiff(e.salary, p.today))} dagar sedan lönen`, 'expected');
   // Takt: klart mer utgifter än vanligt vid samma dag i perioden (högst en gång per vecka)
   if (p.pace && p.pace.day >= 5 && p.pace.cur > p.pace.avg * 1.25 && p.pace.cur - p.pace.avg >= 1000)
     add(`takt:${p.period.id}:${Math.floor((p.pace.day - 1) / 7)}`, `📈 ${kr(p.pace.cur)} i utgifter hittills, ${kr(p.pace.cur - p.pace.avg)} mer än vanligt vid dag ${p.pace.day}`, 'pace');
@@ -68,10 +70,23 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
       add(`mal:${p.period.id}`, `🎯 Målet ${kr(p.goal.target)} till ${p.goal.date}: behöver +${kr(g.need!)}/mån, snittet är ${kr(p.goal.avg || 0)}/mån`, 'goal');
   }
   if (!items.length) return null;
-  const order = ['salary', 'budget', 'pace', 'goal', 'loan', 'consent', 'big', 'day', 'review'];
+  const order = ['salary', 'expected', 'budget', 'pace', 'goal', 'loan', 'consent', 'big', 'day', 'review'];
   items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
-  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget' || i.kind === 'pace') ? 'Koll på budgeten' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
+  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget' || i.kind === 'pace') ? 'Koll på budgeten' : items[0].kind === 'expected' ? 'Något har inte kommit' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
   const lines = items.slice(0, 4).map((i) => i.line);
   if (items.length > 4) lines.push(`+ ${items.length - 4} till i appen`);
   return { title, body: lines.join('\n'), keys: items.map((i) => i.key) };
+}
+
+// Förväntade transaktioner (expected_tx): [{id, name, type, cat, match?, days}] ska komma inom `days` dagar efter
+// att lönen kom in i perioden. Returnerar de som uteblivit (rows = periodens transaktioner).
+export function missingExpected(expected: Obj[], rows: Obj[], today: string) {
+  const live = rows.filter((r) => !r.deleted);
+  const salary = live.filter((r) => r.type === 'income' && (r.category ?? r.cat) === 'Lön').map((r) => r.tx_date ?? r.date).sort()[0];
+  if (!salary) return [];
+  return (expected || []).filter((e) => e && e.enabled !== false).filter((e) => {
+    if (dayDiff(salary, today) < (Number(e.days) || 5) || today < salary) return false;
+    const q = String(e.match || '').toLowerCase();
+    return !live.some((r) => r.type === e.type && (!e.cat || (r.category ?? r.cat) === e.cat) && (!q || String(r.description ?? r.desc ?? '').toLowerCase().includes(q)));
+  }).map((e) => ({ ...e, salary }));
 }

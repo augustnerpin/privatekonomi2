@@ -1505,6 +1505,11 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
   </div>
 
   <div class="s-sec">
+    <div class="s-lbl">⏰ Förväntade transaktioner <span style="font-size:10px;color:var(--sub2);font-weight:400">— notis när de uteblir</span></div>
+    <div class="s-card" id="expected-list"></div>
+  </div>
+
+  <div class="s-sec">
     <div class="s-lbl">Konton <span style="font-size:10px;color:var(--sub2);font-weight:400">— som du importerar kontoutdrag från</span></div>
     <div class="s-card" id="acc-list"></div>
     <div class="tag-add" style="padding:0;margin-top:-6px;margin-bottom:16px">
@@ -4139,6 +4144,7 @@ function renderSettings(){
   renderAccountSettings();
   renderProfileSettings();
   renderFixedSettings();
+  renderExpectedSettings();
   renderNWCatList();
   renderGroupList();
   renderSyncSettings();
@@ -4404,7 +4410,7 @@ function addCat(type){
 function buildBackup(){
   return{version:2,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
     ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
-    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),ai_profile:getProfile(),planned_savings:getPlannedSavings(),known_inflows:getInflows(),goal_start:ld('goal_start',null),fixed_costs:ld('fixed_costs',null),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
+    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),ai_profile:getProfile(),planned_savings:getPlannedSavings(),known_inflows:getInflows(),goal_start:ld('goal_start',null),fixed_costs:ld('fixed_costs',null),expected_tx:getExpected(),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
       cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
       accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{}),
       owner_name:getOwnerName(),ai_import_notes:getImportNotes(),cat_budgets:getBudgets(),contact_names:getContacts()}};
@@ -4449,7 +4455,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date','ai_profile','planned_savings','known_inflows','goal_start','fixed_costs'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date','ai_profile','planned_savings','known_inflows','goal_start','fixed_costs','expected_tx'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -4468,7 +4474,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters','planned_savings','known_inflows','goal_start','fixed_costs']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters','planned_savings','known_inflows','goal_start','fixed_costs','expected_tx']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -6385,7 +6391,7 @@ function renderFixedSettings(){
   const saved=Array.isArray(ld('fixed_costs',null)),list=getFixedCosts();
   el.innerHTML=(saved?'':'<div class="s-row-sub" style="padding:10px 16px 0">Förslag från historiken. Ändra ett belopp eller ta bort en rad så sparas listan.</div>')+
     list.map((x,i)=>`<div class="s-row"><div style="min-width:0;flex:1"><div class="s-row-lbl" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</div><div class="s-row-sub">${esc(x.cat)}${x.key?' · butik':' · hela kategorin'}</div></div>
-      <input type="number" value="${Math.round(x.amount)}" style="width:90px" onchange="setFixedCost(${i},this.value)"><button class="tag-rm" onclick="removeFixedCost(${i})">×</button></div>`).join('')+
+      <input type="number" value="${Math.round(x.amount)}" style="width:90px" onchange="setFixedCost(${i},this.value)"><button class="chip" title="Notis om den uteblir" onclick="expectFixed(${i})">⏰</button><button class="tag-rm" onclick="removeFixedCost(${i})">×</button></div>`).join('')+
     `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px"><input id="fx-name" class="sb-inp" placeholder="Namn, t.ex. Hemförsäkring" style="flex:1 1 140px;margin:0"><select id="fx-cat" class="sb-inp" style="width:auto;margin:0">${[...getExpCats(),...getSavCats()].map(c=>`<option>${esc(c)}</option>`).join('')}</select><input id="fx-amount" type="number" class="sb-inp" placeholder="kr/mån" style="width:90px;margin:0"><button class="sb-btn sb-btn2" onclick="addFixedCost()">Lägg till</button></div>
      <div style="padding:0 16px 12px"><span class="chip" onclick="if(confirm('Ersätt listan med förslag från historiken?')){localStorage.removeItem('fixed_costs');sv('fixed_costs',suggestFixedCosts());renderFixedSettings();render()}">Föreslå från historiken</span></div>`;
 }
@@ -6394,6 +6400,44 @@ function setFixedCost(i,v){const l=getFixedCosts();if(!l[i])return;l[i].amount=M
 function removeFixedCost(i){const l=getFixedCosts();l.splice(i,1);saveFixed(l)}
 function addFixedCost(){const g=k=>document.getElementById(k),name=g('fx-name').value.trim(),amount=+g('fx-amount').value;if(!name||!(amount>0)){toast('Ange namn och belopp','warn');return}
   const l=getFixedCosts();l.push({id:'fx_'+Date.now().toString(36),name,cat:g('fx-cat').value,amount});g('fx-name').value='';g('fx-amount').value='';saveFixed(l)}
+
+// ═══════════════════════════════════════════
+// FÖRVÄNTADE TRANSAKTIONER — nattjobbet skickar en notis när en post inte kommit inom N dagar efter lönen
+// (missingExpected i supabase/functions/bank/notify.ts). expected_tx = [{id,name,type,cat,match?,days,enabled}]
+// ═══════════════════════════════════════════
+const getExpected=()=>{const l=ld('expected_tx',[]);return Array.isArray(l)?l:[]};
+// Hur ofta posten uteblev eller kom sent de senaste 12 perioderna (perioder där lönen kom in)
+function expectedHistory(e){
+  const txs=getTxs(),cur=currentPayPeriod();let periods=0,missed=0;
+  for(let i=1;i<=12;i++){const p=periodShift(cur,-i),pt=txs.filter(t=>t.month===p);
+    const sal=pt.filter(t=>t.type==='income'&&t.cat==='Lön').map(t=>t.date).sort()[0];if(!sal)continue;periods++;
+    const limit=new Date(parseLocalDate(sal).getTime()+(+e.days||5)*864e5),q=String(e.match||'').toLowerCase();
+    if(!pt.some(t=>t.type===e.type&&(!e.cat||t.cat===e.cat)&&(!q||(t.desc||'').toLowerCase().includes(q))&&parseLocalDate(t.date)<=limit))missed++}
+  return{periods,missed};
+}
+function renderExpectedSettings(){
+  const el=document.getElementById('expected-list');if(!el)return;
+  const TL={expense:'Utgift',income:'Inkomst',savings:'Sparande',transfer:'Överföring'};
+  el.innerHTML=(getExpected().map((e,i)=>{const h=expectedHistory(e);return`<div class="s-row"><div style="min-width:0;flex:1"><div class="s-row-lbl">${esc(e.name)}</div>
+      <div class="s-row-sub">${TL[e.type]||e.type}${e.cat?' · '+esc(e.cat):''}${e.match?` · text "${esc(e.match)}"`:''} · senast ${e.days||5} dagar efter lönen${h.periods?` · uteblev/sent ${h.missed} av ${h.periods} perioder`:''}</div></div>
+      <label class="toggle"><input type="checkbox"${e.enabled!==false?' checked':''} onchange="setExpected(${i},'enabled',this.checked)"><span class="tsl"></span></label><button class="tag-rm" onclick="removeExpected(${i})">×</button></div>`}).join('')||'<div style="padding:12px 16px;font-size:13px;color:var(--sub2)">Inga ännu.</div>')+
+    `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px 12px"><input id="ex-name" class="sb-inp" placeholder="Namn, t.ex. Hyra från inneboende" style="flex:1 1 140px;margin:0">
+      <select id="ex-type" class="sb-inp" style="width:auto;margin:0" onchange="document.getElementById('ex-cat').innerHTML=catsForType(this.value).map(c=>'<option>'+esc(c)+'</option>').join('')">${Object.entries(TL).map(([k,l])=>`<option value="${k}"${k==='savings'?' selected':''}>${l}</option>`).join('')}</select>
+      <select id="ex-cat" class="sb-inp" style="width:auto;margin:0">${catsForType('savings').map(c=>`<option>${esc(c)}</option>`).join('')}</select>
+      <input id="ex-match" class="sb-inp" placeholder="Text (valfri)" style="width:110px;margin:0"><input id="ex-days" type="number" class="sb-inp" value="5" style="width:60px;margin:0" title="Dagar efter lönen">
+      <button class="sb-btn sb-btn2" onclick="addExpected()">Lägg till</button></div>`;
+}
+const saveExpected=l=>{sv('expected_tx',l);renderExpectedSettings()};
+function setExpected(i,k,v){const l=getExpected();if(!l[i])return;l[i][k]=v;saveExpected(l)}
+function removeExpected(i){const l=getExpected();l.splice(i,1);saveExpected(l)}
+function addExpected(){const g=k=>document.getElementById(k),name=g('ex-name').value.trim();if(!name){toast('Ange ett namn','warn');return}
+  const l=getExpected();l.push({id:'exp_'+Date.now().toString(36),name,type:g('ex-type').value,cat:g('ex-cat').value,...(g('ex-match').value.trim()?{match:g('ex-match').value.trim()}:{}),days:Math.max(0,+g('ex-days').value||5),enabled:true});
+  g('ex-name').value='';g('ex-match').value='';saveExpected(l);toast('Notis när den uteblir ✓')}
+// Från listan med fasta kostnader: markera som förväntad
+function expectFixed(i){const x=getFixedCosts()[i];if(!x)return;const l=getExpected();
+  if(l.some(e=>e.cat===x.cat&&e.name===x.name)){toast('Finns redan','warn');return}
+  const type=getSavCats().includes(x.cat)?'savings':'expense';
+  l.push({id:'exp_'+Date.now().toString(36),name:x.name,type,cat:x.cat,days:5,enabled:true});saveExpected(l);toast(`Notis om ${x.name} uteblir ✓`)}
 
 const COACH_TOOLS=[
   {name:'search_transactions',
