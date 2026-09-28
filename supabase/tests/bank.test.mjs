@@ -138,3 +138,26 @@ test('bolån: amortering sänker skulden, räntan sparas, andra konton påverkar
   // Utan känd skuld före dragningen gissas ingen ny skuld
   assert.deepEqual(loanUpdates(rows, [{ ...loans[0], history: [] }], (id) => acc[id]).balances, []);
 });
+
+test('AMEX väntande: överföring till kortkontot räknas som utgift, sparuttaget blir minskat sparande', async () => {
+  const accounts = [{ id: 'lonekonto', kind: 'bank' }, { id: 'amexk', kind: 'bank', role: 'card_payment', number: '51960273264' }, { id: 'spar', kind: 'savings', role: 'savings', number: '53293380441' }];
+  const acc = Object.fromEntries(accounts.map((a) => [a.id, a]));
+  const S3 = { ...S, accounts, cats_sav: ['SEB'], cats_exp: [...S.cats_exp, 'AMEX (väntande)'], merchant_rules: {} };
+  const rows = [
+    { ...mapTx(ebTx(400, 'DBIT', '2026-09-28', '51960273264 072714609501', { ref: 'l1' })), account: 'lonekonto' },
+    { ...mapTx(ebTx(7930, 'DBIT', '2026-09-25', '51960273264 225717143320', { ref: 's1' })), account: 'spar' },
+    { ...mapTx(ebTx(7930, 'CRDT', '2026-09-25', 'AUGUST NERPI', { ref: 'a1' })), account: 'amexk' },
+    { ...mapTx(ebTx(5977.3, 'DBIT', '2026-09-26', 'AMERICAN EXPRESS', { ref: 'a2' })), account: 'amexk' },
+  ];
+  const groups = await categorize(S3, rows, (id) => acc[id], async () => []);
+  const out = toRows('u', groups, S3, 1);
+  markSavingsWithdrawals(S3, out, (id) => acc[id]);
+  const by = Object.fromEntries(out.map((r) => [r.extra.bank_ref, [r.type, r.category, r.amount]]));
+  assert.deepEqual(by.l1, ['expense', 'AMEX (väntande)', 400]);
+  assert.deepEqual(by.s1, ['expense', 'AMEX (väntande)', 7930]);
+  assert.deepEqual(by.a1, ['savings', 'SEB', -7930]);                 // pengarna kom från sparandet
+  assert.deepEqual(by.a2, ['transfer', 'Kreditkortsbetalning', -5977.3]); // själva fakturan räknas inte
+  // Utan kategorin i listan: som förut (överföring)
+  const g2 = await categorize({ ...S3, cats_exp: S.cats_exp }, rows.slice(0, 1), (id) => acc[id], async () => []);
+  assert.notEqual(g2[0].cat, 'AMEX (väntande)');
+});

@@ -1,7 +1,7 @@
 // Bankkoppling: tolkning, dubblettkontroll och kategorisering av transaktioner från Enable Banking.
 // Ren logik utan Deno/nätverk, så att den kan testas i Node (supabase/tests/bank.test.mjs).
 // deno-lint-ignore-file no-explicit-any
-import { type Obj, CAT_KEY, DEF, TYPES, addDays, dayDiff, mkeyFor, periodForDate, autoCat, fallbackCat, storedAmount, today, numberKind, descNumber } from '../_shared/finance.ts';
+import { type Obj, CAT_KEY, DEF, TYPES, addDays, dayDiff, mkeyFor, periodForDate, autoCat, fallbackCat, storedAmount, today, numberKind, descNumber, PENDING_CARD_CAT } from '../_shared/finance.ts';
 
 // Bokfört saldo i första hand (som i bankens app), annars disponibelt
 const BALANCE_ORDER = ['CLBD', 'ITBD', 'XPCD', 'ITAV', 'CLAV', 'OTHR'];
@@ -83,6 +83,10 @@ export function roleCat(s: Obj, acc: Obj | undefined, g: Obj) {
   const cats = (t: string) => (s[CAT_KEY[t]] || DEF[CAT_KEY[t]]) as string[];
   const own = cats('transfer').includes('Egen överföring') ? 'Egen överföring' : cats('transfer')[0];
   const set = (type: string, cat: string) => ({ type, cat, conf: 'high', src: 'role' });
+  // Pengar till kontot som betalar kreditkortet (…3264) = kortköp som väntar på fakturan
+  const num = descNumber(g.desc);
+  const dest = num ? (s.accounts || []).find((a: Obj) => a.number && String(a.number).replace(/\D/g, '') === num) : null;
+  if (dest?.role === 'card_payment' && dest.id !== acc?.id && g.dir === 'ut' && cats('expense').includes(PENDING_CARD_CAT)) return set('expense', PENDING_CARD_CAT);
   if (role === 'mortgage' || role === 'savings') return set('transfer', own);
   if (role === 'card_payment') {
     if (g.dir === 'in') return set('transfer', own);
@@ -102,7 +106,8 @@ export function markSavingsWithdrawals(s: Obj, rows: Obj[], accOf: (id: string) 
   const used = new Set<Obj>(); let n = 0;
   for (const r of rows) {
     if (isSav(r.account) || r.type !== 'transfer' || r.amount <= 0 || accOf(r.account)?.role === 'mortgage') continue;
-    const out = rows.find((o) => !used.has(o) && o !== r && isSav(o.account) && Math.round(o.amount * 100) === -Math.round(r.amount * 100) && dayDiff(o.tx_date, r.tx_date) <= 2);
+    // Jämför med bankens tecken: sparkontots sida kan vara en överföring eller en väntande kortutgift
+    const out = rows.find((o) => !used.has(o) && o !== r && isSav(o.account) && Math.round(rawOf(o) * 100) === -Math.round(r.amount * 100) && dayDiff(o.tx_date, r.tx_date) <= 2);
     if (!out || !cat) continue;
     used.add(out); n++;
     Object.assign(r, { type: 'savings', category: cat, amount: -r.amount }); // negativt sparande = uttag

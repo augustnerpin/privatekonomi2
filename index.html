@@ -1755,6 +1755,9 @@ const DEF_EXP=['Boende (Lån)','Boende (Avgift)','Boende (Resterande)','Mat (But
 // Swish till/från privatpersoner (bara ett mobilnummer i texten) bokförs netto här:
 // betalar du 300 kr och får tillbaka 200 kr för en delad nota blir kostnaden 100 kr.
 const SWISH_CAT='Swish (privat)';
+// Överföringar till kontot som betalar kreditkortet räknas som utgift här tills kortfakturan för perioden
+// importeras; då blir de kortbetalningar och fakturans köp tar deras plats (se saveImport/undoImport)
+const PENDING_CARD_CAT='AMEX (väntande)';
 const DEF_SAV=['Avanza','SEB','Annat'];
 const DEF_INC=['Lön','Spelvinst/förlust','Övrigt'];
 
@@ -5513,6 +5516,13 @@ function saveImport(){
     });
     setRule(g.mkey,g.type,g.cat);
   });
+  // Kortfakturan för perioden: de väntande AMEX-raderna ersätts av fakturans köp (blir kortbetalningar)
+  const settled=[];
+  const cardImport=on.some(g=>g.rows.some(r=>getAccounts().find(a=>a.id===r.account)?.kind==='card'));
+  if(cardImport){
+    const trf=getTrfCats().includes('Kreditkortsbetalning')?'Kreditkortsbetalning':getTrfCats()[0];
+    txs.forEach(t=>{if(t.type==='expense'&&t.cat===PENDING_CARD_CAT&&t.month===_imp.month){t.type='transfer';t.cat=trf;t.amount=-t.amount;settled.push(t.id)}});
+  }
   svTxs(txs);
   // Senaste saldo per konto (hjälp vid förmögenhetssnapshot)
   if(_imp.balances?.length){
@@ -5521,7 +5531,7 @@ function saveImport(){
     svAccounts(accs);
   }
   const imps=getImports();
-  imps.push({id:impId,date:new Date().toISOString(),month:_imp.month,count:n,files:_imp.files.filter(f=>f.status==='ready').map(f=>f.name),removed,removedTxs});
+  imps.push({id:impId,date:new Date().toISOString(),month:_imp.month,count:n,files:_imp.files.filter(f=>f.status==='ready').map(f=>f.name),removed,removedTxs,settled});
   svImports(imps.slice(-50));
   _imp.step='done';
   document.getElementById('import-screen').classList.remove('open');
@@ -5531,7 +5541,7 @@ function saveImport(){
   const latest=Object.entries(perMonth).sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0]))[0]?.[0];
   // Tillbaka till Hem, där AI-analysen av månaden dyker upp när den är klar
   if(latest){state.month=latest;if(state.screen!=='home')showScreen('home');else render()}
-  toast(`${n} transaktioner importerade ✓${removed?` · ${removed} manuella ersatta`:''}`);
+  toast(`${n} transaktioner importerade ✓${removed?` · ${removed} manuella ersatta`:''}${settled.length?` · ${settled.length} väntande AMEX ersatta av fakturan`:''}`);
   // Analysera månaden direkt i bakgrunden
   if(latest&&aiReady())setTimeout(()=>runMonthAnalysis(latest,true),600);
 }
@@ -5541,8 +5551,10 @@ function undoImport(id){
   const n=getTxs().filter(t=>t.importId===id).length;
   // Manuella transaktioner som importen ersatte läggs tillbaka
   const back=imp.removedTxs||[];
-  if(!confirm(`Ångra importen från ${imp.date.slice(0,10)}? ${n} transaktioner tas bort.${back.length?` ${back.length} manuella som ersattes läggs tillbaka.`:''}`))return;
+  const settledIds=new Set(imp.settled||[]);
+  if(!confirm(`Ångra importen från ${imp.date.slice(0,10)}? ${n} transaktioner tas bort.${back.length?` ${back.length} manuella som ersattes läggs tillbaka.`:''}${settledIds.size?` ${settledIds.size} AMEX-överföringar blir väntande igen.`:''}`))return;
   const rest=getTxs().filter(t=>t.importId!==id);const have=new Set(rest.map(t=>t.id));
+  rest.forEach(t=>{if(settledIds.has(t.id)&&t.type==='transfer'){t.type='expense';t.cat=PENDING_CARD_CAT;t.amount=-t.amount}});
   svTxs([...rest,...back.filter(t=>!have.has(t.id))]);
   svImports(getImports().filter(i=>i.id!==id));
   renderSettings();render();toast('Importen ångrad');

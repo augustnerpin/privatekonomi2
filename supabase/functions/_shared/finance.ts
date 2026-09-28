@@ -15,6 +15,9 @@ export const DEF: Obj = {
 export const CAT_KEY: Obj = { expense: 'cats_exp', income: 'cats_inc', savings: 'cats_sav', transfer: 'cats_trf' };
 export const TYPES = ['expense', 'income', 'savings', 'transfer'];
 export const SWISH_CAT = 'Swish (privat)';
+// Överföring till kontot som betalar kreditkortet = kortköp som inte importerats än. Räknas som utgift
+// tills kortfakturan för perioden importeras; då blir raden en kortbetalning (se saveImport i appen).
+export const PENDING_CARD_CAT = 'AMEX (väntande)';
 export const ASSET_TRF = 'Bostad, lån & tillgångar';
 
 // ── Datum och löneperioder ─────────────────────────────────────────────
