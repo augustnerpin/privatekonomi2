@@ -8,7 +8,18 @@ const BIG = 1500; // köp från och med detta belopp nämns var för sig
 
 // in: newRows = nya bankrader (som i transactions), spent = {kategori: förbrukat i perioden}, budgets = cat_budgets,
 //     period = {id, start, end}, today = 'YYYY-MM-DD', conns = bankkopplingar, sent = redan skickade nycklar
-export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[] }) {
+// Plan mot måldatum (samma som goalPlan i appen): diff > 0 = före plan, null = nås inte i nuvarande takt
+export function goalPlan(latest: Obj | null, goal: number, avgMonthly: number | null, goalYM: string) {
+  if (!latest || !/^\d{4}-\d{2}$/.test(goalYM || '')) return null;
+  const [gy, gm] = goalYM.split('-').map(Number), [ly, lm] = String(latest.period).split('-').map(Number);
+  const months = (gy - ly) * 12 + (gm - lm), left = Math.max(goal - Number(latest.total), 0);
+  if (left <= 0) return { done: true, months, left: 0 };
+  if (months <= 0) return { late: true, months, left };
+  const eta = avgMonthly && avgMonthly > 0 ? Math.ceil(left / avgMonthly) : null;
+  return { months, left, need: left / months, eta, diff: eta != null ? months - eta : null };
+}
+
+export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[]; goal?: Obj }) {
   const items: Obj[] = [];
   const add = (key: string, line: string, kind: string) => { if (!p.sent.has(key)) items.push({ key, line, kind }); };
   const rows = p.newRows.filter((r) => !r.deleted);
@@ -47,8 +58,14 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
       add(`lan:${l.id}:${date}:${step}`, `🏠 ${l.name}: ${what} ${date} (om ${days} ${days === 1 ? 'dag' : 'dagar'}) – dags att jämföra räntor`, 'loan');
     }
   }
+  // Förmögenhetsmålet: säg till en gång per löneperiod om du ligger efter planen
+  if (p.goal) {
+    const g = goalPlan(p.goal.latest, p.goal.target, p.goal.avg, p.goal.date);
+    if (g && !g.done && !g.late && (g.diff == null || g.diff < 0))
+      add(`mal:${p.period.id}`, `🎯 Målet ${kr(p.goal.target)} till ${p.goal.date}: behöver +${kr(g.need!)}/mån, snittet är ${kr(p.goal.avg || 0)}/mån`, 'goal');
+  }
   if (!items.length) return null;
-  const order = ['salary', 'budget', 'loan', 'consent', 'big', 'day', 'review'];
+  const order = ['salary', 'budget', 'goal', 'loan', 'consent', 'big', 'day', 'review'];
   items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
   const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget') ? 'Koll på budgeten' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
   const lines = items.slice(0, 4).map((i) => i.line);

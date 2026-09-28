@@ -262,7 +262,15 @@ async function notify(uid: string, r: Obj) {
   const conns = await must<Obj[]>(db.from('bank_connections').select('id,aspsp,valid_until,status').eq('user_id', uid).in('status', ['active', 'expired']));
   // Vilka av nattens händelser har redan skickats? (bara de aktuella nycklarna, så att listan aldrig kapas)
   const loans = await loadLoansFor(uid).catch(() => []);
-  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans };
+  // Förmögenhetsmålet med måldatum (goal, goal_date) mot snittökningen i snapshotten
+  let goal: Obj | undefined;
+  const gdate = await loadKey(uid, 'goal_date');
+  if (gdate) {
+    const nws = await must<Obj[]>(db.from('net_worth_snapshots').select('period,total').eq('user_id', uid).eq('deleted', false).order('period'));
+    const target = Number(await loadKey(uid, 'goal')) || 700000;
+    if (nws.length) goal = { target, date: gdate, latest: nws[nws.length - 1], avg: nws.length > 1 ? (Number(nws[nws.length - 1].total) - Number(nws[0].total)) / (nws.length - 1) : null };
+  }
+  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal };
   const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
   const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
   const d = buildDigest({ ...input, sent });

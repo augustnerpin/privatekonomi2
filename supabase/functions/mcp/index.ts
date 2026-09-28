@@ -46,7 +46,7 @@ const DEF: Obj = {
   ],
   accounts: [{ id: 'lonekonto', name: 'Lönekonto', kind: 'bank' }, { id: 'amex', name: 'AMEX', kind: 'card' }],
   cat_groups: [], cat_budgets: {}, pay_periods: [], contact_names: {}, merchant_rules: {},
-  goal: 700000, salary: 0, owner_name: '',
+  goal: 700000, goal_date: '', salary: 0, owner_name: '',
 };
 // Kontotyper. Appen räknar bank + savings som likvida medel; card = kreditkort (köp brukar vara positiva i exporten).
 const KINDS: Obj = { bank: 'Bankkonto', card: 'Kreditkort', savings: 'Sparkonto', investment: 'Investering (ISK/depå)' };
@@ -117,7 +117,7 @@ async function loadState(c: Ctx, keys: string[]) {
 async function saveState(c: Ctx, key: string, value: any) {
   await must(c.db.from('user_state').upsert({ user_id: c.uid, key, value, deleted: false }, { onConflict: 'user_id,key' }));
 }
-const SETTINGS = ['cats_exp', 'cats_inc', 'cats_sav', 'cats_trf', 'cats_nw', 'cat_groups', 'cat_budgets', 'accounts', 'goal', 'salary', 'pay_periods', 'contact_names', 'owner_name'];
+const SETTINGS = ['cats_exp', 'cats_inc', 'cats_sav', 'cats_trf', 'cats_nw', 'cat_groups', 'cat_budgets', 'accounts', 'goal', 'goal_date', 'salary', 'pay_periods', 'contact_names', 'owner_name'];
 
 const TX_COLS = 'id,type,amount,description,category,tx_date,month,account,source,mkey,extra';
 function txQuery(c: Ctx, f: Obj) {
@@ -298,7 +298,7 @@ export const TOOLS: Tool[] = [
         accounts: s.accounts.map((a: Obj) => accountView(a, hist[a.id])),
         account_kinds: KINDS,
         net_worth_categories: s.cats_nw,
-        net_worth_goal: +s.goal,
+        net_worth_goal: +s.goal, net_worth_goal_date: s.goal_date || null,
         salary: +s.salary || 0,
         owner_name: s.owner_name || undefined,
         conventions: 'expense/savings: positivt = pengar ut (negativt = retur). income: positivt = in. transfer: negativt = flyttat till eget konto, räknas inte som utgift. month = löneperiod.',

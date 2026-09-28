@@ -85,3 +85,20 @@ test('sammanfattning: påminnelse före villkorsändring och bindningstidens slu
   // Passerat datum → inget
   assert.equal(buildDigest({ ...base, today: '2026-10-21', sent: new Set(['lan:L1:2026-10-20:7']) }), null);
 });
+
+test('måldatum: behövd ökning, före/efter plan och notis bara när du ligger efter', async () => {
+  const { goalPlan } = await import('../functions/bank/notify.ts');
+  const latest = { period: '2026-10', total: 655500 };
+  // 44 500 kvar på 10 mån = 4 450/mån; snitt 10 000/mån → 5 mån → 5 mån före plan
+  assert.deepEqual(goalPlan(latest, 700000, 10000, '2027-08'), { months: 10, left: 44500, need: 4450, eta: 5, diff: 5 });
+  assert.equal(goalPlan(latest, 700000, 2000, '2027-08').diff, -13);   // 23 mån i nuvarande takt
+  assert.equal(goalPlan(latest, 700000, -500, '2027-08').diff, null);  // minskar → nås inte
+  assert.equal(goalPlan(latest, 600000, 1000, '2027-08').done, true);
+  assert.equal(goalPlan(latest, 700000, 1000, '2026-09').late, true);
+  assert.equal(goalPlan(latest, 700000, 1000, ''), null);
+  const base = { newRows: [], spent: {}, budgets: {}, period, today: '2026-09-28', conns: [], sent: new Set() };
+  const behind = buildDigest({ ...base, goal: { target: 700000, date: '2027-08', latest, avg: 2000 } });
+  assert.deepEqual(behind.keys, ['mal:2026-10']);
+  assert.match(behind.body, /Målet 700 000 kr till 2027-08: behöver \+4 450 kr\/mån, snittet är 2 000 kr\/mån/);
+  assert.equal(buildDigest({ ...base, goal: { target: 700000, date: '2027-08', latest, avg: 10000 } }), null); // före plan → tyst
+});

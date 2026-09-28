@@ -1626,6 +1626,10 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
         <div><div class="s-row-lbl">Förmögenhetsmål</div></div>
         <input type="number" id="s-goal" placeholder="700000" onchange="saveSetting('goal',this.value)">
       </div>
+      <div class="s-row">
+        <div><div class="s-row-lbl">Nå målet senast</div><div class="s-row-sub">Valfritt. Visar hur mycket förmögenheten behöver öka per månad.</div></div>
+        <input type="month" id="s-goal-date" onchange="saveSetting('goal_date',this.value)" style="background:var(--surf2);border:none;border-radius:12px;color:var(--text);padding:8px 10px;font-family:var(--sans);font-size:14px;flex-shrink:0">
+      </div>
     </div>
   </div>
 
@@ -3110,7 +3114,7 @@ function renderNetWorth(){
         <div style="font-size:10px;color:var(--sub2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Beräknat</div>
         <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--blue)">${goalDateStr||'—'}</div>
       </div>
-    </div>
+    </div>${goalPlanHtml(latest,goal,avgMonthly)}
   </div></div>`;
 
   // ── 3. TILLGÅNGSFÖRDELNING ──
@@ -3794,7 +3798,30 @@ function closeSettings(){
   document.getElementById('settings-screen').classList.remove('open');
   updateAiStatus();render();
 }
-function saveSetting(k,v){sv(k,k==='salary'||k==='goal'?parseFloat(v)||0:v);if(k==='goal')render();}
+function saveSetting(k,v){sv(k,k==='salary'||k==='goal'?parseFloat(v)||0:v);if(k==='goal'||k==='goal_date')render();}
+// Rad under målkortet: behövd ökning per månad mot ditt snitt, och före/efter plan
+function goalPlanHtml(latest,goal,avgMonthly){
+  const ym=String(ld('goal_date','')||''),p=goalPlan(latest,goal,avgMonthly,ym);
+  if(!p)return'';
+  const wrap=t=>`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);line-height:1.6">${t}</div>`;
+  if(p.done)return wrap(`🎉 Målet är nått, före ${mLabel(ym)}.`);
+  if(p.late)return wrap(`Måldatumet ${mLabel(ym)} har passerat. Kvar till målet: <b style="color:var(--text)">${fmt(p.left)} kr</b>. Välj ett nytt datum i inställningarna.`);
+  const status=p.diff==null?`<span style="color:var(--red)">I nuvarande takt nås inte målet.</span>`
+    :p.diff>=0?`<span style="color:var(--green)">✓ ${p.diff?p.diff+' mån före planen':'Precis i fas med planen'}</span>`
+    :`<span style="color:var(--red)">${-p.diff} mån efter planen</span> — öka med ${fmt(p.need-(avgMonthly||0))} kr/mån för att hinna.`;
+  return wrap(`Mål senast <b style="color:var(--text)">${mLabel(ym)}</b>, ${p.months} mån kvar. Förmögenheten behöver öka <b style="color:var(--text)">${fmt(p.need)} kr/mån</b>; ditt snitt är ${avgMonthly!=null?fmtSigned(avgMonthly):'—'} kr/mån.<br>${status}`);
+}
+// Plan mot måldatum (goal_date = YYYY-MM): månader kvar från senaste snapshot, behövd ökning per månad och
+// hur många månader före (diff > 0) eller efter plan du ligger i nuvarande takt (avgMonthly)
+function goalPlan(latest,goal,avgMonthly,goalYM){
+  if(!latest||!/^\d{4}-\d{2}$/.test(goalYM||''))return null;
+  const[gy,gm]=goalYM.split('-').map(Number),[ly,lm]=latest.period.split('-').map(Number);
+  const months=(gy-ly)*12+(gm-lm),left=Math.max(goal-latest.total,0);
+  if(left<=0)return{done:true,months,left:0};
+  if(months<=0)return{late:true,months,left};
+  const eta=avgMonthly>0?Math.ceil(left/avgMonthly):null;
+  return{months,left,need:left/months,eta,diff:eta!=null?months-eta:null};
+}
 // Utseende: auto följer iOS/systemets ljust/mörkt läge (HIG: stöd Dark Mode)
 function applyThemePref(){
   const t=ld('theme','auto');
@@ -3822,6 +3849,7 @@ function renderSettings(){
   applyThemePref();
   document.getElementById('haptics-toggle').checked=ld('haptics',true)!==false;
   document.getElementById('s-goal').value=ld('goal',700000)||'';
+  document.getElementById('s-goal-date').value=ld('goal_date','')||'';
   document.getElementById('s-apikey').value=getApiKey();
   renderFontPicker();
   renderPayPeriodsList();
@@ -4095,7 +4123,7 @@ function addCat(type){
 function buildBackup(){
   return{version:2,exportedAt:new Date().toISOString(),txs:getTxs(),nws:getNWs(),
     ai:{memory:getAiMemory(),history:ld('ai_history',[]),totalCost:localStorage.getItem('ai_total_cost')||'0'},
-    settings:{goal:ld('goal',700000),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
+    settings:{goal:ld('goal',700000),goal_date:ld('goal_date',''),salary:ld('salary',0),theme:ld('theme','auto'),font:localStorage.getItem('font_theme')||'sf',
       cats_exp:getExpCats(),cats_inc:getIncCats(),cats_sav:getSavCats(),cats_trf:getTrfCats(),cats_nw:ld('cats_nw',null),cat_groups:ld('cat_groups',[]),pay_periods:getPayPeriods(),
       accounts:getAccounts(),merchant_rules:getRules(),imports:getImports(),import_maps:ld('import_maps',{}),
       owner_name:getOwnerName(),ai_import_notes:getImportNotes(),cat_budgets:getBudgets(),contact_names:getContacts()}};
@@ -4140,7 +4168,7 @@ function applyBackup(d){
     if(d.settings.cats_exp)sv('cats_exp',d.settings.cats_exp);
     if(d.settings.cats_inc)sv('cats_inc',d.settings.cats_inc);
     if(d.settings.cats_sav)sv('cats_sav',d.settings.cats_sav);
-    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
+    ['cats_trf','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','goal_date'].forEach(k=>{if(d.settings[k]!=null)sv(k,d.settings[k])});
     if(d.settings.cats_nw)sv('cats_nw',d.settings.cats_nw);
     if(d.settings.cat_groups)sv('cat_groups',d.settings.cat_groups);
     if(d.settings.pay_periods)sv('pay_periods',d.settings.pay_periods);
@@ -4159,7 +4187,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -5771,6 +5799,8 @@ function buildCtx(){
   // Enskilda transaktioner hämtas med verktygen search_transactions/summarize_spending i stället för att allt skickas med
   const rec=detectRecurring(state.month);
   const ins=getInsights()[state.month];
+  const gym=String(ld('goal_date','')||''),gp=goalPlan(ln,goal,nws.length>1?(nws[nws.length-1].total-nws[0].total)/(nws.length-1):null,gym);
+  const goalPlanTxt=!gp?'':gp.done?' — målet är nått':gp.late?` — måldatumet ${gym} har passerat`:` — ska nås senast ${gym} (${gp.months} mån): behöver öka ${Math.round(gp.need)} kr/mån${gp.diff==null?', nås inte i nuvarande takt':gp.diff>=0?`, i nuvarande takt ${gp.diff} mån före planen`:`, i nuvarande takt ${-gp.diff} mån efter planen`}`;
   // Lån: skuld, ränta, villkor (från Supabase, cachat lokalt)
   const loanSection=_loans.length?`\n\nLÅN:\n${_loans.map(l=>{const d=loanDebt(l),x=l.extra||{},im=loanInterestMonth(l);return`- ${l.name}${l.lender?` (${l.lender})`:''}: skuld ${d?Math.round(d.value)+' kr ('+d.date+')':'okänd'}, ränta ${l.interest_pct!=null?l.interest_pct+' %':'okänd'}${x.rate_type?' '+x.rate_type:''}${im!=null?` ≈ ${Math.round(im)} kr/mån`:''}, amortering ${l.amortization?Math.round(l.amortization)+' kr/mån':'okänd'}${x.fixed_until?`, bunden till ${x.fixed_until}`:''}${x.rate_change_date?`, villkorsändring ${x.rate_change_date}`:''}${l.netted_in_assets?' (redan avdragen i förmögenheten)':''}`}).join('\n')}`:'';
   const merchantSection=topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'';
@@ -5822,7 +5852,7 @@ FÖRMÖGENHETSUTVECKLING:
 ${nwHistory||'Ingen data'}
 ${ln?`Senaste: Total ${Math.round(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${Math.round(ln[c.key])}`).join(' | ')}`:''}
 
-MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${loanSection}${merchantSection}`;
+MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${goalPlanTxt}${loanSection}${merchantSection}`;
   const live=`${memSection}${coachExtraCtx()}${monthSection}`.replace(/^\n+/,'');
   return{fixed,live};
 }
