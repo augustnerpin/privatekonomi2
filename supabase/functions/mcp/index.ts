@@ -1594,10 +1594,11 @@ export function createHandler(db: Db) {
     const token = tokenFrom(req);
     if (!token) return json({ error: 'Ange din MCP-nyckel (skapas i appen under Inställningar → AI-koppling)' }, 401);
     const hash = await sha256hex(token);
-    const { data: rows, error } = await db.from('mcp_tokens').select('id,user_id,scope').eq('token_hash', hash).limit(1);
+    const { data: rows, error } = await db.from('mcp_tokens').select('id,user_id,scope,expires_at').eq('token_hash', hash).limit(1);
     if (error) { console.error('[mcp] token lookup', error); return json({ error: 'Databasfel' }, 500); }
     const tok = rows?.[0];
     if (!tok) return json({ error: 'Ogiltig eller återkallad MCP-nyckel' }, 401);
+    if (tok.expires_at && Date.parse(tok.expires_at) < Date.now()) return json({ error: 'MCP-nyckeln har gått ut – skapa en ny i appen (Inställningar → AI-koppling)' }, 401);
     if (req.method === 'GET') {
       // Ingen server-initierad ström; en webbläsare får en liten statussida
       if ((req.headers.get('accept') || '').includes('text/event-stream')) return new Response(null, { status: 405, headers: { ...CORS, Allow: 'POST' } });

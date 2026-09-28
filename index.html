@@ -1593,7 +1593,8 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
           <div id="mcp-new" style="display:none"></div>
           <div id="mcp-list"></div>
           <input type="text" id="mcp-name" placeholder="Namn, t.ex. Claude" autocapitalize="off" autocomplete="off" class="sb-inp">
-          <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--sub)"><input type="checkbox" id="mcp-write"> Får även ändra (lägga till, ändra, ta bort)</label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--sub)"><input type="checkbox" id="mcp-write"> Får även ändra (lägga till, ändra, ta bort). Standard: bara läsa.</label>
+          <select id="mcp-expiry" class="sb-inp"><option value="30">Giltig i 30 dagar</option><option value="90" selected>Giltig i 90 dagar</option><option value="365">Giltig i 1 år</option><option value="">Giltig tills den återkallas</option></select>
           <button class="sb-btn sb-btn2" onclick="mcpCreate()">Skapa nyckel</button>
         </div>
         <div class="s-row">
@@ -4146,7 +4147,13 @@ function applyThemePref(){
 }
 function setTheme(t){sv('theme',t);applyThemePref()}
 function toggleTheme(isLight){setTheme(isLight?'light':'dark')}
-function saveApiKey(v){localStorage.setItem('anthropic_key',v.trim());updateAiStatus()}
+// Inloggad: serverns nyckel används och en egen nyckel sparas inte på enheten (inte i klartext i localStorage)
+function saveApiKey(v){if(_sbUser){purgeOwnKey();toast('Du är inloggad – serverns nyckel används, så din egen sparas inte på enheten','warn');return}localStorage.setItem('anthropic_key',v.trim());updateAiStatus()}
+function purgeOwnKey(){
+  const el=document.getElementById('s-apikey');
+  if(el){el.disabled=!!_sbUser;el.placeholder=_sbUser?'Serverns nyckel används (du är inloggad)':'sk-ant-...';if(_sbUser)el.value=''}
+  if(_sbUser&&localStorage.getItem('anthropic_key')){localStorage.removeItem('anthropic_key');toast('Din egen API-nyckel togs bort från enheten – serverns nyckel används')}
+}
 function getApiKey(){return localStorage.getItem('anthropic_key')||''}
 
 function getOwnerName(){return String(ld('owner_name','')||'').trim()}
@@ -4165,7 +4172,7 @@ function renderSettings(){
   document.getElementById('s-goal-date').value=ld('goal_date','')||'';
   document.getElementById('s-planned').value=getPlannedSavings();
   renderInflowSettings();
-  document.getElementById('s-apikey').value=getApiKey();
+  document.getElementById('s-apikey').value=getApiKey();purgeOwnKey();
   renderFontPicker();
   renderPayPeriodsList();
   renderCatList('exp-cats',getExpCats(),'expense');
@@ -4630,9 +4637,9 @@ async function sbClient(){
       const lib=await loadSbLib();
       const c=lib.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
       c._pkCfg=cfg;
-      c.auth.onAuthStateChange((ev,session)=>{_sbUser=session?.user||null;renderSbSettings();updateAiStatus()});
+      c.auth.onAuthStateChange((ev,session)=>{_sbUser=session?.user||null;renderSbSettings();updateAiStatus();purgeOwnKey()});
       const{data}=await c.auth.getSession();_sbUser=data.session?.user||null;
-      _sb=c;return c;
+      _sb=c;purgeOwnKey();return c;
     })();
     p.cfg=cfg;_sbInit=p;p.catch(()=>{if(_sbInit===p)_sbInit=null});
   }
@@ -4739,12 +4746,13 @@ async function mcpList(){
   _mcpBusy=true;
   try{
     const sb=await sbClient();
-    const{data,error}=await sb.from('mcp_tokens').select('id,name,scope,created_at,last_used_at').order('created_at',{ascending:false});
+    let{data,error}=await sb.from('mcp_tokens').select('id,name,scope,created_at,last_used_at,expires_at').order('created_at',{ascending:false});
+    if(error&&/expires_at/.test(error.message||''))({data,error}=await sb.from('mcp_tokens').select('id,name,scope,created_at,last_used_at').order('created_at',{ascending:false}));
     if(error)throw error;
     const d=s=>s?new Date(s).toLocaleDateString('sv-SE'):'aldrig';
     el.innerHTML=data.map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)">
       <div style="flex:1;min-width:0"><div style="font-size:14px">${esc(t.name)} <span style="font-size:11px;color:var(--sub2)">${t.scope==='write'?'läsa + ändra':'bara läsa'}</span></div>
-      <div class="s-row-sub">Skapad ${d(t.created_at)} · använd ${d(t.last_used_at)}</div></div>
+      <div class="s-row-sub">Skapad ${d(t.created_at)} · senast använd ${d(t.last_used_at)} · ${t.expires_at?(Date.parse(t.expires_at)<Date.now()?'<span style="color:var(--red)">har gått ut</span>':'går ut '+d(t.expires_at)):'gäller tills vidare'}</div></div>
       <button onclick="mcpRevoke(${jsArg(t.id)})" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;flex-shrink:0">Återkalla</button></div>`).join('');
   }catch(e){
     // Tabellen saknas tills schema.sql körts igen
@@ -4760,7 +4768,8 @@ async function mcpCreate(){
   const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(tok)))].map(x=>x.toString(16).padStart(2,'0')).join('');
   try{
     const sb=await sbClient();
-    const{error}=await sb.from('mcp_tokens').insert({name,scope:write?'write':'read',token_hash:hash});if(error)throw error;
+    const days=+document.getElementById('mcp-expiry').value;
+    const{error}=await sb.from('mcp_tokens').insert({name,scope:write?'write':'read',token_hash:hash,...(days?{expires_at:new Date(Date.now()+days*864e5).toISOString()}:{})});if(error)throw error;
   }catch(e){toast('Kunde inte skapa nyckel: '+(e.message||e),'err');return}
   document.getElementById('mcp-name').value='';document.getElementById('mcp-write').checked=false;
   const box=document.getElementById('mcp-new');box.style.display='block';

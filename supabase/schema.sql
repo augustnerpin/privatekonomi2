@@ -329,3 +329,6 @@ grant select, insert, update, delete on public.asset_values to authenticated;
 
 -- Automatiskt skapade förmögenhetsbilder (nattjobbet) markeras; manuellt registrerade skrivs aldrig över
 alter table public.net_worth_snapshots add column if not exists auto boolean not null default false;
+
+-- MCP-nycklar kan ha ett utgångsdatum (valfritt; null = gäller tills den återkallas). Servern nekar utgångna nycklar.
+alter table public.mcp_tokens add column if not exists expires_at timestamptz;

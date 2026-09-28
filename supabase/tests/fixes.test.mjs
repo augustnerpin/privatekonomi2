@@ -63,3 +63,12 @@ test('set_loan/get_loans: räntetyp, bindningstid, villkorsändringsdag och beta
   assert.equal(l.rate_type, 'bunden'); assert.equal(l.fixed_until, '2027-03-01'); assert.equal(l.rate_change_date, '2026-12-01'); assert.equal(l.pay_account, 'lonekonto');
   assert.match((await w.call('set_loan', { loan: 'Bolån', pay_account: 'Finns inte' })).err, /Okänt konto/);
 });
+
+test('MCP-nyckel som gått ut nekas; utan utgångsdatum gäller den', async () => {
+  const { M } = await import('./helpers.mjs');
+  const EXP = 'pkm_' + 'e'.repeat(40);
+  const w = await world({ mcp_tokens: [{ id: 't9', user_id: U, scope: 'read', token_hash: await M.sha256hex(EXP), expires_at: '2020-01-01T00:00:00Z' }] });
+  const r = await w.rpc(EXP, 'ping');
+  assert.equal(r.status, 401); assert.match(r.body.error, /gått ut/);
+  assert.ok((await w.rpc(W, 'ping')).body.result);
+});
