@@ -66,3 +66,48 @@ export function accountReturn(a: Obj, balances: Obj[], txs: Obj[]) {
     .reduce((s, t) => s + Number(t.amount), 0);
   return { from: first.date, to: last.date, start: first.value, value: last.value, deposits: Math.round(deposits), return: Math.round(last.value - first.value - deposits) };
 }
+
+// ── Vad förändringen består av (mellan två förmögenhetsbilder) ─────────
+// Förmögenhetsbilden för P = läget när P börjar, så förändringen P → nästa bild beror på perioderna däremellan.
+//  sparande   = sparandetransaktioner i perioderna (utom kategorin Amortering)
+//  amortering = lånens minskade skuld mellan datumen; saknas skuldhistorik: sparkategorin Amortering
+//  avkastning = förändring i aktier/fonder + pension − insättningar dit (sparkategorier kopplade till
+//               investeringskonton, t.ex. Avanza) − kända pensionsinbetalningar
+//  omvärdering= förändring i övriga tillgångar (lägenhet, klockor, AB …) − amorteringen (lånen hör till dem)
+//  övrigt     = resten (t.ex. pengar som blev kvar eller togs från bufferten), så att summan stämmer exakt
+export const LIQUID = ['cash', 'kontanter'], INVEST = ['stocks', 'pension'];
+export const AMORT_CAT = 'Amortering';
+export function decompose(p: { snaps: Obj[]; txs: Obj[]; loans: Obj[]; starts: Obj; investCats: string[]; pensionPerMonth?: number }) {
+  const snaps = [...p.snaps].sort((a, b) => a.period.localeCompare(b.period));
+  const steps: Obj[] = [];
+  const amt = (s: Obj, k: string) => Number((s.amounts || s)[k] || 0);
+  const keys = (s: Obj) => Object.keys(s.amounts || s).filter((k) => !['period', 'total', 'auto'].includes(k));
+  for (let i = 1; i < snaps.length; i++) {
+    const A = snaps[i - 1], B = snaps[i];
+    const months = p.txs.filter((t) => t.month >= A.period && t.month < B.period);
+    const sav = (f: (t: Obj) => boolean) => Math.round(months.filter((t) => t.type === 'savings' && f(t)).reduce((s, t) => s + Number(t.amount), 0));
+    const cat = (t: Obj) => t.category ?? t.cat;
+    const sparande = sav((t) => cat(t) !== AMORT_CAT);
+    const dA = p.starts[A.period], dB = p.starts[B.period];
+    let amortering = 0, fromLoans = false;
+    if (dA && dB) for (const l of p.loans) {
+      const a = valueAt(l.history || [], dA), b = valueAt(l.history || [], dB);
+      if (a && b && a.date >= (l.history?.[0]?.date || '') && a.date !== b.date) { amortering += a.value - b.value; fromLoans = true; }
+    }
+    if (!fromLoans) amortering = sav((t) => cat(t) === AMORT_CAT);
+    amortering = Math.round(amortering);
+    const nMonths = new Set(months.map((t) => t.month)).size || 1;
+    const deposits = sav((t) => p.investCats.includes(cat(t))) + Math.round((p.pensionPerMonth || 0) * nMonths);
+    const inv = (s: Obj) => INVEST.reduce((x, k) => x + amt(s, k), 0);
+    const avkastning = Math.round(inv(B) - inv(A) - deposits);
+    const manual = [...new Set([...keys(A), ...keys(B)])].filter((k) => !LIQUID.includes(k) && !INVEST.includes(k));
+    const omvardering = Math.round(manual.reduce((x, k) => x + amt(B, k) - amt(A, k), 0) - amortering);
+    const change = Math.round(Number(B.total) - Number(A.total));
+    const ovrigt = change - sparande - amortering - avkastning - omvardering;
+    steps.push({ from: A.period, to: B.period, start: Math.round(Number(A.total)), end: Math.round(Number(B.total)), change, sparande, amortering, avkastning, omvardering, ovrigt });
+  }
+  const sum = (k: string) => steps.reduce((s, x) => s + x[k], 0);
+  const total = steps.length ? { from: steps[0].from, to: steps[steps.length - 1].to, start: steps[0].start, end: steps[steps.length - 1].end, change: sum('change'),
+    sparande: sum('sparande'), amortering: sum('amortering'), avkastning: sum('avkastning'), omvardering: sum('omvardering'), ovrigt: sum('ovrigt') } : null;
+  return { steps, total };
+}

@@ -2546,6 +2546,77 @@ async function nwFromBalances(){
 }
 
 // ═══════════════════════════════════════════
+// VAD FÖRÄNDRINGEN BESTÅR AV — samma regler som decompose() i supabase/functions/_shared/networth.ts
+// Förmögenhetsbilden för P = läget när P börjar; förändringen till nästa bild beror på perioderna däremellan.
+// ═══════════════════════════════════════════
+const NW_LIQUID=['cash','kontanter'],NW_INVEST=['stocks','pension'],AMORT_CAT='Amortering';
+const pensionPerMonth=()=>{const k=ld('known_inflows',[]);return Array.isArray(k)?k.filter(x=>x.monthly&&x.nw_cat==='pension').reduce((s,x)=>s+(+x.amount||0),0):0};
+function decomposeNW(){
+  const snaps=[...getNWs()].sort((a,b)=>a.period.localeCompare(b.period)),txs=getTxs();
+  const investCats=getAccounts().filter(a=>a.kind==='investment'&&a.sav_cat).map(a=>a.sav_cat);
+  const keys=s=>Object.keys(s).filter(k=>!['period','total','auto'].includes(k)),amt=(s,k)=>+s[k]||0;
+  const steps=[];
+  for(let i=1;i<snaps.length;i++){
+    const A=snaps[i-1],B=snaps[i],months=txs.filter(t=>t.month>=A.period&&t.month<B.period);
+    const sav=f=>Math.round(months.filter(t=>t.type==='savings'&&f(t)).reduce((s,t)=>s+t.amount,0));
+    const sparande=sav(t=>t.cat!==AMORT_CAT);
+    const dA=getPeriodStart(A.period),dB=getPeriodStart(B.period);
+    let amortering=0,fromLoans=false;
+    _loans.forEach(l=>{const a=latestOf(l.history||[],dA),b=latestOf(l.history||[],dB);if(a&&b&&a.date!==b.date){amortering+=a.value-b.value;fromLoans=true}});
+    if(!fromLoans)amortering=sav(t=>t.cat===AMORT_CAT);
+    amortering=Math.round(amortering);
+    const n=new Set(months.map(t=>t.month)).size||1;
+    const deposits=sav(t=>investCats.includes(t.cat))+Math.round(pensionPerMonth()*n);
+    const inv=s=>NW_INVEST.reduce((x,k)=>x+amt(s,k),0);
+    const avkastning=Math.round(inv(B)-inv(A)-deposits);
+    const manual=[...new Set([...keys(A),...keys(B)])].filter(k=>!NW_LIQUID.includes(k)&&!NW_INVEST.includes(k));
+    const omvardering=Math.round(manual.reduce((x,k)=>x+amt(B,k)-amt(A,k),0)-amortering);
+    const change=Math.round(B.total-A.total);
+    steps.push({from:A.period,to:B.period,start:Math.round(A.total),end:Math.round(B.total),change,sparande,amortering,avkastning,omvardering,ovrigt:change-sparande-amortering-avkastning-omvardering});
+  }
+  const sum=k=>steps.reduce((s,x)=>s+x[k],0);
+  const total=steps.length?{from:steps[0].from,to:steps[steps.length-1].to,start:steps[0].start,end:steps[steps.length-1].end,change:sum('change'),
+    sparande:sum('sparande'),amortering:sum('amortering'),avkastning:sum('avkastning'),omvardering:sum('omvardering'),ovrigt:sum('ovrigt')}:null;
+  return{steps,total};
+}
+const CHG_PARTS=[['sparande','Sparande'],['amortering','Amortering'],['avkastning','Avkastning'],['omvardering','Omvärdering'],['ovrigt','Övrigt']];
+// Vattenfall: startvärde → varje del (upp grön, ner röd, omvärdering lila/streckad som engångspost) → slutvärde
+function waterfallSvg(s){
+  const W=340,H=190,top=22,bot=150,bw=34,gap=(W-7*bw)/8;
+  let lvl=s.start;const bars=[{label:'Start',from:0,to:s.start,kind:'base'}];
+  CHG_PARTS.forEach(([k,l])=>{const v=s[k];bars.push({label:l,from:lvl,to:lvl+v,kind:k==='omvardering'?'reval':v>=0?'up':'down',v});lvl+=v});
+  bars.push({label:'Slut',from:0,to:s.end,kind:'base'});
+  const levels=bars.flatMap(b=>b.kind==='base'?[b.to]:[b.from,b.to]);
+  const lo=Math.min(...levels),hi=Math.max(...levels),pad=Math.max((hi-lo)*0.25,1000),min=lo-pad,max=hi+pad*0.4;
+  const y=v=>bot-(v-min)/(max-min)*(bot-top);
+  const col={base:'var(--acc)',up:'var(--green)',down:'var(--red)',reval:'var(--purple)'};
+  const k=v=>Math.abs(v)>=1e6?(v/1e6).toFixed(2).replace('.',',')+' M':Math.abs(v)>=1e4?Math.round(v/1e3)+'k':fmt(v);
+  return`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${bars.map((b,i)=>{
+    const x=gap+i*(bw+gap),y1=y(Math.max(b.from,b.to)),y2=b.kind==='base'?bot:y(Math.min(b.from,b.to)),h=Math.max(1.5,y2-y1);
+    const val=b.kind==='base'?k(b.to):(b.v>=0?'+':'')+k(b.v);
+    return`<rect x="${x}" y="${y1}" width="${bw}" height="${h}" rx="3" fill="${col[b.kind]}" fill-opacity="${b.kind==='base'?0.35:0.85}"${b.kind==='reval'?' stroke="var(--purple)" stroke-dasharray="3 2" stroke-width="1.5" fill-opacity="0.35"':''}/>
+      <text x="${x+bw/2}" y="${y1-5}" text-anchor="middle" font-size="9" fill="var(--sub)" font-family="var(--mono)">${val}</text>
+      <text x="${x+bw/2}" y="${bot+14}" text-anchor="middle" font-size="8.5" fill="var(--sub2)">${b.label}</text>`}).join('')}
+    <text x="${W-4}" y="${H-4}" text-anchor="end" font-size="8.5" fill="var(--purple)">▨ omvärdering = engångspost</text></svg>`;
+}
+let _chgSel=null;
+function changeHtml(){
+  const d=decomposeNW();if(!d.steps.length)return'';
+  if(_chgSel==null||(_chgSel!=='total'&&!d.steps[_chgSel]))_chgSel=d.steps.length-1;
+  const s=_chgSel==='total'?d.total:d.steps[_chgSel];
+  const opts=[...d.steps.map((x,i)=>[i,`${mLabel(x.from)} → ${mLabel(x.to)}`]).reverse(),['total',`Totalt ${mLabel(d.total.from)} → ${mLabel(d.total.to)}`]];
+  const rows=CHG_PARTS.map(([k,l])=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span style="color:${k==='omvardering'?'var(--purple)':'var(--sub)'}">${l}${k==='omvardering'&&s[k]?' <span style="font-size:10px">(engångspost)</span>':''}</span><span style="font-family:var(--mono);color:${s[k]>=0?'var(--green)':'var(--red)'}">${fmtSigned(s[k])} kr</span></div>`).join('');
+  return`<div class="sec"><span class="sec-t">Vad förändringen består av</span></div>
+  <div class="card"><div class="card-inner">
+    <select onchange="_chgSel=this.value==='total'?'total':+this.value;renderNetWorth()" style="width:100%;background:var(--surf2);border:none;border-radius:10px;color:var(--text);padding:8px 10px;font-size:13px;margin-bottom:10px">${opts.map(([v,l])=>`<option value="${v}"${String(v)===String(_chgSel)?' selected':''}>${l}</option>`).join('')}</select>
+    ${waterfallSvg(s)}
+    <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">${rows}
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0 0;border-top:1px solid var(--line);margin-top:4px"><b>Förändring</b><b style="font-family:var(--mono)">${fmtSigned(s.change)} kr</b></div></div>
+    <div style="font-size:11px;color:var(--sub2);line-height:1.5;margin-top:8px">Avkastning = aktier/fonder + pension minus insättningar. Omvärdering = ändrat värde på lägenhet och andra manuella tillgångar. Övrigt = det som blev kvar av inkomsten (eller togs från bufferten).</div>
+  </div></div>`;
+}
+
+// ═══════════════════════════════════════════
 // DONUT SVG
 // ═══════════════════════════════════════════
 function makeDonut(slices,total,cx=70,cy=70,r=54,sw=9){
@@ -3229,6 +3300,9 @@ function renderNetWorth(){
       </div>
     </div>${goalPlanHtml(latest,goal,avgMonthly)}
   </div></div>`;
+
+  // ── 2b. VAD FÖRÄNDRINGEN BESTÅR AV ──
+  html+=changeHtml();
 
   // ── 3. TILLGÅNGSFÖRDELNING ──
   html+=`<div class="sec"><span class="sec-t">Tillgångsfördelning</span></div>
