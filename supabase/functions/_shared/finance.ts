@@ -18,6 +18,18 @@ export const SWISH_CAT = 'Swish (privat)';
 // Överföring till kontot som betalar kreditkortet = kortköp som inte importerats än. Räknas som utgift
 // tills kortfakturan för perioden importeras; då blir raden en kortbetalning (se saveImport i appen).
 export const PENDING_CARD_CAT = 'AMEX (väntande)';
+// När kortutdraget för en löneperiod är importerat ersätts periodens AMEX (väntande)-rader av utdragets köp:
+// de blir kortbetalningar (överföring, räknas inte som utgift), annars räknas samma pengar två gånger.
+// Fungerar på både serverrader (category) och appens rader (cat). Returnerar id:n som ändrades.
+export function settlePendingCard(rows: Obj[], months: Iterable<string>, trf = 'Kreditkortsbetalning') {
+  const ms = new Set(months), ids: number[] = [];
+  for (const r of rows) {
+    const cat = 'category' in r ? r.category : r.cat;
+    if (r.deleted || r.type !== 'expense' || cat !== PENDING_CARD_CAT || !ms.has(r.month)) continue;
+    r.type = 'transfer'; if ('category' in r) r.category = trf; else r.cat = trf; r.amount = -Number(r.amount); ids.push(Number(r.id));
+  }
+  return ids;
+}
 export const ASSET_TRF = 'Bostad, lån & tillgångar';
 
 // ── Datum och löneperioder ─────────────────────────────────────────────

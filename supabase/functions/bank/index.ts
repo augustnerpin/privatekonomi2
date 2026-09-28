@@ -7,7 +7,7 @@
 // Driftsätt: npx supabase functions deploy bank --no-verify-jwt   (inloggningen kontrolleras här)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff, periodForDate, periodRange, periodShift } from '../_shared/finance.ts';
+import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff, periodForDate, periodRange, periodShift, PENDING_CARD_CAT, settlePendingCard } from '../_shared/finance.ts';
 import { computeNetWorth, DEF_NW_CATS, shiftMonthDay } from '../_shared/networth.ts';
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
@@ -229,6 +229,14 @@ async function syncLocked(uid: string, psu: Psu) {
       if (!target) continue;
       Object.assign(target, { type: c.after.type, category: c.after.category, amount: c.after.amount, extra: { ...(target.extra || {}), ...(c.pair_id ? { transfer_pair_id: c.pair_id } : {}) } });
       if (!newIds.has(c.id)) existingUpdates.push(target);
+    }
+    // AMEX (väntande): är kortutdraget för perioden redan importerat har dess köp redan räknats → betalningen är en kortbetalning
+    const pendMonths = [...new Set(rows.filter((r) => !r.deleted && r.type === 'expense' && r.category === PENDING_CARD_CAT).map((r) => r.month))];
+    const cardIds = s.accounts.filter((x: Obj) => x.kind === 'card').map((x: Obj) => x.id);
+    if (pendMonths.length && cardIds.length) {
+      const stmt = await must<Obj[]>(db.from('transactions').select('month').eq('user_id', uid).eq('deleted', false).eq('source', 'import').in('account', cardIds).in('month', pendMonths));
+      const trf = (s.cats_trf || DEF.cats_trf).includes('Kreditkortsbetalning') ? 'Kreditkortsbetalning' : (s.cats_trf || DEF.cats_trf)[0];
+      settlePendingCard(rows, stmt.map((x) => x.month), trf);
     }
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
     // Befintliga rader som blev andra sidan av en ny överföring (t.ex. sparandet räknas nu på lönekontots sida)

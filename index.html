@@ -1829,6 +1829,14 @@ const SWISH_CAT='Swish (privat)';
 // Överföringar till kontot som betalar kreditkortet räknas som utgift här tills kortfakturan för perioden
 // importeras; då blir de kortbetalningar och fakturans köp tar deras plats (se saveImport/undoImport)
 const PENDING_CARD_CAT='AMEX (väntande)';
+// Samma regel som settlePendingCard i supabase/functions/_shared/finance.ts: när kortutdraget för perioden importeras
+// blir periodens AMEX (väntande)-rader kortbetalningar (överföring), så att samma pengar inte räknas två gånger.
+function settlePendingCardApp(txs,month,trf){
+  const ids=[];
+  txs.forEach(t=>{if(t.type==='expense'&&t.cat===PENDING_CARD_CAT&&t.month===month){t.type='transfer';t.cat=trf;t.amount=-t.amount;ids.push(t.id)}});
+  return ids;
+}
+const pendingCardIn=(month,txs=getTxs())=>{const r=txs.filter(t=>t.month===month&&t.type==='expense'&&t.cat===PENDING_CARD_CAT);return{sum:r.reduce((s,t)=>s+t.amount,0),n:r.length}};
 const DEF_SAV=['Avanza','SEB','Annat'];
 const DEF_INC=['Lön','Spelvinst/förlust','Övrigt'];
 
@@ -2825,7 +2833,7 @@ function renderBudget(){
 
   document.getElementById('bgt-pills').innerHTML=`
     <div class="scard"><div class="scard-lbl">Inkomst</div><div class="scard-val" style="color:var(--green)">${fmt(income)} kr</div></div>
-    <div class="scard"><div class="scard-lbl">Utgifter</div><div class="scard-val" style="color:var(--red)">${fmt(expense)} kr</div></div>
+    <div class="scard"><div class="scard-lbl">Utgifter</div><div class="scard-val" style="color:var(--red)">${fmt(expense)} kr</div>${pendingCardIn(month,allTx).sum?`<div style="font-size:10px;color:var(--amber);margin-top:2px">varav ${fmt(pendingCardIn(month,allTx).sum)} kr AMEX (väntande)</div>`:''}</div>
     <div class="scard"><div class="scard-lbl">Sparkvot</div><div class="scard-val" style="color:var(--blue)">${sRate}%</div></div>`;
 
   const byCat={};
@@ -3254,7 +3262,7 @@ function renderHome(){
       <div>Sparat<b>${fmt(sav)}</b></div>
       <div>Kvar<b style="color:${inc-exp-sav>=0?'var(--green)':'var(--red)'}">${fmtSigned(inc-exp-sav)}</b></div>
       ${inc>0?`<div>Sparkvot<b>${Math.round(sav/inc*100)}%</b></div>`:''}
-    </div>`:''}
+    </div>${pendingCardIn(month).sum?`<div style="font-size:11.5px;color:var(--amber);margin-top:6px">Varav AMEX (väntande): <b>${fmt(pendingCardIn(month).sum)} kr</b> (${pendingCardIn(month).n} betalning${pendingCardIn(month).n>1?'ar':''} till AMEX-kontot). Ersätts av köpen när AMEX-utdraget för perioden importeras.</div>`:''}`:''}
   </div>`;
 
   // ── Händelsekort (prio: lägre = högre upp) ──
@@ -5472,6 +5480,7 @@ function renderImpFiles(body,bar,sub){
         Bara transaktioner i löneperioden ${payPeriodLabel(_imp.month).replace('Löneperiod ','')} tas med. Lägg till alla filer för månaden (bank + kort).
         ${inMonth.map(x=>`<br>${esc(x.f.name)}: <b style="color:var(--text)">${x.n}</b> rader i perioden`).join('')}
         ${already.length?`<br><span style="color:var(--amber)">${already.length} transaktioner är redan importerade för ${mLabel(_imp.month)} — dubbletter hoppas över.</span>`:''}
+        ${pendingCardIn(_imp.month).sum?`<br><span style="color:var(--amber)">${fmt(pendingCardIn(_imp.month).sum)} kr i AMEX (väntande) för ${mLabel(_imp.month)} ersätts av utdragets köp när du importerar kortfilen (inga dubbla utgifter).</span>`:''}
       </div>
     </div></div>`;
   const owner=getOwnerName();
@@ -5920,7 +5929,7 @@ function saveImport(){
   const cardImport=on.some(g=>g.rows.some(r=>getAccounts().find(a=>a.id===r.account)?.kind==='card'));
   if(cardImport){
     const trf=getTrfCats().includes('Kreditkortsbetalning')?'Kreditkortsbetalning':getTrfCats()[0];
-    txs.forEach(t=>{if(t.type==='expense'&&t.cat===PENDING_CARD_CAT&&t.month===_imp.month){t.type='transfer';t.cat=trf;t.amount=-t.amount;settled.push(t.id)}});
+    settled.push(...settlePendingCardApp(txs,_imp.month,trf));
   }
   svTxs(txs);
   // Senaste saldo per konto (hjälp vid förmögenhetssnapshot)

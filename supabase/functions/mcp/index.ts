@@ -405,11 +405,14 @@ export const TOOLS: Tool[] = [
       }).sort((x, y) => y.spent - x.spent || y.avg_3 - x.avg_3);
       const bsum = Object.values(B).reduce((x: number, v: any) => x + (+v || 0), 0);
       const range = periodRange(month, s.pay_periods);
+      // AMEX (väntande): betalningar till AMEX-kontot som räknas som utgift tills kortutdraget för perioden importeras
+      const pend = cur.filter((t) => t.type === 'expense' && t.category === 'AMEX (väntande)');
       return {
         month, ...range, in_progress: today() <= range.end && today() >= range.start,
         income: round(income), expense: round(expense), savings: round(savings),
         balance: round(income - expense - savings), savings_rate_pct: income > 0 ? Math.round((savings / income) * 100) : 0,
         moved_to_own_accounts: round(moved), balance_incl_moved: round(income - expense - savings + moved),
+        ...(pend.length ? { pending_card: { amount: round(pend.reduce((x, t) => x + t.amount, 0)), count: pend.length, note: 'Ingår i expense. Ersätts av kortköpen när AMEX-utdraget för perioden importeras.' } } : {}),
         budget_total: bsum || undefined, compared_months: prev.length,
         categories, category_groups: s.cat_groups?.length ? s.cat_groups : undefined,
         largest_expenses: cur.filter((t) => t.type === 'expense').sort((x, y) => y.amount - x.amount).slice(0, 10).map(pub),
