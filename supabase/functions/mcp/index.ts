@@ -1,7 +1,7 @@
 // Supabase Edge Function: MCP-server för Privatekonomi — allt i en fil, så att den går att
 // klistra in direkt i Supabase-panelen. Driftsätt: supabase functions deploy mcp --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { goalProgress, avgSavings12 } from '../_shared/goal.ts';
+import { goalProgress, avgSavings12, goalPct } from '../_shared/goal.ts';
 import { decompose, debtAt as debtAtStart } from '../_shared/networth.ts';
 
 // Privatekonomi som MCP-server (Model Context Protocol, "Streamable HTTP", tillståndslös).
@@ -424,7 +424,7 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: 'object', properties: { month_from: FILTERS.month_from, month_to: FILTERS.month_to } },
     annotations: RO,
     async run(c, a) {
-      const s = await loadState(c, ['cats_nw', 'goal', 'pay_periods']);
+      const s = await loadState(c, ['cats_nw', 'goal', 'goal_start', 'pay_periods']);
       let q = uq(c, 'net_worth_snapshots', 'period,total,amounts').eq('deleted', false);
       if (a.month_from) q = q.gte('period', a.month_from);
       if (a.month_to) q = q.lte('period', a.month_to);
@@ -467,7 +467,11 @@ export const TOOLS: Tool[] = [
         extra.loans = loans.map((l) => loanView(l, s));
         extra.explanation = 'assets = inmatade förmögenhetsvärden (samma som total). liabilities = lånens skuld när perioden börjar (liabilities_date; liabilities_estimated = bakåträknad med amorteringen före första kända saldot). Lån med netted_in_assets är redan avdragna i tillgången de hör till (secured_by) och dras inte av igen: net = assets − (liabilities − liabilities_already_in_assets). gross_assets = assets + liabilities_already_in_assets.';
       } else if (loans === null) extra.loans_note = 'Lån visas när schema.sql körts igen.';
-      const latest = last ? { period: last.period, total: last.total, goal_progress_pct: Math.round((last.total / s.goal) * 1000) / 10, left_to_goal: round(s.goal - last.total),
+      // Framsteg från förmögenheten när målet sattes (goal_start), inte från 0 kr; utan goal_start från första förmögenhetsbilden
+      const gstart = s.goal_start && isFinite(Number(s.goal_start.total)) ? s.goal_start : (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).order('period', { ascending: true }).limit(1)))[0];
+      const gp = last ? goalPct(Number(s.goal), gstart, last.total) : null;
+      const latest = last ? { period: last.period, total: last.total, goal_progress_pct: gp?.progress_pct ?? null, goal_start: gp?.start ?? null, moved_since_goal_start: gp?.moved_since_start ?? null,
+        goal_progress_note: 'goal_progress_pct = andel av vägen från goal_start.total till målet (0 % under startvärdet), inte total/mål.', left_to_goal: round(s.goal - last.total),
         ...(last.net != null ? { assets: last.assets, liabilities: last.liabilities, liabilities_already_in_assets: last.liabilities_already_in_assets, net: last.net, gross_assets: last.gross_assets } : {}) } : null;
       return { goal: +s.goal, latest, categories: s.cats_nw, snapshots: snaps, ...extra };
     },

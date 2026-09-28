@@ -42,6 +42,15 @@ export function simulate(p: { latest: Obj; months: number; monthly: number; rate
   return { projected: Math.round(invest + other), reached, path };
 }
 
+// Framsteg = andel av vägen från förmögenheten när målet sattes (start = goal_start) till målet, inte från 0 kr.
+// Under startvärdet = 0 %. Utan start: null (procenten går inte att räkna ut ärligt).
+export function goalPct(goal: number, start: Obj | null | undefined, total: number) {
+  if (!start || !isFinite(Number(start.total)) || !isFinite(Number(total))) return null;
+  const span = goal - Number(start.total), moved = Number(total) - Number(start.total);
+  const pct = span > 0 ? Math.min(100, Math.max(0, (moved / span) * 100)) : Number(total) >= goal ? 100 : 0;
+  return { progress_pct: Math.round(pct * 10) / 10, start: { period: start.period, total: Number(start.total) }, moved_since_start: Math.round(moved) };
+}
+
 export function goalProgress(p: { goal: number; goalDate: string; start?: Obj | null; latest: Obj | null; plannedSavings: number; inflows: Obj[]; savingsLast12: number; amortMonthly: number }) {
   if (!p.latest || !/^\d{4}-\d{2}$/.test(p.goalDate || '')) return null;
   const latest = p.latest, total = Number(latest.total);
@@ -59,6 +68,7 @@ export function goalProgress(p: { goal: number; goalDate: string; start?: Obj | 
   return {
     goal: p.goal, goal_date: p.goalDate, current: Math.round(total), current_period: latest.period, left: Math.round(left), months_left: monthsLeft,
     required_per_month: monthsLeft ? Math.round(left / monthsLeft) : null, done: left <= 0,
+    progress_pct: goalPct(p.goal, start, total)?.progress_pct ?? null,
     plan: { start, value_now: planNow, vs_plan: Math.round(total - planNow), line: planLine },
     scenarios: [scen('svagt', 'Svagt', p.savingsLast12, 0), scen('plan', 'Plan', p.plannedSavings, 6), scen('bra', 'Bra', p.plannedSavings, 9)],
   };

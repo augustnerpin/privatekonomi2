@@ -36,3 +36,23 @@ test('hjälpfunktioner', () => {
   assert.equal(simulate({ latest: { period: '2026-10', total: 100, amounts: { stocks: 100 } }, months: 12, monthly: 0, ratePct: 12, amort: 0, inflows: [], goal: 1e9 }).projected, 112);
   assert.equal(avgSavings12([{ type: 'savings', month: '2026-05', amount: 12000, category: 'Avanza' }, { type: 'savings', month: '2026-05', amount: 999, category: 'Amortering' }, { type: 'savings', month: '2026-10', amount: 5000, category: 'Avanza' }], '2026-10'), 1000);
 });
+
+// Framsteg räknas från förmögenheten när målet sattes, inte från 0 (705k → 950k: 704 558 kr är 0 %, inte 74 %)
+import { goalPct } from '../functions/_shared/goal.ts';
+import { appFns, fmt, mLabel } from './app.mjs';
+test('målprocent: andel av vägen från goal_start, samma i appen och på servern', () => {
+  const start = { period: '2026-10', total: 707104 };
+  assert.equal(goalPct(950000, start, 704558).progress_pct, 0);
+  assert.equal(goalPct(950000, start, 704558).moved_since_start, -2546);
+  assert.equal(goalPct(950000, start, 828552).progress_pct, 50);
+  assert.equal(goalPct(950000, start, 990000).progress_pct, 100);
+  assert.equal(goalPct(950000, null, 704558), null);
+  assert.equal(goalProgress({ goal: 950000, goalDate: '2027-12', start, latest: { ...latest, total: 704558 }, plannedSavings: 10000, inflows: [], savingsLast12: 0, amortMonthly: 0 }).progress_pct, 0);
+  const state = { goal_start: start };
+  const app = appFns(['goalPctApp', 'goalPctTxt'], { ld: (k, d) => state[k] ?? d, getGoal: () => 950000, getNWs: () => [{ period: '2026-09', total: 659000 }, { period: '2026-10', total: 704558 }], fmt, mLabel });
+  assert.equal(app.goalPctApp(704558).pct, 0);
+  assert.match(app.goalPctTxt(app.goalPctApp(704558)), /^0 % av vägen 707 104 → 950 000 kr \(när målet sattes 2026-10; 2 546 kr under startvärdet\)$/);
+  assert.equal(Math.round(app.goalPctApp(828552).pct), 50);
+  delete state.goal_start; // utan goal_start: från första förmögenhetsbilden, och det står i texten
+  assert.match(app.goalPctTxt(app.goalPctApp(704558)), /första förmögenhetsbilden 2026-09/);
+});
