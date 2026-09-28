@@ -79,7 +79,8 @@ const stateIo = (uid: string): StateIo => ({
   },
 });
 async function saveState(uid: string, key: string, value: unknown) {
-  const r = await saveMerged(stateIo(uid), key, value, READ.get(`${uid}|${key}`));
+  // Utan tidigare läsning av nyckeln är värdet en avsiktlig ersättning: serverns rad är grundvärdet (ingen sammanslagning)
+  const r = await saveMerged(stateIo(uid), key, value, READ.get(`${uid}|${key}`), () => true);
   READ.set(`${uid}|${key}`, { v: structuredClone(r.value), at: r.at });
   return r.value;
 }

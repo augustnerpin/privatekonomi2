@@ -11,8 +11,8 @@ const snaps = [
 test('set_net_worth_goal + get_goal_progress: krav per månad, plan och scenarier', async () => {
   const w = await world({ net_worth_snapshots: snaps, loans: [], loan_balances: [] });
   const r = await w.call('set_net_worth_goal', { amount: 950000, target_date: '2027-12', planned_savings: 10000 });
-  assert.deepEqual(r.plan_starts_at, { period: '2026-10', total: 707104 });
-  assert.deepEqual(w.state('goal_start'), { period: '2026-10', total: 707104 });
+  assert.deepEqual([r.plan_starts_at.period, r.plan_starts_at.total], ['2026-10', 707104]);
+  assert.deepEqual(w.state('goal_start'), { period: '2026-10' }); // bara perioden: totalen läses från bilden
   const g = await w.call('get_goal_progress', {}, R);
   assert.equal(g.required_per_month, 16193); assert.equal(g.months_left, 15); assert.equal(g.plan.vs_plan, 0);
   assert.deepEqual(g.scenarios.map((s) => s.key), ['svagt', 'plan', 'bra']);
@@ -83,4 +83,25 @@ test('get_net_worth: skulder per förmögenhetsbild vid periodstart, bakåträkn
   assert.equal(by['2026-10'].gross_assets, 707104 + now + am); assert.equal(by['2026-10'].net, 707104);
   // Samma skuldförändring som breakdown räknar som amortering
   assert.equal(by['2026-09'].liabilities - by['2026-10'].liabilities, n.breakdown.steps.at(-1).amortering);
+});
+
+test('goal_start följer rättelser av startbilden; start_period och reset_start sätter om startpunkten', async () => {
+  const fixed = snaps.map((x) => (x.period === '2026-10' ? { ...x, total: 693764 } : { ...x }));
+  const w = await world({ net_worth_snapshots: fixed, loans: [], loan_balances: [], user_state: [{ user_id: U, key: 'goal', value: 950000, deleted: false }, { user_id: U, key: 'goal_date', value: '2027-12', deleted: false }, { user_id: U, key: 'goal_start', value: { period: '2026-10', total: 707104 }, deleted: false }] });
+  // Äldre goal_start med fryst total: bildens rättade total gäller
+  let g = await w.call('get_goal_progress', {}, R);
+  assert.deepEqual([g.plan.start.total, g.plan.vs_plan, g.progress_pct], [693764, 0, 0]);
+  const nw = await w.call('get_net_worth', {}, R);
+  assert.deepEqual([nw.latest.goal_start, nw.latest.moved_since_goal_start], [{ period: '2026-10', total: 693764 }, 0]);
+  // Sätt om till september utan att ändra målet
+  const r = await w.call('set_net_worth_goal', { start_period: '2026-09' });
+  assert.deepEqual([r.goal, r.plan_starts_at.period, r.plan_starts_at.total], [950000, '2026-09', 659000]);
+  assert.deepEqual(w.state('goal_start'), { period: '2026-09' });
+  g = await w.call('get_goal_progress', {}, R);
+  assert.equal(g.progress_pct, Math.round(((693764 - 659000) / (950000 - 659000)) * 1000) / 10);
+  // Nollställ till senaste bilden
+  assert.equal((await w.call('set_net_worth_goal', { reset_start: true })).plan_starts_at.period, '2026-10');
+  assert.deepEqual(w.state('goal_start'), { period: '2026-10' });
+  assert.match((await w.call('set_net_worth_goal', { start_period: '2025-01' })).err, /ingen förmögenhetsbild för 2025-01/);
+  assert.match((await w.call('set_net_worth_goal', {})).err, /Ange amount/);
 });

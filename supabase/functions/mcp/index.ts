@@ -1,7 +1,7 @@
 // Supabase Edge Function: MCP-server för Privatekonomi — allt i en fil, så att den går att
 // klistra in direkt i Supabase-panelen. Driftsätt: supabase functions deploy mcp --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { goalProgress, avgSavings12, goalPct } from '../_shared/goal.ts';
+import { goalProgress, avgSavings12, goalPct, resolveGoalStart } from '../_shared/goal.ts';
 import { saveMerged, type StateIo } from '../_shared/merge.ts';
 import { decompose, debtAt as debtAtStart, manualValues } from '../_shared/networth.ts';
 
@@ -132,7 +132,8 @@ const stateIo = (c: Ctx): StateIo => ({
   },
 });
 async function saveState(c: Ctx, key: string, value: any) {
-  const r = await saveMerged(stateIo(c), key, value, c.st?.[key]);
+  // Utan tidigare läsning av nyckeln är värdet en avsiktlig ersättning: serverns rad är grundvärdet (ingen sammanslagning)
+  const r = await saveMerged(stateIo(c), key, value, c.st?.[key], () => true);
   (c.st ||= {})[key] = { v: structuredClone(r.value), at: r.at };
   return r.value;
 }
@@ -494,7 +495,9 @@ export const TOOLS: Tool[] = [
         extra.explanation = 'assets = inmatade förmögenhetsvärden (samma som total). liabilities = lånens skuld när perioden börjar (liabilities_date; liabilities_estimated = bakåträknad med amorteringen före första kända saldot). Lån med netted_in_assets är redan avdragna i tillgången de hör till (secured_by) och dras inte av igen: net = assets − (liabilities − liabilities_already_in_assets). gross_assets = assets + liabilities_already_in_assets.';
       } else if (loans === null) extra.loans_note = 'Lån visas när schema.sql körts igen.';
       // Framsteg från förmögenheten när målet sattes (goal_start), inte från 0 kr; utan goal_start från första förmögenhetsbilden
-      const gstart = s.goal_start && isFinite(Number(s.goal_start.total)) ? s.goal_start : (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).order('period', { ascending: true }).limit(1)))[0];
+      // goal_start pekar på en period; totalen läses från den bilden (rättelser slår igenom)
+      const startSnap = s.goal_start?.period ? await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).eq('period', s.goal_start.period)) : [];
+      const gstart = resolveGoalStart(s.goal_start, startSnap) || (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).order('period', { ascending: true }).limit(1)))[0];
       const gp = last ? goalPct(Number(s.goal), gstart, last.total) : null;
       // Manuella saldon och värden: uppskattat tills användaren bekräftat, senast uppdaterad, äldre än 6 månader
       const ms = await loadState(c, ['accounts', 'cats_nw']);
@@ -506,7 +509,7 @@ export const TOOLS: Tool[] = [
         extra.manual_values_note = 'Manuellt inmatade saldon/värden (inte från banken). estimated = uppskattat, inte bekräftat av användaren; updated = senast uppdaterad; stale = äldre än 6 månader. Säg det när du använder dem, t.ex. "Klarna 190 300 kr (uppskattat, 2026-09-29)".';
       }
       const latest = last ? { period: last.period, total: last.total, ...(mv.some((x) => x.estimated || x.stale) ? { contains_estimates: mv.filter((x) => x.estimated || x.stale).map((x) => x.name) } : {}), goal_progress_pct: gp?.progress_pct ?? null, goal_start: gp?.start ?? null, moved_since_goal_start: gp?.moved_since_start ?? null,
-        goal_progress_note: 'goal_progress_pct = andel av vägen från goal_start.total till målet (0 % under startvärdet), inte total/mål.', left_to_goal: round(s.goal - last.total),
+        goal_progress_note: 'goal_progress_pct = andel av vägen från goal_start.total (förmögenhetsbilden för goal_start.period, som den ser ut nu) till målet (0 % under startvärdet), inte total/mål.', left_to_goal: round(s.goal - last.total),
         ...(last.net != null ? { assets: last.assets, liabilities: last.liabilities, liabilities_already_in_assets: last.liabilities_already_in_assets, net: last.net, gross_assets: last.gross_assets } : {}) } : null;
       return { goal: +s.goal, latest, categories: s.cats_nw, snapshots: snaps, ...extra };
     },
@@ -698,17 +701,28 @@ export const TOOLS: Tool[] = [
   {
     name: 'set_net_worth_goal',
     title: 'Sätt förmögenhetsmål',
-    description: 'Sätter förmögenhetsmålet (amount, kr) och när det ska vara nått (target_date, YYYY-MM = löneperiod; målet gäller vid periodens slut). Planlinjen börjar om från senaste förmögenhetsbilden. Valfritt: planned_savings (kr/mån).',
+    description: 'Sätter förmögenhetsmålet (amount, kr) och när det ska vara nått (target_date, YYYY-MM = löneperiod; målet gäller vid periodens slut). Nytt mål eller datum: planen och framsteget börjar om från senaste förmögenhetsbilden. Startpunkten (goal_start) pekar på en period och läser bildens aktuella total, så rättelser av startbilden slår igenom. start_period sätter om startpunkten till en viss period (utan att ändra målet); reset_start: true = till senaste bilden. Valfritt: planned_savings (kr/mån).',
     write: true,
-    inputSchema: { type: 'object', required: ['amount'], properties: { amount: { type: 'number', minimum: 1 }, target_date: { ...S.month, description: 'YYYY-MM' }, planned_savings: { type: 'number', minimum: 0 } } },
+    inputSchema: { type: 'object', properties: { amount: { type: 'number', minimum: 1 }, target_date: { ...S.month, description: 'YYYY-MM' }, planned_savings: { type: 'number', minimum: 0 },
+      start_period: { ...S.month, description: 'Sätt om startpunkten till förmögenhetsbilden för denna period (YYYY-MM, måste finnas)' },
+      reset_start: { type: 'boolean', description: 'true = nollställ startpunkten till senaste förmögenhetsbilden' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     async run(c, a) {
-      await saveState(c, 'goal', Math.round(a.amount));
+      if (a.amount == null && a.target_date == null && a.planned_savings == null && !a.start_period && !a.reset_start) throw new UserError('Ange amount, target_date, planned_savings, start_period eller reset_start');
+      if (a.amount != null) await saveState(c, 'goal', Math.round(a.amount));
       if (a.target_date) await saveState(c, 'goal_date', a.target_date);
       if (a.planned_savings != null) await saveState(c, 'planned_savings', Math.round(a.planned_savings));
-      const last = (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).order('period', { ascending: false }).limit(1)))[0];
-      if (last) await saveState(c, 'goal_start', { period: last.period, total: Math.round(Number(last.total)) });
-      return { goal: Math.round(a.amount), goal_date: a.target_date ?? null, plan_starts_at: last ? { period: last.period, total: Number(last.total) } : null, note: 'Syns i appen vid nästa synk.' };
+      // Startpunkten: vald period, annars senaste bilden när målet/datumet ändras eller reset_start
+      let start: Obj | null = null;
+      if (a.start_period) {
+        start = (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).eq('period', a.start_period)))[0];
+        if (!start) throw new UserError(`Det finns ingen förmögenhetsbild för ${a.start_period}`);
+      } else if (a.reset_start || a.amount != null || a.target_date) {
+        start = (await must<Obj[]>(uq(c, 'net_worth_snapshots', 'period,total').eq('deleted', false).order('period', { ascending: false }).limit(1)))[0] || null;
+      }
+      if (start) await saveState(c, 'goal_start', { period: start.period });
+      const s = await loadState(c, ['goal', 'goal_date']);
+      return { goal: Number(s.goal), goal_date: s.goal_date || null, plan_starts_at: start ? { period: start.period, total: Number(start.total), note: 'Totalen läses från bilden varje gång (rättelser slår igenom).' } : 'oförändrad', note: 'Syns i appen vid nästa synk.' };
     },
   },
   {
@@ -724,7 +738,7 @@ export const TOOLS: Tool[] = [
       const latest = snaps[snaps.length - 1]; if (!latest) throw new UserError('Ingen förmögenhetsbild registrerad än');
       const sav = await fetchAll(() => uq(c, 'transactions', 'month,type,category,amount').eq('deleted', false).eq('type', 'savings').order('id', { ascending: true }));
       const loans = (await loadLoans(c)) || [];
-      const g = goalProgress({ goal: Number(s.goal), goalDate: s.goal_date, start: s.goal_start, latest: { period: latest.period, total: Number(latest.total), amounts: latest.amounts },
+      const g = goalProgress({ goal: Number(s.goal), goalDate: s.goal_date, start: resolveGoalStart(s.goal_start, snaps), latest: { period: latest.period, total: Number(latest.total), amounts: latest.amounts },
         plannedSavings: Number(s.planned_savings ?? 10000), inflows: s.known_inflows || [], savingsLast12: avgSavings12(sav, latest.period), amortMonthly: loans.reduce((x, l) => x + (Number(l.amortization) || 0), 0) });
       if (!g) throw new UserError('Kunde inte räkna ut planen');
       if (!a.include_paths) { g.plan = { ...g.plan, line: undefined }; g.scenarios = g.scenarios.map((x: Obj) => ({ ...x, path: undefined })); }

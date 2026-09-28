@@ -48,11 +48,33 @@ test('målprocent: andel av vägen från goal_start, samma i appen och på serve
   assert.equal(goalPct(950000, start, 990000).progress_pct, 100);
   assert.equal(goalPct(950000, null, 704558), null);
   assert.equal(goalProgress({ goal: 950000, goalDate: '2027-12', start, latest: { ...latest, total: 704558 }, plannedSavings: 10000, inflows: [], savingsLast12: 0, amortMonthly: 0 }).progress_pct, 0);
+  let NWS = [{ period: '2026-09', total: 659000 }, { period: '2026-10', total: 707104 }];
   const state = { goal_start: start };
-  const app = appFns(['goalPctApp', 'goalPctTxt'], { ld: (k, d) => state[k] ?? d, getGoal: () => 950000, getNWs: () => [{ period: '2026-09', total: 659000 }, { period: '2026-10', total: 704558 }], fmt, mLabel });
+  const app = appFns(['goalStartApp', 'goalPctApp', 'goalPctTxt'], { ld: (k, d) => state[k] ?? d, getGoal: () => 950000, getNWs: () => NWS, fmt, mLabel });
   assert.equal(app.goalPctApp(704558).pct, 0);
   assert.match(app.goalPctTxt(app.goalPctApp(704558)), /^0 % av vägen 707 104 → 950 000 kr \(när målet sattes 2026-10; 2 546 kr under startvärdet\)$/);
   assert.equal(Math.round(app.goalPctApp(828552).pct), 50);
   delete state.goal_start; // utan goal_start: från första förmögenhetsbilden, och det står i texten
   assert.match(app.goalPctTxt(app.goalPctApp(704558)), /första förmögenhetsbilden 2026-09/);
+});
+
+// goal_start pekar på en period; totalen läses från bilden, så rättelser av startbilden slår igenom
+import { resolveGoalStart } from '../functions/_shared/goal.ts';
+test('goal_start: oktoberbilden rättad från 707 104 till 693 764 kr ger inte "under startvärdet"', () => {
+  const snaps = [{ period: '2026-09', total: 659000 }, { period: '2026-10', total: 693764 }];
+  for (const gs of [{ period: '2026-10' }, { period: '2026-10', total: 707104 }]) { // ny form och äldre form med fryst total
+    const st = resolveGoalStart(gs, snaps);
+    assert.deepEqual(st, { period: '2026-10', total: 693764, from: 'snapshot' });
+    assert.deepEqual([goalPct(950000, st, 693764).progress_pct, goalPct(950000, st, 693764).moved_since_start], [0, 0]);
+  }
+  assert.deepEqual(resolveGoalStart({ period: '2026-10', total: 707104 }, []), { period: '2026-10', total: 707104, from: 'stored' }); // bilden borttagen
+  assert.equal(resolveGoalStart({ period: '2026-10' }, []), null);
+  assert.equal(resolveGoalStart(null, snaps), null);
+  const g = goalProgress({ goal: 950000, goalDate: '2027-12', start: resolveGoalStart({ period: '2026-10' }, snaps), latest: { ...latest, total: 693764 }, plannedSavings: 10000, inflows: [], savingsLast12: 0, amortMonthly: 0 });
+  assert.deepEqual([g.plan.start.total, g.plan.vs_plan, g.progress_pct], [693764, 0, 0]);
+  // Appen: samma, och texten säger inget om "under startvärdet"
+  const state = { goal_start: { period: '2026-10', total: 707104 } };
+  const app = appFns(['goalStartApp', 'goalPctApp', 'goalPctTxt'], { ld: (k, d) => state[k] ?? d, getGoal: () => 950000, getNWs: () => snaps, fmt, mLabel });
+  assert.deepEqual(app.goalStartApp(), { period: '2026-10', total: 693764 });
+  assert.equal(app.goalPctTxt(app.goalPctApp(693764)), '0 % av vägen 693 764 → 950 000 kr (när målet sattes 2026-10)');
 });

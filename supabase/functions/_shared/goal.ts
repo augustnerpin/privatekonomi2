@@ -42,7 +42,16 @@ export function simulate(p: { latest: Obj; months: number; monthly: number; rate
   return { projected: Math.round(invest + other), reached, path };
 }
 
-// Framsteg = andel av vägen från förmögenheten när målet sattes (start = goal_start) till målet, inte från 0 kr.
+// goal_start = {period}: förmögenhetsbilden som planen och framsteget räknas från. Totalen läses från bilden varje gång,
+// så rättelser av startbilden slår igenom. Äldre goal_start med fryst total används bara om bilden saknas.
+export function resolveGoalStart(gs: Obj | null | undefined, snaps: Obj[]) {
+  if (!gs || !/^\d{4}-\d{2}$/.test(String(gs.period || ''))) return null;
+  const snap = (snaps || []).find((x) => x.period === gs.period && !x.deleted);
+  if (snap) return { period: gs.period, total: Number(snap.total), from: 'snapshot' };
+  return isFinite(Number(gs.total)) && gs.total != null ? { period: gs.period, total: Number(gs.total), from: 'stored' } : null;
+}
+
+// Framsteg = andel av vägen från förmögenheten när målet sattes (start = resolveGoalStart) till målet, inte från 0 kr.
 // Under startvärdet = 0 %. Utan start: null (procenten går inte att räkna ut ärligt).
 export function goalPct(goal: number, start: Obj | null | undefined, total: number) {
   if (!start || !isFinite(Number(start.total)) || !isFinite(Number(total))) return null;
