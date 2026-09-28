@@ -51,7 +51,7 @@ const DEF: Obj = {
   goal: 700000, goal_date: '', salary: 0, owner_name: '', ai_profile: {}, goal_start: null, planned_savings: 10000, known_inflows: [],
 };
 // Kontotyper. Appen räknar bank + savings som likvida medel; card = kreditkort (köp brukar vara positiva i exporten).
-const KINDS: Obj = { bank: 'Bankkonto', card: 'Kreditkort', savings: 'Sparkonto', investment: 'Investering (ISK/depå)' };
+const KINDS: Obj = { bank: 'Bankkonto', card: 'Kreditkort', savings: 'Sparkonto', investment: 'Investering (ISK/depå)', passage: 'Passagekonto (t.ex. bolånekonto, alltid neutralt)' };
 const CAT_KEY: Obj = { expense: 'cats_exp', income: 'cats_inc', savings: 'cats_sav', transfer: 'cats_trf' };
 
 // ── Datum och löneperioder (portat från index.html) ───────────────────
@@ -220,7 +220,11 @@ function balanceHistory(s: Obj, rows: Obj[]) {
 }
 function accountView(a: Obj, hist: Obj[] = []) {
   const last = hist[hist.length - 1];
-  return { id: a.id, name: a.name, kind: a.kind || 'bank', ...(a.number ? { number: a.number } : {}), ...(last ? { balance: { value: last.value, date: last.date } } : {}) };
+  // class: regular (bank/card), saving (savings/investment) eller passage (bolånekonto, alltid neutralt). Sparande mellan egna
+  // konton avgörs av klasserna (regular → saving = +sparande i kontots savings_category, saving → regular = −sparande).
+  const cls = a.kind === 'passage' || a.role === 'mortgage' ? 'passage' : a.kind === 'savings' || a.kind === 'investment' ? 'saving' : 'regular';
+  return { id: a.id, name: a.name, kind: a.kind || 'bank', class: cls, ...(cls === 'saving' ? { savings_category: a.sav_cat || 'Annat' } : {}), ...(a.role ? { role: a.role } : {}),
+    ...(a.match?.length ? { counterparty_text: a.match } : {}), ...(a.manual ? { manual: true } : {}), ...(a.number ? { number: a.number } : {}), ...(last ? { balance: { value: last.value, date: last.date } } : {}) };
 }
 // Lån och deras skuld per datum (null om tabellerna inte finns ännu)
 async function loadLoans(c: Ctx): Promise<Obj[] | null> {

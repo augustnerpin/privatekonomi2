@@ -245,3 +245,101 @@ export function splitMortgageRows(s: Obj, rows: Obj[], loans: Obj[], nextId: () 
   }
   return { rows: out, split };
 }
+
+// ── Sparande utifrån kontotyp (ersätter regler för flyttar mellan egna konton) ──────────────────────
+// Kontoklass: vanligt (bank, card), sparkonto (savings, investment) eller passage (kind "passage" eller
+// rollen mortgage: bolånekontot, alltid neutralt). Motparten avgörs av (i ordning): uttryckligt motkonto
+// (extra.from_account / to_account), paret (extra.transfer_pair_id eller samma belopp med motsatt tecken inom
+// 3 dagar), kontonumret i texten (accounts[].number) och motpartstext (accounts[].match, t.ex. "AVANZA BANK").
+//   vanligt → sparkonto = +sparande (sparkontots sav_cat)     sparkonto → vanligt = −sparande
+//   sparkonto → sparkonto = neutral                           vanligt → vanligt = neutral
+// Sparandet räknas på det vanliga kontots sida; saknas den i datan räknas det på sparkontots sida.
+// Undantag som behålls: pengar till kontot som betalar kreditkortet (utgift "AMEX (väntande)"), pengar till
+// bolånekontot (utgift/uppdelning ränta + Amortering), delar av uppdelade rader och kategorin Amortering.
+// Rader utan motpart (t.ex. äldre sparrader utan text) ändras inte.
+export const OWN_TRF = 'Egen överföring';
+export function accClass(a: Obj | null | undefined) {
+  if (!a) return null;
+  if (a.kind === 'passage' || a.role === 'mortgage') return 'passage';
+  return a.kind === 'savings' || a.kind === 'investment' ? 'saving' : 'regular';
+}
+const digitsOf = (v: any) => String(v || '').replace(/\D/g, '');
+function transferLike(r: Obj, owner: string) {
+  if (r.deleted || r.extra?.parent_id || r.extra?.split_into) return false;
+  if (r.type === 'transfer' || r.type === 'savings') return true;
+  const d = String(r.description || '').toUpperCase();
+  return !!descNumber(r.description) || (owner.length >= 5 && d.startsWith(owner.slice(0, Math.min(owner.length, 12))));
+}
+// Par av egna överföringar: befintliga transfer_pair_id först, sedan samma belopp (motsatt tecken) på olika konton inom 3 dagar
+export function pairTransfers(rows: Obj[], owner = '') {
+  const pair = new Map<number, Obj>();
+  const byId = new Map(rows.map((r) => [Number(r.id), r]));
+  for (const r of rows) { const p = byId.get(Number(r.extra?.transfer_pair_id)); if (p && !r.deleted && !p.deleted) { pair.set(Number(r.id), p); pair.set(Number(p.id), r); } }
+  const cand = rows.filter((r) => !pair.has(Number(r.id)) && transferLike(r, owner)).sort((a, b) => a.tx_date.localeCompare(b.tx_date) || Number(a.id) - Number(b.id));
+  for (const r of cand) {
+    if (pair.has(Number(r.id))) continue;
+    const c = Math.round(rawOf(r) * 100);
+    const hits = cand.filter((o) => o !== r && !pair.has(Number(o.id)) && o.account !== r.account && Math.round(rawOf(o) * 100) === -c && dayDiff(o.tx_date, r.tx_date) <= 3);
+    if (hits.length === 1) { pair.set(Number(r.id), hits[0]); pair.set(Number(hits[0].id), r); }
+  }
+  return pair;
+}
+export function counterpartyOf(r: Obj, accounts: Obj[], partner?: Obj | null) {
+  const x = r.extra || {}, raw = rawOf(r);
+  const explicit = raw < 0 ? x.to_account : x.from_account;
+  if (explicit) return accounts.find((a) => a.id === explicit) || null;
+  if (partner) return accounts.find((a) => a.id === partner.account) || null;
+  const num = descNumber(r.description);
+  if (num) { const a = accounts.find((a) => a.id !== r.account && a.number && digitsOf(a.number) === num); if (a) return a; }
+  const d = String(r.description || '').toUpperCase();
+  return accounts.find((a) => a.id !== r.account && (a.match || []).some((p: string) => p && d.includes(String(p).toUpperCase()) && !d.startsWith('K*'))) || null;
+}
+// Returnerar ändringar [{id, before, after, why}] och vilka par som ska länkas. Muterar inte rows.
+export function applySavingsModel(rows: Obj[], s: Obj) {
+  const accounts: Obj[] = s.accounts || [];
+  const owner = String(s.owner_name || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const accOf = (id: string) => accounts.find((a) => a.id === id);
+  const sav = (s.cats_sav || DEF.cats_sav) as string[];
+  const savCat = (a: Obj) => (a.sav_cat && sav.includes(a.sav_cat) ? a.sav_cat : sav.includes('Annat') ? 'Annat' : sav[0]);
+  const pair = pairTransfers(rows, owner);
+  const changes: Obj[] = [];
+  for (const r of rows) {
+    if (r.deleted || r.extra?.parent_id || r.extra?.split_into || (r.type === 'savings' && r.category === 'Amortering')) continue;
+    const X = accOf(r.account), partner = pair.get(Number(r.id)) || null, Y = counterpartyOf(r, accounts, partner);
+    if (!X || !Y) continue;
+    const raw = rawOf(r), cx = accClass(X), cy = accClass(Y);
+    let after: Obj | null = null, why = '';
+    const neutral = { type: 'transfer', category: OWN_TRF, amount: raw };
+    if (cx === 'passage') { after = neutral; why = `${X.name} är ett passagekonto (alltid neutralt)`; }
+    else if (cy === 'passage') continue;                                          // bolånebetalning: utgift/uppdelning som idag
+    else if (raw < 0 && Y.role === 'card_payment') continue;                      // AMEX (väntande)
+    else if (cx === 'regular' && cy === 'saving') { after = { type: 'savings', category: savCat(Y), amount: -raw }; why = `${raw < 0 ? 'till' : 'från'} sparkontot ${Y.name}`; }
+    else if (cx === 'saving' && cy === 'regular') {
+      const regularLegInData = partner && partner.account === Y.id;
+      if (regularLegInData) { after = neutral; why = `räknas på ${Y.name}s sida`; }
+      else { after = { type: 'savings', category: savCat(X), amount: raw }; why = `${raw < 0 ? 'uttag' : 'insättning'} (${Y.name}s sida saknas i datan)`; }
+    } else { after = neutral; why = cx === 'saving' ? 'mellan två sparkonton' : 'mellan två vanliga konton'; }
+    const pid = partner ? Number(partner.id) : null;
+    const same = after.type === r.type && after.category === r.category && Math.round(Number(after.amount) * 100) === Math.round(Number(r.amount) * 100);
+    const needPair = pid != null && Number(r.extra?.transfer_pair_id) !== pid;
+    if (same && !needPair) continue;
+    changes.push({ id: Number(r.id), month: r.month, tx_date: r.tx_date, account: r.account, description: r.description,
+      before: { type: r.type, category: r.category, amount: Number(r.amount) }, after: same ? { type: r.type, category: r.category, amount: Number(r.amount) } : after,
+      ...(needPair ? { pair_id: pid } : {}), counterparty: Y.id, why });
+  }
+  return changes;
+}
+// Sparande per löneperiod före och efter ändringarna (för förhandsgranskningen)
+export function savingsByPeriod(rows: Obj[], changes: Obj[]) {
+  const ch = new Map(changes.map((c) => [c.id, c]));
+  const out: Obj = {};
+  for (const r of rows) {
+    if (r.deleted) continue;
+    const c = ch.get(Number(r.id));
+    const b = r.type === 'savings' ? Number(r.amount) : 0, a = c ? (c.after.type === 'savings' ? Number(c.after.amount) : 0) : b;
+    if (!b && !a) continue;
+    const o = (out[r.month] ||= { period: r.month, before: 0, after: 0 });
+    o.before += b; o.after += a;
+  }
+  return Object.values(out).map((o: Obj) => ({ ...o, before: Math.round(o.before), after: Math.round(o.after), diff: Math.round(o.after - o.before) })).sort((x: Obj, y: Obj) => x.period.localeCompare(y.period));
+}

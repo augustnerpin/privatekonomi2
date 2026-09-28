@@ -1528,7 +1528,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
     <div class="tag-add" style="padding:0;margin-top:-6px;margin-bottom:16px">
       <input type="text" id="new-acc-name" placeholder="Nytt konto, t.ex. Sparkonto…" onkeydown="if(event.key==='Enter')addAccount()">
       <select id="new-acc-kind" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:var(--rsm);padding:0 10px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none">
-        <option value="bank">Bank</option><option value="card">Kort</option><option value="savings">Sparkonto</option><option value="investment">Investering</option>
+        <option value="bank">Bank</option><option value="card">Kort</option><option value="savings">Sparkonto</option><option value="investment">Investering</option><option value="passage">Passage (t.ex. bolånekonto)</option>
       </select>
       <button class="tag-add-btn" onclick="addAccount()">+</button>
     </div>
@@ -1882,8 +1882,8 @@ const DEF_ACCOUNTS=[{id:'lonekonto',name:'Lönekonto',kind:'bank'},{id:'amex',na
 function getAccounts(){const a=ld('accounts',null);return Array.isArray(a)&&a.length?a:DEF_ACCOUNTS.map(x=>({...x}))}
 function svAccounts(v){sv('accounts',v)}
 // Kontotyper: bank och sparkonto räknas som likvida medel; kort och investering (ISK/depå) gör det inte
-const ACC_KIND_LABEL={bank:'bank',card:'kort',savings:'sparkonto',investment:'investering'};
-const isCashAcc=a=>!a.kind||a.kind==='bank'||a.kind==='savings';
+const ACC_KIND_LABEL={bank:'bank',card:'kort',savings:'sparkonto',investment:'investering',passage:'passage'};
+const isCashAcc=a=>!a.kind||a.kind==='bank'||a.kind==='savings'||a.kind==='passage';
 function accountName(id){return getAccounts().find(a=>a.id===id)?.name||id||'—'}
 // Överföringar (kortfaktura, egna konton) räknas varken som utgift eller inkomst
 const DEF_TRF=['Kreditkortsbetalning','Egen överföring','Bostad, lån & tillgångar'];
@@ -5899,6 +5899,11 @@ function saveImport(){
     let sid=nextTxId(txs);
     txs.filter(t=>t.importId===impId).forEach(t=>{const sp=mortgageSplitOf(t,byNum);if(sp){ensureAmortCat();applyMortgageSplit(txs,t,sp,()=>sid++)}});
   }
+  // Sparande utifrån kontotyp: importerade rader tillsammans med befintliga runt samma datum (för paren)
+  {const imp=txs.filter(t=>t.importId===impId).map(t=>t.date).sort();
+    if(imp.length){const lo=ymdOf(new Date(parseLocalDate(imp[0]).getTime()-5*864e5)),hi=ymdOf(new Date(parseLocalDate(imp[imp.length-1]).getTime()+5*864e5));
+      const win=txs.filter(t=>t.date>=lo&&t.date<=hi);
+      applySavingsModelApp(win).forEach(c=>{const t=txs.find(x=>x.id===c.id);if(!t)return;t.type=c.after.type;t.cat=c.after.cat;t.amount=c.after.amount;if(c.pair)t.transfer_pair_id=c.pair})}}
   // Kortfakturan för perioden: de väntande AMEX-raderna ersätts av fakturans köp (blir kortbetalningar)
   const settled=[];
   const cardImport=on.some(g=>g.rows.some(r=>getAccounts().find(a=>a.id===r.account)?.kind==='card'));
@@ -5955,7 +5960,8 @@ function renderAccountSettings(){
         <div class="s-row-sub">${n} transaktioner${a.balance?` · saldo ${fmt(a.balance.value)} kr (${a.balance.date})`:''}</div></div>
       ${a.kind!=='card'?`<button class="chip" onclick="openValModal('acc',${jsArg(a.id)})">Saldo</button>`:''}
       <button class="tag-rm" onclick="removeAccount(${i})">×</button>
-      <div style="display:flex;gap:6px;width:100%;font-size:11px;color:var(--sub2);align-items:center">Förmögenhet: ${sel('nw_cat',[['','Räknas inte'],...getNWCats().map(c=>[c.key,c.label])],nwCatOfAcc(a)||'')}${a.kind==='investment'?` Sparkategori: ${sel('sav_cat',[['','—'],...getSavCats().map(c=>[c,c])],a.sav_cat||'')}`:''}</div>
+      <div style="display:flex;gap:6px;width:100%;font-size:11px;color:var(--sub2);align-items:center;flex-wrap:wrap">Typ: ${sel('kind',Object.entries(ACC_KIND_LABEL),a.kind||'bank')} Förmögenhet: ${sel('nw_cat',[['','Räknas inte'],...getNWCats().map(c=>[c.key,c.label])],nwCatOfAcc(a)||'')}${a.kind==='investment'||a.kind==='savings'?` Sparkategori: ${sel('sav_cat',[['','Annat'],...getSavCats().map(c=>[c,c])],a.sav_cat||'')}`:''}</div>
+      ${a.manual?`<div style="display:flex;gap:6px;width:100%;font-size:11px;color:var(--sub2);align-items:center">Motpartstext: <input class="sb-inp" style="flex:1;margin:0;font-size:12px;padding:4px 8px" placeholder="t.ex. AVANZA BANK" value="${esc((a.match||[]).join(', '))}" onchange="setAccField(${i},'match',this.value)"></div>`:''}
     </div>`}).join('');
   const imps=getImports().slice().reverse();
   document.getElementById('imp-hist').innerHTML=imps.length?imps.slice(0,15).map(i=>`<div class="s-row">
@@ -5978,7 +5984,7 @@ function renderAccountSettings(){
     :`<div style="padding:14px 16px;font-size:13px;color:var(--sub2)">Inga ännu. Svar på AI:ns frågor vid import hamnar här.</div>`)+
     `<div class="tag-add" style="padding:10px 16px 12px"><input type="text" id="new-ai-note" placeholder="Ny instruktion, t.ex. ”Konto 5329… är mitt sparkonto”" onkeydown="if(event.key==='Enter')addImportNoteFromSettings()"><button class="tag-add-btn" onclick="addImportNoteFromSettings()">+</button></div>`;
 }
-function setAccField(i,k,v){const accs=getAccounts();if(!accs[i])return;accs[i][k]=v||(k==='nw_cat'?null:undefined);if(accs[i][k]===undefined)delete accs[i][k];svAccounts(accs);renderAccountSettings()}
+function setAccField(i,k,v){const accs=getAccounts();if(!accs[i])return;if(k==='match')v=String(v||'').split(',').map(x=>x.trim()).filter(Boolean),v=v.length?v:'';accs[i][k]=v||(k==='nw_cat'?null:undefined);if(accs[i][k]===undefined)delete accs[i][k];svAccounts(accs);renderAccountSettings()}
 function addAccount(){
   const inp=document.getElementById('new-acc-name');const name=inp.value.trim();if(!name)return;
   const accs=getAccounts();
@@ -6596,6 +6602,42 @@ function tagSummaryHtml(tag){
   const sum=Object.values(byCat).reduce((a,b)=>a+b,0),dates=txs.map(t=>t.date).sort();
   return`<div class="card" style="margin:0 16px 10px"><div class="card-inner"><div class="card-lbl">#${esc(tag)} · ${txs.length} transaktioner${dates.length?` · ${dates[0]} – ${dates[dates.length-1]}`:''}</div>
     <div class="card-big">${fmt(sum)} kr</div>${Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0"><span style="color:var(--sub)">${esc(c)}</span><span style="font-family:var(--mono)">${fmt(v)}</span></div>`).join('')}</div></div>`;
+}
+
+// ═══════════════════════════════════════════
+// SPARANDE UTIFRÅN KONTOTYP — samma regler som applySavingsModel i supabase/functions/bank/core.ts
+// vanligt (bank/card) → sparkonto (savings/investment) = +sparande, sparkonto → vanligt = −sparande, övrigt neutralt;
+// passage (bolånekonto) alltid neutralt. Motpart: from_account/to_account, par, kontonummer, motpartstext (match).
+// ═══════════════════════════════════════════
+const accClassApp=a=>!a?null:a.kind==='passage'||a.role==='mortgage'?'passage':a.kind==='savings'||a.kind==='investment'?'saving':'regular';
+const rawOfTx=t=>t.type==='income'||t.type==='transfer'?t.amount:-t.amount;
+function applySavingsModelApp(txs){
+  const accs=getAccounts(),owner=getOwnerName().toUpperCase().replace(/\s+/g,' ').trim(),sav=getSavCats();
+  const savCat=a=>a.sav_cat&&sav.includes(a.sav_cat)?a.sav_cat:sav.includes('Annat')?'Annat':sav[0];
+  const skip=t=>t.parent_id||t.split_into;
+  const like=t=>!skip(t)&&(t.type==='transfer'||t.type==='savings'||!!descNumber(t.desc)||(owner.length>=5&&String(t.desc||'').toUpperCase().startsWith(owner.slice(0,12))));
+  const byId=new Map(txs.map(t=>[t.id,t])),pair=new Map();
+  txs.forEach(t=>{const p=byId.get(+t.transfer_pair_id);if(p){pair.set(t.id,p);pair.set(p.id,t)}});
+  const cand=txs.filter(t=>!pair.has(t.id)&&like(t)).sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id);
+  cand.forEach(t=>{if(pair.has(t.id))return;const c=Math.round(rawOfTx(t)*100);
+    const h=cand.filter(o=>o!==t&&!pair.has(o.id)&&o.account!==t.account&&Math.round(rawOfTx(o)*100)===-c&&Math.abs(parseLocalDate(o.date)-parseLocalDate(t.date))<=3*864e5);
+    if(h.length===1){pair.set(t.id,h[0]);pair.set(h[0].id,t)}});
+  const cp=(t,p)=>{const raw=rawOfTx(t),ex=raw<0?t.to_account:t.from_account;if(ex)return accs.find(a=>a.id===ex)||null;if(p)return accs.find(a=>a.id===p.account)||null;
+    const n=descNumber(t.desc);if(n){const a=accs.find(a=>a.id!==t.account&&a.number&&String(a.number).replace(/\D/g,'')===n);if(a)return a}
+    const d=String(t.desc||'').toUpperCase();return accs.find(a=>a.id!==t.account&&(a.match||[]).some(m=>m&&d.includes(String(m).toUpperCase())&&!d.startsWith('K*')))||null};
+  const out=[];
+  txs.forEach(t=>{
+    if(skip(t)||(t.type==='savings'&&t.cat===AMORT_CAT))return;
+    const X=accs.find(a=>a.id===t.account),p=pair.get(t.id)||null,Y=cp(t,p);if(!X||!Y)return;
+    const raw=rawOfTx(t),cx=accClassApp(X),cy=accClassApp(Y),neutral={type:'transfer',cat:'Egen överföring',amount:raw};let after;
+    if(cx==='passage')after=neutral;else if(cy==='passage')return;else if(raw<0&&Y.role==='card_payment')return;
+    else if(cx==='regular'&&cy==='saving')after={type:'savings',cat:savCat(Y),amount:-raw};
+    else if(cx==='saving'&&cy==='regular')after=p&&p.account===Y.id?neutral:{type:'savings',cat:savCat(X),amount:raw};
+    else after=neutral;
+    const same=after.type===t.type&&after.cat===t.cat&&Math.round(after.amount*100)===Math.round(t.amount*100),needPair=p&&+t.transfer_pair_id!==p.id;
+    if(!same||needPair)out.push({id:t.id,after,pair:p?p.id:null});
+  });
+  return out;
 }
 
 const COACH_TOOLS=[

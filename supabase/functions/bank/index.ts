@@ -12,7 +12,7 @@ import { computeNetWorth, DEF_NW_CATS, shiftMonthDay } from '../_shared/networth
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
 import { buildDigest, missingExpected } from './notify.ts';
-import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals, loanUpdates, splitMortgageRows } from './core.ts';
+import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, loanUpdates, splitMortgageRows, applySavingsModel, savingsByPeriod } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
 const EB = 'https://api.enablebanking.com';
@@ -210,17 +210,29 @@ async function syncLocked(uid: string, psu: Psu) {
     }
   }
   // 1. Nya rader. Går något fel här sparas inget av nedanstående, så nästa hämtning tar samma rader igen.
-  let added = 0, review = 0, saved: Obj[] = [], learned: Obj | null = null;
+  let added = 0, review = 0, saved: Obj[] = [], learned: Obj | null = null; const existingUpdates: Obj[] = [];
   if (newRows.length) {
     const accOf = (id: string) => s.accounts.find((x: Obj) => x.id === id);
     const groups = await categorize(s, newRows, accOf, (g) => aiCategorize(s, g));
     const top = await must<Obj[]>(db.from('transactions').select('id').eq('user_id', uid).order('id', { ascending: false }).limit(1));
     let rows = toRows(uid, groups, s, Math.max((top[0]?.id || 0) + 1, Date.now()));
-    markSavingsWithdrawals(s, rows, accOf);
+    // (Sparande mellan egna konton avgörs av kontotyperna nedan, efter uppdelningen av bolånet)
     // Bolånebetalningen delas i ränta + amortering (originalet sparas som borttaget, med bankreferensen)
     let nid = rows.length ? rows[rows.length - 1].id + 1 : Date.now();
     rows = splitMortgageRows(s, rows, await loadLoansFor(uid).catch(() => []), () => nid++).rows;
+    // Sparande utifrån kontotyp: nya rader tillsammans med befintliga rader runt samma datum (för paren)
+    const minDate = rows.map((x) => x.tx_date).sort()[0];
+    const near = await pages(() => db.from('transactions').select('id,account,type,category,amount,description,tx_date,month,extra,deleted').eq('user_id', uid).eq('deleted', false).gte('tx_date', addDays(minDate, -5)).order('id'));
+    const newIds = new Set(rows.map((x) => Number(x.id)));
+    for (const c of applySavingsModel([...near, ...rows], s)) {
+      const target = newIds.has(c.id) ? rows.find((x) => Number(x.id) === c.id) : near.find((x) => Number(x.id) === c.id);
+      if (!target) continue;
+      Object.assign(target, { type: c.after.type, category: c.after.category, amount: c.after.amount, extra: { ...(target.extra || {}), ...(c.pair_id ? { transfer_pair_id: c.pair_id } : {}) } });
+      if (!newIds.has(c.id)) existingUpdates.push(target);
+    }
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
+    // Befintliga rader som blev andra sidan av en ny överföring (t.ex. sparandet räknas nu på lönekontots sida)
+    for (const t of existingUpdates) await must(db.from('transactions').update({ type: t.type, category: t.category, amount: t.amount, extra: t.extra }).eq('user_id', uid).eq('id', t.id));
     added = rows.length; review = rows.filter((r) => r.extra.review).length; saved = rows;
     learned = learnRules(s, groups);
     await applyLoanUpdates(uid, rows, s).catch((e) => console.error('Lån:', e));
@@ -343,6 +355,31 @@ async function maybeAutoSnapshot(uid: string, s: Obj) {
   return { period: pid, total: r.total };
 }
 
+// ── Sparande utifrån kontotyp på historiken (förhandsgranskning / tillämpning) ──
+// Idempotent: en andra körning hittar inga ändringar. Före tillämpning sparas berörda rader i backups.
+async function savingsModelRun(uid: string, s: Obj, dry: boolean, assume: Obj) {
+  const rows = await pages(() => db.from('transactions').select('id,account,type,category,amount,description,tx_date,month,extra,deleted').eq('user_id', uid).eq('deleted', false).order('id'));
+  // Antaganden (t.ex. from_account på en rad vars andra sida saknas) räknas bara som ändring om de inte redan är sparade
+  const assumed: number[] = [];
+  for (const [id, x] of Object.entries(assume || {})) {
+    const r = rows.find((t) => String(t.id) === id); if (!r) continue;
+    if (Object.entries(x as Obj).some(([k, v]) => JSON.stringify(r.extra?.[k]) !== JSON.stringify(v))) assumed.push(Number(r.id));
+    r.extra = { ...(r.extra || {}), ...(x as Obj) };
+  }
+  const changes = applySavingsModel(rows, s), table = savingsByPeriod(rows, changes);
+  if (dry || (!changes.length && !assumed.length)) return { dry_run: dry, changes, table: table.filter((t: Obj) => t.diff), all_periods: table };
+  const touched = new Set([...changes.map((c: Obj) => c.id), ...assumed]);
+  const before = await pages(() => db.from('transactions').select('*').eq('user_id', uid).in('id', [...touched]).order('id'));
+  await must(db.from('backups').insert({ user_id: uid, label: 'sparmodell', data: { rows: before, assume, changes } }));
+  for (const id of touched) {
+    const r = rows.find((t) => Number(t.id) === id)!, c = changes.find((x: Obj) => x.id === id);
+    const patch: Obj = { extra: { ...(r.extra || {}), ...(c?.pair_id ? { transfer_pair_id: c.pair_id } : {}) } };
+    if (c) Object.assign(patch, { type: c.after.type, category: c.after.category, amount: c.after.amount });
+    await must(db.from('transactions').update(patch).eq('user_id', uid).eq('id', id));
+  }
+  return { applied: touched.size, table: table.filter((t: Obj) => t.diff), all_periods: table };
+}
+
 // ── Månadsbokslut och veckobrev (nattjobbet) ───────────────────────────
 // Sparas i user_state (month_closings = {period: bokslut}, weekly_letters = [brev]) så att appen visar dem,
 // och skickas som notis. Bokslutet skrivs dag 2 i en ny löneperiod, veckobrevet på söndagar.
@@ -443,6 +480,12 @@ Deno.serve(async (req) => {
       if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'Unauthorized' }, 401);
       const body = await req.json().catch(() => ({})); // {force: ['closing','weekly']} kör bokslut/veckobrev direkt (test)
       const users = [...new Set((await must<Obj[]>(db.from('bank_connections').select('user_id').eq('status', 'active'))).map((r) => r.user_id))];
+      // {savings_model: {dry_run, assume}}: sparmodellen på historiken för alla (förhandsgranskning som standard)
+      if (body.savings_model) {
+        const res: Obj = {};
+        for (const u of users) res[u] = await savingsModelRun(u, await loadState(u), body.savings_model.dry_run !== false, body.savings_model.assume || {});
+        return json(res);
+      }
       // {networth: true}: bara räkna förmögenheten (test, ingen bankhämtning)
       if (body.networth === true) {
         const res: Obj = {};
@@ -489,6 +532,11 @@ Deno.serve(async (req) => {
       const s = await loadState(uid);
       const period = /^\d{4}-\d{2}$/.test(b.period || '') ? b.period : periodForDate(today(), s.pay_periods || []);
       return json(await netWorthFor(uid, period, s));
+    }
+    // Sparande utifrån kontotyp på hela historiken: {dry_run: true (standard), assume: {id: {from_account|to_account}}}
+    if (route === 'savings-model') {
+      const b = await req.json().catch(() => ({}));
+      return json(await savingsModelRun(uid, await loadState(uid), b.dry_run !== false, b.assume || {}));
     }
     if (route === 'push-test') return json(await pushTo(uid, { title: 'Notiser är på ✓', body: 'Här hör appen av sig när lönen kommit, vid stora köp och när budgeten börjar ta slut.', url: APP_URL, tag: 'test' }));
     return json({ error: 'Okänd väg' }, 404);
