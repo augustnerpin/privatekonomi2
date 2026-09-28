@@ -71,3 +71,17 @@ test('sammanfattning: lön, köp, budget, samtycke – och inget skickas två g�
   const late = buildDigest({ newRows: [], spent: { 'Mat (Ute)': 900 }, budgets: { 'Mat (Ute)': 1000 }, period, today: '2026-10-20', conns: [], sent: new Set() });
   assert.equal(late, null);
 });
+
+test('sammanfattning: påminnelse före villkorsändring och bindningstidens slut', () => {
+  const loans = [{ id: 'L1', name: 'Bolån', extra: { rate_type: 'bunden', fixed_until: '2026-10-20', rate_change_date: '2026-10-03' } }];
+  const base = { newRows: [], spent: {}, budgets: {}, period, conns: [], loans };
+  const d = buildDigest({ ...base, today: '2026-09-28', sent: new Set() });
+  assert.equal(d.title, 'Ditt bolån');
+  assert.deepEqual(d.keys.sort(), ['lan:L1:2026-10-03:7', 'lan:L1:2026-10-20:30']);
+  assert.match(d.body, /villkorsändring 2026-10-03 \(om 5 dagar\)/);
+  // 30-dagarspåminnelsen skickad; vid 7 dagar kommer nästa
+  const d2 = buildDigest({ ...base, today: '2026-10-14', sent: new Set(['lan:L1:2026-10-20:30', 'lan:L1:2026-10-03:7']) });
+  assert.deepEqual(d2.keys, ['lan:L1:2026-10-20:7']);
+  // Passerat datum → inget
+  assert.equal(buildDigest({ ...base, today: '2026-10-21', sent: new Set(['lan:L1:2026-10-20:7']) }), null);
+});

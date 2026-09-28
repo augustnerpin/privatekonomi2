@@ -121,3 +121,20 @@ test('categorize: regler, automatiska regler, AI och gissning', async () => {
   const g2 = await categorize(S, rows.slice(3), () => ({ kind: 'bank' }), async () => { throw new Error('nere'); });
   assert.deepEqual(g2.map((g) => g.src), ['guess', 'guess']);
 });
+
+test('bolån: amortering sänker skulden, räntan sparas, andra konton påverkar inte', async () => {
+  const { loanUpdates } = await import('../functions/bank/core.ts');
+  const acc = { bolan: { role: 'mortgage' }, lonekonto: { kind: 'bank' } };
+  const loans = [{ id: 'L1', name: 'Bolån', extra: { pay_account: 'bolan' }, history: [{ date: '2026-09-01', value: 1800000 }] }];
+  const rows = [
+    { account: 'bolan', type: 'transfer', amount: -1500, description: 'AMORTERING 53293315887', tx_date: '2026-10-28' },
+    { account: 'bolan', type: 'transfer', amount: -4525, description: 'RÄNTA 53293315887', tx_date: '2026-10-28' },
+    { account: 'bolan', type: 'transfer', amount: 6025, description: 'AUGUST NERPI', tx_date: '2026-10-25' },
+    { account: 'lonekonto', type: 'expense', amount: 999, description: 'AMORTERING X', tx_date: '2026-10-28' },
+  ];
+  const u = loanUpdates(rows, loans, (id) => acc[id]);
+  assert.deepEqual(u.balances, [{ loan_id: 'L1', bal_date: '2026-10-28', value: 1798500 }]);
+  assert.deepEqual(u.interest, { L1: { date: '2026-10-28', amount: 4525 } });
+  // Utan känd skuld före dragningen gissas ingen ny skuld
+  assert.deepEqual(loanUpdates(rows, [{ ...loans[0], history: [] }], (id) => acc[id]).balances, []);
+});

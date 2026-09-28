@@ -1370,6 +1370,32 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
   </div>
 </div>
 
+<!-- ═══ LÅN ═══ -->
+<div class="overlay" id="loan-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="lm-title">Lån</div>
+    <div id="lm-hint" style="font-size:12px;color:var(--sub2);margin-bottom:12px"></div>
+    <div class="field"><label>Namn</label><input type="text" id="lm-name" placeholder="Bolån"></div>
+    <div class="field"><label>Långivare</label><input type="text" id="lm-lender" placeholder="SEB"></div>
+    <div class="field"><label>Lånenummer</label><input type="text" id="lm-ref" inputmode="numeric"></div>
+    <div class="field"><label>Skuld (kr)</label><input type="number" id="lm-debt" inputmode="decimal"></div>
+    <div class="field"><label>Skulden per datum</label><input type="date" id="lm-debt-date"></div>
+    <div class="field"><label>Ränta (%)</label><input type="number" id="lm-rate" step="0.01" inputmode="decimal" placeholder="3,25"></div>
+    <div class="field"><label>Räntetyp</label><select id="lm-type" onchange="document.getElementById('lm-fixed-row').style.display=this.value==='bunden'?'':'none'"><option value="rörlig">Rörlig</option><option value="bunden">Bunden</option></select></div>
+    <div class="field" id="lm-fixed-row"><label>Bunden till</label><input type="date" id="lm-fixed"></div>
+    <div class="field"><label>Villkorsändringsdag (nästa ränteändring)</label><input type="date" id="lm-change"></div>
+    <div class="field"><label>Amortering (kr/mån)</label><input type="number" id="lm-amort" inputmode="decimal"></div>
+    <div class="field"><label>Dras från konto</label><select id="lm-account"></select></div>
+    <div class="field"><label>Hör till tillgång</label><select id="lm-secured"></select></div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--sub);margin:4px 0 14px;line-height:1.4"><input type="checkbox" id="lm-netted" style="margin-top:2px"> Skulden är redan avdragen i tillgångens värde i förmögenheten (t.ex. lägenheten registrerad som värde minus lån)</label>
+    <button class="btn-p" onclick="saveLoan()">Spara lån</button>
+    <button class="btn-s" id="lm-delete" onclick="deleteLoan()" style="color:var(--red)">Ta bort lånet</button>
+    <button class="btn-s" onclick="closeOverlay('loan-modal')">Avbryt</button>
+  </div>
+</div>
+<input type="file" id="loan-doc" accept="application/pdf,image/*" style="display:none" onchange="readLoanDoc(this)">
+
 <!-- ═══ PAY PERIOD MODAL ═══ -->
 <div class="overlay" id="pp-modal">
   <div class="modal">
@@ -2273,6 +2299,141 @@ function saveNW(){
 }
 
 // ═══════════════════════════════════════════
+// LÅN — tabellerna loans + loan_balances i Supabase (samma som MCP-verktygen och nattjobbet).
+// Villkor i extra: rate_type, fixed_until, rate_change_date, pay_account, last_interest.
+// ═══════════════════════════════════════════
+let _loans=ld('loans_cache',[]);if(!Array.isArray(_loans))_loans=[];
+let _loansAt=0,_loanEdit=null;
+const loanDebt=l=>{const h=l.history||[];return h.length?h[h.length-1]:null};
+const loanInterestMonth=l=>{const d=loanDebt(l);return d&&l.interest_pct!=null?d.value*(+l.interest_pct)/100/12:null};
+async function refreshLoans(){
+  if(!_sbUser)return;_loansAt=Date.now();
+  try{
+    const sb=await sbClient();
+    const[a,b]=await Promise.all([sb.from('loans').select('*').eq('deleted',false).order('name'),sb.from('loan_balances').select('loan_id,bal_date,value').eq('deleted',false).order('bal_date')]);
+    if(a.error||b.error)throw a.error||b.error;
+    const next=a.data.map(l=>({...l,history:b.data.filter(x=>x.loan_id===l.id).map(x=>({date:x.bal_date,value:+x.value}))}));
+    const changed=JSON.stringify(next)!==JSON.stringify(_loans);
+    _loans=next;localStorage.setItem('loans_cache',JSON.stringify(next));
+    if(changed)renderNetWorth();
+  }catch(e){console.warn('Lån:',e.message||e)}
+}
+function loansHtml(latest){
+  const rows=_loans.map(l=>{
+    const d=loanDebt(l),rate=l.interest_pct!=null?+l.interest_pct:null,im=loanInterestMonth(l),x=l.extra||{};
+    const terms=[x.rate_type==='bunden'?(x.fixed_until?`Bunden till ${x.fixed_until}`:'Bunden'):x.rate_type==='rörlig'?'Rörlig':'',x.rate_change_date?`Villkorsändring ${x.rate_change_date}`:''].filter(Boolean).join(' · ');
+    const soon=[x.rate_type==='bunden'?x.fixed_until:null,x.rate_change_date].filter(Boolean).map(s=>Math.round((parseLocalDate(s)-parseLocalDate(todayLocal()))/864e5)).filter(n=>n>=0&&n<=60);
+    return`<div class="txi" onclick="openLoanModal(${jsArg(l.id)})">
+      <div class="txav" style="background:var(--red2);color:var(--red)">🏠</div>
+      <div class="txi-info"><div class="txi-name">${esc(l.name)}${l.lender?` <span style="font-size:11px;color:var(--sub2)">${esc(l.lender)}</span>`:''}</div>
+        <div class="txi-meta">${rate!=null?String(rate).replace('.',',')+' %':'Ränta saknas'}${im!=null?` · ränta ca ${fmt(im)} kr/mån`:''}${l.amortization?` · amortering ${fmt(l.amortization)} kr/mån`:''}</div>
+        ${terms?`<div class="txi-meta" style="${soon.length?'color:var(--amber)':''}">${esc(terms)}${soon.length?` — om ${Math.min(...soon)} dagar`:''}</div>`:''}</div>
+      <div style="text-align:right"><div class="txi-amt" style="color:var(--red)">${d?'−'+fmt(d.value)+' kr':'—'}</div>${d?`<div class="txi-meta">${esc(d.date)}</div>`:''}</div>
+    </div>`}).join('');
+  const debt=_loans.filter(l=>!l.netted_in_assets).reduce((s,l)=>s+(loanDebt(l)?.value||0),0);
+  const cost=_loans.reduce((s,l)=>s+(loanInterestMonth(l)||0),0),amort=_loans.reduce((s,l)=>s+(+l.amortization||0),0);
+  const foot=[
+    debt&&latest?`Förmögenhet efter skulder: <b style="color:var(--text)">${fmt(latest.total-debt)} kr</b>`:'',
+    cost||amort?`Per månad: ränta ca <b style="color:var(--text)">${fmt(cost)} kr</b> (kostnad) + amortering <b style="color:var(--text)">${fmt(amort)} kr</b> (sparande i bostaden)`:'',
+    _loans.some(l=>l.netted_in_assets)?'Lån markerade som redan avdragna räknas inte av igen från förmögenheten.':''].filter(Boolean);
+  return`<div class="sec"><span class="sec-t">Lån & skulder</span>${_sbUser?'':'<span class="sec-sub">logga in för att visa</span>'}</div>
+  <div class="txl">${rows||`<div style="padding:14px 17px;font-size:13px;color:var(--sub);line-height:1.5">Inga lån inlagda. Lägg in bolånet så räknar appen räntekostnad, amortering och förmögenhet efter skulder, och påminner dig före villkorsändringsdagen.</div>`}
+    ${foot.length?`<div style="padding:10px 17px;font-size:12px;color:var(--sub);line-height:1.6;border-top:1px solid var(--line)">${foot.join('<br>')}</div>`:''}</div>
+  <div style="display:flex;gap:8px;margin-top:8px"><button class="btn-s" style="flex:1;margin:0" onclick="openLoanModal()">+ Lägg till lån</button><button class="btn-s" style="flex:1;margin:0" onclick="document.getElementById('loan-doc').click()">📄 Läs låneutdrag</button></div>`;
+}
+function openLoanModal(id,pre){
+  const l=id?_loans.find(x=>x.id===id):null;_loanEdit=l?l.id:null;
+  const x=l?.extra||{},d=l?loanDebt(l):null,cats=getNWCats(),accs=getAccounts();
+  const v={name:l?.name||'Bolån',lender:l?.lender||'',ref:l?.reference||'',debt:d?.value??'',debtDate:d?.date||todayLocal(),rate:l?.interest_pct??'',type:x.rate_type||'rörlig',fixed:x.fixed_until||'',change:x.rate_change_date||'',amort:l?.amortization??'',
+    account:x.pay_account||accs.find(a=>a.role==='mortgage')?.id||'',secured:l?.secured_by||(cats.some(c=>c.key==='apt')?'apt':''),netted:l?!!l.netted_in_assets:null,...(pre||{})};
+  // Ny: är tillgångens värde i förmögenheten mindre än skulden är lånet troligen redan avdraget
+  if(v.netted==null){const nw=getNWs().slice(-1)[0];v.netted=!!(nw&&v.secured&&+v.debt>0&&(+nw[v.secured]||0)<+v.debt)}
+  const g=k=>document.getElementById(k);
+  g('lm-title').textContent=l?'Ändra lån':'Nytt lån';
+  g('lm-hint').textContent=pre?'Ifyllt från låneutdraget. Kontrollera uppgifterna och spara.':'';
+  g('lm-name').value=v.name;g('lm-lender').value=v.lender;g('lm-ref').value=v.ref;g('lm-debt').value=v.debt;g('lm-debt-date').value=v.debtDate;
+  g('lm-rate').value=v.rate;g('lm-type').value=v.type==='bunden'?'bunden':'rörlig';g('lm-fixed').value=v.fixed;g('lm-change').value=v.change;g('lm-amort').value=v.amort;
+  g('lm-fixed-row').style.display=g('lm-type').value==='bunden'?'':'none';
+  g('lm-account').innerHTML='<option value="">—</option>'+accs.map(a=>`<option value="${esc(a.id)}"${a.id===v.account?' selected':''}>${esc(a.name)}</option>`).join('');
+  g('lm-secured').innerHTML='<option value="">Ingen</option>'+cats.map(c=>`<option value="${esc(c.key)}"${c.key===v.secured?' selected':''}>${esc(c.label)}</option>`).join('');
+  g('lm-netted').checked=!!v.netted;g('lm-delete').style.display=l?'':'none';
+  openOverlay('loan-modal');
+}
+const loanNum=v=>{const n=parseFloat(String(v??'').replace(/\s/g,'').replace(',','.'));return isFinite(n)?n:null};
+async function upsertLoan(row,debt,debtDate){
+  const sb=await sbClient();
+  let{error}=await sb.from('loans').upsert(row,{onConflict:'user_id,id'});if(error)throw error;
+  const old=_loans.find(x=>x.id===row.id),last=old?loanDebt(old):null;
+  if(debt!=null&&!(last&&last.value===debt&&last.date===debtDate)){
+    ({error}=await sb.from('loan_balances').upsert({loan_id:row.id,bal_date:debtDate,value:debt,deleted:false},{onConflict:'user_id,loan_id,bal_date'}));if(error)throw error;
+  }
+}
+async function saveLoan(){
+  if(!_sbUser){toast('Logga in under Inställningar → Databas för att spara lån','warn');return}
+  const g=k=>document.getElementById(k);
+  const name=g('lm-name').value.trim();if(!name){toast('Ange ett namn','warn');return}
+  const old=_loanEdit?_loans.find(x=>x.id===_loanEdit):null,type=g('lm-type').value;
+  const row={id:old?.id||'loan_'+Date.now().toString(36),name,lender:g('lm-lender').value.trim()||null,reference:g('lm-ref').value.replace(/\s/g,'')||null,
+    interest_pct:loanNum(g('lm-rate').value),amortization:loanNum(g('lm-amort').value),secured_by:g('lm-secured').value||null,netted_in_assets:g('lm-netted').checked,
+    extra:{...(old?.extra||{}),rate_type:type,fixed_until:type==='bunden'?g('lm-fixed').value||null:null,rate_change_date:g('lm-change').value||null,pay_account:g('lm-account').value||null},deleted:false};
+  try{await upsertLoan(row,loanNum(g('lm-debt').value),g('lm-debt-date').value||todayLocal());closeOverlay('loan-modal');toast('Lånet sparat ✓');await refreshLoans()}
+  catch(e){toast('Kunde inte spara: '+(e.message||e),'err')}
+}
+async function deleteLoan(){
+  const l=_loans.find(x=>x.id===_loanEdit);if(!l||!confirm(`Ta bort ${l.name}?`))return;
+  try{const sb=await sbClient();
+    let{error}=await sb.from('loans').update({deleted:true}).eq('id',l.id);if(error)throw error;
+    ({error}=await sb.from('loan_balances').update({deleted:true}).eq('loan_id',l.id));if(error)throw error;
+    closeOverlay('loan-modal');toast('Lånet borttaget');await refreshLoans();
+  }catch(e){toast('Kunde inte ta bort: '+(e.message||e),'err')}
+}
+// Låneutdrag/årsbesked (PDF eller bild) → AI läser ut varje lånedel
+async function readLoanDoc(input){
+  const file=input.files?.[0];input.value='';if(!file)return;
+  if(!aiReady()){toast('Logga in under Inställningar → Databas för att använda AI','warn');return}
+  if(!_sbUser){toast('Logga in för att spara lån','warn');return}
+  if(file.size>20*1024*1024){toast('Filen är för stor (max 20 MB)','warn');return}
+  toast('Läser låneutdraget…');
+  try{
+    const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=()=>rej(new Error('Kunde inte läsa filen'));r.readAsDataURL(file)});
+    const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+    const block=pdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:IMG_TYPES.includes(file.type)?file.type:'image/jpeg',data:b64}};
+    const S={type:'string'},N={type:'number'};
+    const schema={type:'object',additionalProperties:false,required:['loans'],properties:{loans:{type:'array',items:{type:'object',additionalProperties:false,
+      required:['name','lender','reference','debt','debt_date','interest_pct','rate_type','fixed_until','rate_change_date','amortization_monthly'],
+      properties:{name:S,lender:S,reference:S,debt:N,debt_date:S,interest_pct:N,rate_type:{type:'string',enum:['rörlig','bunden']},fixed_until:S,rate_change_date:S,amortization_monthly:N}}}}};
+    const prompt=`Detta är ett låneutdrag, årsbesked eller lånevillkor för ett bolån (eller annat lån). Lista varje lånedel för sig.
+- name: kort namn, t.ex. "Bolån" eller "Bolån del 2". lender: banken. reference: lånenumret (bara siffror).
+- debt: aktuell skuld för lånedelen i kr. debt_date: datumet skulden avser (YYYY-MM-DD).
+- interest_pct: nominell ränta i procent, t.ex. 3.25. rate_type: "bunden" eller "rörlig" (3 månaders = rörlig).
+- fixed_until: sista dag för bindningstiden (YYYY-MM-DD), tom sträng om rörlig.
+- rate_change_date: villkorsändringsdag/räntejusteringsdag (YYYY-MM-DD), tom sträng om den saknas.
+- amortization_monthly: amortering i kr per månad (räkna om om den anges per kvartal eller år), 0 om ingen.
+Saknas en uppgift: tom sträng eller 0. Hitta aldrig på värden.`;
+    const r=await callClaude({messages:[{role:'user',content:[block,{type:'text',text:prompt}]}],effort:'medium',max_tokens:8000,schema});
+    const found=(JSON.parse(r.text).loans||[]).filter(x=>x.debt>0||x.interest_pct>0);
+    if(!found.length){toast('Hittade inget lån i filen','warn');return}
+    const d=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')?s:'';
+    const pre=x=>({name:x.name||'Bolån',lender:x.lender||'',ref:String(x.reference||'').replace(/\D/g,''),debt:x.debt||'',debtDate:d(x.debt_date)||todayLocal(),rate:x.interest_pct||'',type:x.rate_type,fixed:d(x.fixed_until),change:d(x.rate_change_date),amort:x.amortization_monthly||''});
+    const byRef=x=>{const ref=String(x.reference||'').replace(/\D/g,'');return ref?_loans.find(l=>String(l.reference||'').replace(/\D/g,'')===ref):null};
+    if(found.length===1){openLoanModal(byRef(found[0])?.id,pre(found[0]));return}
+    const sum=found.map(x=>`${x.name}: ${fmt(x.debt)} kr, ${String(x.interest_pct).replace('.',',')} %`).join('\n');
+    if(!confirm(`Hittade ${found.length} lånedelar:\n${sum}\n\nSpara alla?`))return;
+    const acc=getAccounts().find(a=>a.role==='mortgage')?.id||null,nw=getNWs().slice(-1)[0];
+    for(const[i,x]of found.entries()){
+      const old=byRef(x),p=pre(x);
+      const name=old?.name||(found.filter(y=>y.name===x.name).length>1?`${p.name} (del ${i+1})`:p.name);
+      const secured=old?.secured_by||(getNWCats().some(c=>c.key==='apt')?'apt':null);
+      const totalDebt=found.reduce((s,y)=>s+(+y.debt||0),0);
+      await upsertLoan({id:old?.id||'loan_'+Date.now().toString(36)+i,name,lender:p.lender||null,reference:p.ref||null,interest_pct:x.interest_pct||null,amortization:x.amortization_monthly||null,secured_by:secured,
+        netted_in_assets:old?!!old.netted_in_assets:!!(nw&&secured&&(+nw[secured]||0)<totalDebt),
+        extra:{...(old?.extra||{}),rate_type:x.rate_type,fixed_until:x.rate_type==='bunden'?p.fixed||null:null,rate_change_date:p.change||null,pay_account:old?.extra?.pay_account||acc},deleted:false},x.debt||null,p.debtDate);
+    }
+    toast(`${found.length} lånedelar sparade ✓`);await refreshLoans();
+  }catch(e){toast('Kunde inte läsa låneutdraget: '+(e.message||e),'err')}
+}
+
+// ═══════════════════════════════════════════
 // DONUT SVG
 // ═══════════════════════════════════════════
 function makeDonut(slices,total,cx=70,cy=70,r=54,sw=9){
@@ -2874,6 +3035,7 @@ function initNWChartEvents(){
 }
 
 function renderNetWorth(){
+  if(_sbUser&&Date.now()-_loansAt>60e3)refreshLoans(); // lånen hämtas i bakgrunden, högst en gång i minuten
   const nws=getNWs();
   const goal=getGoal();
   const latest=nws[nws.length-1];
@@ -2987,6 +3149,9 @@ function renderNetWorth(){
     </div>`;
   });
   html+=`</div>`;
+
+  // ── 4b. LÅN & SKULDER ──
+  html+=loansHtml(latest);
 
   // ── 5. MÅNADSANALYS ──
   if(nws.length>=2){
@@ -4444,7 +4609,7 @@ function sbSchedule(k){
 }
 // Synka när appen öppnas och när den kommer tillbaka i förgrunden
 if(sbCfg().url){
-  sbClient().then(()=>{if(_sbUser&&ld('sb_auto',true)!==false)sbSync({silent:true})}).catch(e=>sbStatus('Fel: '+e.message));
+  sbClient().then(()=>{if(_sbUser)refreshLoans();if(_sbUser&&ld('sb_auto',true)!==false)sbSync({silent:true})}).catch(e=>sbStatus('Fel: '+e.message));
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')sbSchedule()});
 
@@ -5594,6 +5759,8 @@ function buildCtx(){
   // Enskilda transaktioner hämtas med verktygen search_transactions/summarize_spending i stället för att allt skickas med
   const rec=detectRecurring(state.month);
   const ins=getInsights()[state.month];
+  // Lån: skuld, ränta, villkor (från Supabase, cachat lokalt)
+  const loanSection=_loans.length?`\n\nLÅN:\n${_loans.map(l=>{const d=loanDebt(l),x=l.extra||{},im=loanInterestMonth(l);return`- ${l.name}${l.lender?` (${l.lender})`:''}: skuld ${d?Math.round(d.value)+' kr ('+d.date+')':'okänd'}, ränta ${l.interest_pct!=null?l.interest_pct+' %':'okänd'}${x.rate_type?' '+x.rate_type:''}${im!=null?` ≈ ${Math.round(im)} kr/mån`:''}, amortering ${l.amortization?Math.round(l.amortization)+' kr/mån':'okänd'}${x.fixed_until?`, bunden till ${x.fixed_until}`:''}${x.rate_change_date?`, villkorsändring ${x.rate_change_date}`:''}${l.netted_in_assets?' (redan avdragen i förmögenheten)':''}`}).join('\n')}`:'';
   const merchantSection=topMerchants.length?`\n\nSTÖRSTA BUTIKER/MOTTAGARE SENASTE 12 MÅN:\n${topMerchants.join('\n')}`:'';
   const monthSection=(rec.length?`\n\nÅTERKOMMANDE KOSTNADER (typiskt/mån):\n${rec.map(r=>`- ${r.name} (${r.cat}): ${r.typical} kr${r.status==='dyrare'?` — nu ${r.current} kr (dyrare)`:''}`).join('\n')}`:'')+
     (ins?`\n\nSENASTE AI-ANALYS AV ${mLabel(state.month).toUpperCase()}: ${ins.d.headline} — ${ins.d.summary}`:'');
@@ -5643,7 +5810,7 @@ FÖRMÖGENHETSUTVECKLING:
 ${nwHistory||'Ingen data'}
 ${ln?`Senaste: Total ${Math.round(ln.total)} kr | ${getNWCats().filter(c=>ln[c.key]>0).map(c=>`${c.label}: ${Math.round(ln[c.key])}`).join(' | ')}`:''}
 
-MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${merchantSection}`;
+MÅL: ${Math.round(goal)} kr${ln?` — ${Math.round(ln.total/goal*100)}% uppnått`:''}${loanSection}${merchantSection}`;
   const live=`${memSection}${coachExtraCtx()}${monthSection}`.replace(/^\n+/,'');
   return{fixed,live};
 }

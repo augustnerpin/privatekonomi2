@@ -236,7 +236,9 @@ function loanView(l: Obj, s: Obj, withHistory = false) {
   const o: Obj = { id: l.id, name: l.name, lender: l.lender || null, reference: l.reference || null,
     interest_pct: l.interest_pct != null ? Number(l.interest_pct) : null, amortization_monthly: l.amortization != null ? Number(l.amortization) : null,
     secured_by: l.secured_by ? { key: l.secured_by, label: s.cats_nw.find((x: Obj) => x.key === l.secured_by)?.label || l.secured_by } : null,
-    netted_in_assets: !!l.netted_in_assets, balance: last ? { value: last.value, date: last.date } : null };
+    netted_in_assets: !!l.netted_in_assets, balance: last ? { value: last.value, date: last.date } : null,
+    rate_type: l.extra?.rate_type || null, fixed_until: l.extra?.fixed_until || null, rate_change_date: l.extra?.rate_change_date || null,
+    pay_account: l.extra?.pay_account || null, ...(l.extra?.last_interest ? { last_interest: l.extra.last_interest } : {}) };
   if (last && o.interest_pct != null) o.interest_monthly_estimate = round((last.value * o.interest_pct) / 100 / 12);
   if (withHistory) o.history = l.history;
   return o;
@@ -793,11 +795,15 @@ export const TOOLS: Tool[] = [
         secured_by: { type: 'string', description: 'Förmögenhetskategori (nyckel eller namn). Tom sträng tar bort kopplingen.' },
         netted_in_assets: { type: 'boolean' },
         balance: { type: 'number', minimum: 0, description: 'Aktuell skuld i kr' }, balance_date: S.date,
+        rate_type: { type: 'string', enum: ['rörlig', 'bunden'], description: 'Rörlig eller bunden ränta' },
+        fixed_until: { ...S.date, description: 'Bunden ränta till (YYYY-MM-DD)' },
+        rate_change_date: { ...S.date, description: 'Villkorsändringsdag / nästa ränteändring (YYYY-MM-DD)' },
+        pay_account: { type: 'string', description: 'Kontot som lånet dras från (namn eller id), t.ex. Bolånekonto' },
       },
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     async run(c, a) {
-      const s = await loadState(c, ['cats_nw']);
+      const s = await loadState(c, ['cats_nw', 'accounts']);
       const loans = await loadLoans(c);
       if (loans === null) throw new UserError(NEEDS_MIGRATION);
       let l: Obj;
@@ -818,6 +824,13 @@ export const TOOLS: Tool[] = [
       if (a.interest_pct != null) l.interest_pct = a.interest_pct;
       if (a.amortization != null) l.amortization = a.amortization;
       if (a.netted_in_assets != null) l.netted_in_assets = a.netted_in_assets;
+      // Villkor i extra (samma fält som appens lånevy och nattens påminnelser använder)
+      for (const k of ['rate_type', 'fixed_until', 'rate_change_date']) if (a[k] != null) l.extra = { ...(l.extra || {}), [k]: a[k] || null };
+      if (a.pay_account != null) {
+        const v = String(a.pay_account).trim(); const id = v ? accountId(s, v) : null;
+        if (v && !id) throw new UserError(unknownAccount(s, v));
+        l.extra = { ...(l.extra || {}), pay_account: id };
+      }
       if (a.secured_by != null) {
         const v = String(a.secured_by).trim().toLowerCase();
         const cat = v ? s.cats_nw.find((x: Obj) => x.key.toLowerCase() === v || x.label.toLowerCase() === v) : null;

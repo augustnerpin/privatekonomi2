@@ -8,7 +8,7 @@ const BIG = 1500; // köp från och med detta belopp nämns var för sig
 
 // in: newRows = nya bankrader (som i transactions), spent = {kategori: förbrukat i perioden}, budgets = cat_budgets,
 //     period = {id, start, end}, today = 'YYYY-MM-DD', conns = bankkopplingar, sent = redan skickade nycklar
-export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string> }) {
+export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[] }) {
   const items: Obj[] = [];
   const add = (key: string, line: string, kind: string) => { if (!p.sent.has(key)) items.push({ key, line, kind }); };
   const rows = p.newRows.filter((r) => !r.deleted);
@@ -36,10 +36,21 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
     else if (days <= 3) add(`samtycke:${c.id}:3`, `🏦 ${c.aspsp}: samtycket går ut om ${days} dagar – förnya i inställningar`, 'consent');
     else if (days <= 14) add(`samtycke:${c.id}:14`, `🏦 ${c.aspsp}: samtycket går ut om ${days} dagar`, 'consent');
   }
+  // Bolånet: villkorsändringsdag eller slut på bindningstiden om 30 respektive 7 dagar
+  for (const l of p.loans || []) {
+    const x = l.extra || {};
+    for (const [date, what] of [[x.rate_change_date, 'villkorsändring'], [x.rate_type === 'bunden' ? x.fixed_until : null, 'bindningstiden går ut']] as [string, string][]) {
+      if (!date) continue;
+      const days = Math.round(dayDiff(p.today, date)) * (date >= p.today ? 1 : -1);
+      if (days < 0 || days > 30) continue;
+      const step = days <= 7 ? 7 : 30;
+      add(`lan:${l.id}:${date}:${step}`, `🏠 ${l.name}: ${what} ${date} (om ${days} ${days === 1 ? 'dag' : 'dagar'}) – dags att jämföra räntor`, 'loan');
+    }
+  }
   if (!items.length) return null;
-  const order = ['salary', 'budget', 'consent', 'big', 'day', 'review'];
+  const order = ['salary', 'budget', 'loan', 'consent', 'big', 'day', 'review'];
   items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
-  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget') ? 'Koll på budgeten' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
+  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget') ? 'Koll på budgeten' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
   const lines = items.slice(0, 4).map((i) => i.line);
   if (items.length > 4) lines.push(`+ ${items.length - 4} till i appen`);
   return { title, body: lines.join('\n'), keys: items.map((i) => i.key) };

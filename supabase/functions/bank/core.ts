@@ -163,3 +163,27 @@ export function learnRules(s: Obj, groups: Obj[]) {
 
 // Från vilket datum transaktioner hämtas: överlapp med förra hämtningen, annars ett år bakåt
 export const fetchFrom = (lastDate?: string) => (lastDate ? addDays(lastDate, -7) : addDays(today(), -365));
+
+// Bolånet: dragningar från ett konto med rollen mortgage. "AMORTERING" sänker skulden, "RÄNTA" sparas
+// som senaste räntekostnad. Lånet hittas via extra.pay_account (eller det enda lånet). Returnerar
+// { balances: [{loan_id, bal_date, value}], interest: {loan_id: {date, amount}} }.
+export function loanUpdates(rows: Obj[], loans: Obj[], accOf: (id: string) => Obj | undefined) {
+  const balances: Obj[] = []; const interest: Obj = {};
+  const last: Obj = {};
+  for (const l of loans) { const h = [...(l.history || [])].sort((a, b) => a.date.localeCompare(b.date)); last[l.id] = h[h.length - 1] || null; }
+  const sorted = [...rows].sort((a, b) => a.tx_date.localeCompare(b.tx_date));
+  for (const r of sorted) {
+    if (accOf(r.account)?.role !== 'mortgage' || r.deleted) continue;
+    const raw = r.type === 'income' || r.type === 'transfer' ? Number(r.amount) : -Number(r.amount);
+    if (!(raw < 0)) continue;
+    const loan = loans.find((l) => l.extra?.pay_account === r.account) || (loans.length === 1 ? loans[0] : null);
+    if (!loan) continue;
+    const desc = String(r.description || '');
+    if (/amort/i.test(desc)) {
+      const prev = last[loan.id]; if (!prev || prev.date > r.tx_date) continue; // ingen känd skuld före dragningen
+      const next = { date: r.tx_date, value: Math.max(0, Math.round((prev.value + raw) * 100) / 100) };
+      balances.push({ loan_id: loan.id, bal_date: next.date, value: next.value }); last[loan.id] = next;
+    } else if (/r[äa]nt/i.test(desc)) interest[loan.id] = { date: r.tx_date, amount: -raw };
+  }
+  return { balances, interest };
+}

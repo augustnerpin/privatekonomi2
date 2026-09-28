@@ -55,3 +55,11 @@ test('bulk_update_transactions: rader i borttagen kategori kan få nytt konto', 
   assert.equal(w.txRow(2).account, 'amex');
   assert.equal(w.txRow(2).category, 'Mat (Butik)');
 });
+
+test('set_loan/get_loans: räntetyp, bindningstid, villkorsändringsdag och betalkonto', async () => {
+  const w = await world({ loans: [], loan_balances: [] });
+  await w.call('set_loan', { name: 'Bolån', interest_pct: 3.2, rate_type: 'bunden', fixed_until: '2027-03-01', rate_change_date: '2026-12-01', pay_account: 'Lönekonto', balance: 1800000, balance_date: '2026-09-01' });
+  const l = (await w.call('get_loans')).loans[0];
+  assert.equal(l.rate_type, 'bunden'); assert.equal(l.fixed_until, '2027-03-01'); assert.equal(l.rate_change_date, '2026-12-01'); assert.equal(l.pay_account, 'lonekonto');
+  assert.match((await w.call('set_loan', { loan: 'Bolån', pay_account: 'Finns inte' })).err, /Okänt konto/);
+});

@@ -10,7 +10,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, periodForDate, periodRange } from '../_shared/finance.ts';
 import { sendPush } from '../_shared/push.ts';
 import { buildDigest } from './notify.ts';
-import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals } from './core.ts';
+import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, markSavingsWithdrawals, loanUpdates } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
 const EB = 'https://api.enablebanking.com';
@@ -127,6 +127,23 @@ async function loadKey(uid: string, key: string) {
   const r = await must<Obj[]>(db.from('user_state').select('value').eq('user_id', uid).eq('key', key).eq('deleted', false));
   return r[0]?.value ?? null;
 }
+// Lån med skuldhistorik (tabellerna loans + loan_balances, samma som appen och MCP-servern)
+async function loadLoansFor(uid: string) {
+  const loans = await must<Obj[]>(db.from('loans').select('*').eq('user_id', uid).eq('deleted', false));
+  if (!loans.length) return [];
+  const bal = await pages(() => db.from('loan_balances').select('loan_id,bal_date,value').eq('user_id', uid).eq('deleted', false).order('bal_date'));
+  return loans.map((l) => ({ ...l, history: bal.filter((b) => b.loan_id === l.id).map((b) => ({ date: b.bal_date, value: Number(b.value) })) }));
+}
+// Amortering från bolånekontot sänker skulden; räntedragningen sparas som senaste räntekostnad
+async function applyLoanUpdates(uid: string, rows: Obj[], s: Obj) {
+  const loans = await loadLoansFor(uid); if (!loans.length) return;
+  const u = loanUpdates(rows, loans, (id) => s.accounts.find((x: Obj) => x.id === id));
+  if (u.balances.length) await must(db.from('loan_balances').upsert(u.balances.map((b) => ({ ...b, user_id: uid, deleted: false })), { onConflict: 'user_id,loan_id,bal_date' }));
+  for (const [id, last_interest] of Object.entries(u.interest)) {
+    const l = loans.find((x) => x.id === id);
+    await must(db.from('loans').update({ extra: { ...(l?.extra || {}), last_interest } }).eq('user_id', uid).eq('id', id));
+  }
+}
 // En hämtning i taget per användare (nattjobb och "Hämta nu" kan annars lägga in samma rader två gånger)
 const lock = async (uid: string) => (await db.rpc('bank_try_lock', { p_user: uid, p_secs: 300 })).data === true;
 const unlock = (uid: string) => db.rpc('bank_unlock', { p_user: uid });
@@ -186,6 +203,7 @@ async function syncLocked(uid: string, psu: Psu) {
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
     added = rows.length; review = rows.filter((r) => r.extra.review).length; saved = rows;
     learned = learnRules(s, groups);
+    await applyLoanUpdates(uid, rows, s).catch((e) => console.error('Lån:', e));
   }
   // 2. Kontolista och regler: läses om och slås ihop, så att ändringar gjorda i appen under tiden inte skrivs över
   if (newAccounts.length || Object.keys(balances).length) {
@@ -243,7 +261,8 @@ async function notify(uid: string, r: Obj) {
   const spent: Obj = {}; for (const x of exp) spent[x.category] = (spent[x.category] || 0) + Number(x.amount);
   const conns = await must<Obj[]>(db.from('bank_connections').select('id,aspsp,valid_until,status').eq('user_id', uid).in('status', ['active', 'expired']));
   // Vilka av nattens händelser har redan skickats? (bara de aktuella nycklarna, så att listan aldrig kapas)
-  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns };
+  const loans = await loadLoansFor(uid).catch(() => []);
+  const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans };
   const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
   const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
   const d = buildDigest({ ...input, sent });
