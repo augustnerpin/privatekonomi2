@@ -161,3 +161,21 @@ test('AMEX väntande: överföring till kortkontot räknas som utgift, sparuttag
   const g2 = await categorize({ ...S3, cats_exp: S.cats_exp }, rows.slice(0, 1), (id) => acc[id], async () => []);
   assert.notEqual(g2[0].cat, 'AMEX (väntande)');
 });
+
+test('bolån i lånedelar (SEB "LÅN <nr>"): ränta beräknas, resten amorterar rätt lånedel', async () => {
+  const { loanUpdates } = await import('../functions/bank/core.ts');
+  const acc = { bolan: { role: 'mortgage' } };
+  const loans = [
+    { id: 'A', name: 'Del 1', reference: '48500366', interest_pct: 3.0, extra: { pay_account: 'bolan' }, history: [{ date: '2026-09-01', value: 800000 }] },
+    { id: 'B', name: 'Del 2', reference: '48500358', interest_pct: 3.6, extra: { pay_account: 'bolan' }, history: [{ date: '2026-09-01', value: 700000 }] },
+  ];
+  const rows = [
+    { account: 'bolan', type: 'transfer', amount: -2596, description: 'LÅN 48500366', tx_date: '2026-09-28' },
+    { account: 'bolan', type: 'transfer', amount: -2659, description: 'LÅN 48500358', tx_date: '2026-09-28' },
+    { account: 'bolan', type: 'transfer', amount: -770, description: 'LÅN 50248267', tx_date: '2026-09-28' }, // okänd lånedel
+  ];
+  const u = loanUpdates(rows, loans, (id) => acc[id]);
+  // A: ränta 800 000 × 3 % / 12 = 2 000 → amortering 596; B: 700 000 × 3,6 % / 12 = 2 100 → 559
+  assert.deepEqual(u.balances, [{ loan_id: 'A', bal_date: '2026-09-28', value: 799404 }, { loan_id: 'B', bal_date: '2026-09-28', value: 699441 }]);
+  assert.deepEqual(u.interest.A, { date: '2026-09-28', amount: 2000, estimated: true });
+});

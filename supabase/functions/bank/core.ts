@@ -181,9 +181,21 @@ export function loanUpdates(rows: Obj[], loans: Obj[], accOf: (id: string) => Ob
     if (accOf(r.account)?.role !== 'mortgage' || r.deleted) continue;
     const raw = r.type === 'income' || r.type === 'transfer' ? Number(r.amount) : -Number(r.amount);
     if (!(raw < 0)) continue;
-    const loan = loans.find((l) => l.extra?.pay_account === r.account) || (loans.length === 1 ? loans[0] : null);
-    if (!loan) continue;
     const desc = String(r.description || '');
+    // Lånedelen: lånenumret i texten (SEB: "LÅN 48500366"), annars lånet som dras från kontot eller det enda lånet
+    const nums = desc.match(/\d{6,}/g) || [];
+    const byRef = loans.find((l) => l.reference && nums.includes(String(l.reference).replace(/\D/g, '')));
+    const loan = byRef || loans.find((l) => l.extra?.pay_account === r.account && loans.filter((x) => x.extra?.pay_account === r.account).length === 1) || (loans.length === 1 ? loans[0] : null);
+    if (!loan) continue;
+    if (byRef && !/amort|r[äa]nt/i.test(desc)) {
+      // Ränta + amortering i en dragning: räntan räknas från skulden och räntesatsen, resten är amortering
+      const prev = last[loan.id]; if (!prev || prev.date > r.tx_date || loan.interest_pct == null) continue;
+      const int = Math.round((prev.value * Number(loan.interest_pct)) / 100 / 12);
+      const amort = Math.max(0, -raw - int);
+      interest[loan.id] = { date: r.tx_date, amount: Math.min(int, -raw), estimated: true };
+      if (amort > 0) { const next = { date: r.tx_date, value: Math.max(0, Math.round((prev.value - amort) * 100) / 100) }; balances.push({ loan_id: loan.id, bal_date: next.date, value: next.value }); last[loan.id] = next; }
+      continue;
+    }
     if (/amort/i.test(desc)) {
       const prev = last[loan.id]; if (!prev || prev.date > r.tx_date) continue; // ingen känd skuld före dragningen
       const next = { date: r.tx_date, value: Math.max(0, Math.round((prev.value + raw) * 100) / 100) };
