@@ -270,8 +270,10 @@ function transferLike(r: Obj, owner: string) {
   const d = String(r.description || '').toUpperCase();
   return !!descNumber(r.description) || (owner.length >= 5 && d.startsWith(owner.slice(0, Math.min(owner.length, 12))));
 }
-// Par av egna överföringar: befintliga transfer_pair_id först, sedan samma belopp (motsatt tecken) på olika konton inom 3 dagar
-export function pairTransfers(rows: Obj[], owner = '') {
+// Par av egna överföringar: befintliga transfer_pair_id först, sedan samma belopp (motsatt tecken) på olika konton inom 3 dagar.
+// Kontot som betalar kortet (role card_payment, AMEX-kontot) får bara pengar från egna konton: en insättning där paras
+// även med en utgående rad som inte ser ut som en överföring (eget meddelande, t.ex. "VIN FARMOR"), om den är ensam om beloppet.
+export function pairTransfers(rows: Obj[], owner = '', accounts: Obj[] = []) {
   const pair = new Map<number, Obj>();
   const byId = new Map(rows.map((r) => [Number(r.id), r]));
   for (const r of rows) { const p = byId.get(Number(r.extra?.transfer_pair_id)); if (p && !r.deleted && !p.deleted) { pair.set(Number(r.id), p); pair.set(Number(p.id), r); } }
@@ -280,6 +282,13 @@ export function pairTransfers(rows: Obj[], owner = '') {
     if (pair.has(Number(r.id))) continue;
     const c = Math.round(rawOf(r) * 100);
     const hits = cand.filter((o) => o !== r && !pair.has(Number(o.id)) && o.account !== r.account && Math.round(rawOf(o) * 100) === -c && dayDiff(o.tx_date, r.tx_date) <= 3);
+    if (hits.length === 1) { pair.set(Number(r.id), hits[0]); pair.set(Number(hits[0].id), r); }
+  }
+  const cardPay = new Set(accounts.filter((a) => a.role === 'card_payment').map((a) => a.id));
+  const free = (r: Obj) => !pair.has(Number(r.id)) && !r.deleted && !r.extra?.parent_id && !r.extra?.split_into;
+  for (const r of rows.filter((x) => free(x) && cardPay.has(x.account) && rawOf(x) > 0 && transferLike(x, owner))) {
+    const c = Math.round(rawOf(r) * 100);
+    const hits = rows.filter((o) => o !== r && free(o) && o.account !== r.account && !cardPay.has(o.account) && Math.round(rawOf(o) * 100) === -c && dayDiff(o.tx_date, r.tx_date) <= 3);
     if (hits.length === 1) { pair.set(Number(r.id), hits[0]); pair.set(Number(hits[0].id), r); }
   }
   return pair;
@@ -301,7 +310,7 @@ export function applySavingsModel(rows: Obj[], s: Obj) {
   const accOf = (id: string) => accounts.find((a) => a.id === id);
   const sav = (s.cats_sav || DEF.cats_sav) as string[];
   const savCat = (a: Obj) => (a.sav_cat && sav.includes(a.sav_cat) ? a.sav_cat : sav.includes('Annat') ? 'Annat' : sav[0]);
-  const pair = pairTransfers(rows, owner);
+  const pair = pairTransfers(rows, owner, accounts);
   const changes: Obj[] = [];
   for (const r of rows) {
     if (r.deleted || r.extra?.parent_id || r.extra?.split_into || (r.type === 'savings' && r.category === 'Amortering')) continue;
@@ -312,7 +321,13 @@ export function applySavingsModel(rows: Obj[], s: Obj) {
     const neutral = { type: 'transfer', category: OWN_TRF, amount: raw };
     if (cx === 'passage') { after = neutral; why = `${X.name} är ett passagekonto (alltid neutralt)`; }
     else if (cy === 'passage') continue;                                          // bolånebetalning: utgift/uppdelning som idag
-    else if (raw < 0 && Y.role === 'card_payment') continue;                      // AMEX (väntande)
+    else if (raw < 0 && Y.role === 'card_payment') {
+      // Pengar till kontot som betalar kortet (AMEX-kontot) = kortköp som väntar på fakturan: AMEX (väntande), oavsett
+      // vad meddelandet säger (motparten avgörs av paret eller kontonumret). Redan avräknade (Kreditkortsbetalning) rörs inte.
+      if (X.role === 'card_payment' || (r.type === 'transfer' && r.category === 'Kreditkortsbetalning')) continue;
+      if (!((s.cats_exp || DEF.cats_exp) as string[]).includes(PENDING_CARD_CAT)) continue;
+      after = { type: 'expense', category: PENDING_CARD_CAT, amount: -raw }; why = `till ${Y.name}: kortköp som väntar på fakturan`;
+    }
     else if (cx === 'regular' && cy === 'saving') { after = { type: 'savings', category: savCat(Y), amount: -raw }; why = `${raw < 0 ? 'till' : 'från'} sparkontot ${Y.name}`; }
     else if (cx === 'saving' && cy === 'regular') {
       const regularLegInData = partner && partner.account === Y.id;
@@ -325,7 +340,7 @@ export function applySavingsModel(rows: Obj[], s: Obj) {
     if (same && !needPair) continue;
     changes.push({ id: Number(r.id), month: r.month, tx_date: r.tx_date, account: r.account, description: r.description,
       before: { type: r.type, category: r.category, amount: Number(r.amount) }, after: same ? { type: r.type, category: r.category, amount: Number(r.amount) } : after,
-      ...(needPair ? { pair_id: pid } : {}), counterparty: Y.id, why });
+      ...(needPair ? { pair_id: pid } : {}), ...(!same && r.extra?.review ? { clear_review: true } : {}), counterparty: Y.id, why });
   }
   return changes;
 }

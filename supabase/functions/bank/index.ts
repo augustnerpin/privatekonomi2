@@ -248,7 +248,8 @@ async function syncLocked(uid: string, psu: Psu) {
     for (const c of applySavingsModel([...near, ...rows], s)) {
       const target = newIds.has(c.id) ? rows.find((x) => Number(x.id) === c.id) : near.find((x) => Number(x.id) === c.id);
       if (!target) continue;
-      Object.assign(target, { type: c.after.type, category: c.after.category, amount: c.after.amount, extra: { ...(target.extra || {}), ...(c.pair_id ? { transfer_pair_id: c.pair_id } : {}) } });
+      const { review: _r, ...kept } = target.extra || {};
+      Object.assign(target, { type: c.after.type, category: c.after.category, amount: c.after.amount, extra: { ...(c.clear_review ? kept : target.extra || {}), ...(c.pair_id ? { transfer_pair_id: c.pair_id } : {}) } });
       if (!newIds.has(c.id)) existingUpdates.push(target);
     }
     // AMEX (väntande): är kortutdraget för perioden redan importerat har dess köp redan räknats → betalningen är en kortbetalning
@@ -257,7 +258,7 @@ async function syncLocked(uid: string, psu: Psu) {
     if (pendMonths.length && cardIds.length) {
       const stmt = await must<Obj[]>(db.from('transactions').select('month').eq('user_id', uid).eq('deleted', false).eq('source', 'import').in('account', cardIds).in('month', pendMonths));
       const trf = (s.cats_trf || DEF.cats_trf).includes('Kreditkortsbetalning') ? 'Kreditkortsbetalning' : (s.cats_trf || DEF.cats_trf)[0];
-      settlePendingCard(rows, stmt.map((x) => x.month), trf);
+      settlePendingCard([...rows, ...existingUpdates], stmt.map((x) => x.month), trf);
     }
     for (let i = 0; i < rows.length; i += 500) await must(db.from('transactions').insert(rows.slice(i, i + 500)));
     // Befintliga rader som blev andra sidan av en ny överföring (t.ex. sparandet räknas nu på lönekontots sida)
@@ -410,7 +411,8 @@ async function savingsModelRun(uid: string, s: Obj, dry: boolean, assume: Obj) {
   await must(db.from('backups').insert({ user_id: uid, label: 'sparmodell', data: { rows: before, assume, changes } }));
   for (const id of touched) {
     const r = rows.find((t) => Number(t.id) === id)!, c = changes.find((x: Obj) => x.id === id);
-    const patch: Obj = { extra: { ...(r.extra || {}), ...(c?.pair_id ? { transfer_pair_id: c.pair_id } : {}) } };
+    const { review: _r, ...kept } = r.extra || {};
+    const patch: Obj = { extra: { ...(c?.clear_review ? kept : r.extra || {}), ...(c?.pair_id ? { transfer_pair_id: c.pair_id } : {}) } };
     if (c) Object.assign(patch, { type: c.after.type, category: c.after.category, amount: c.after.amount });
     await must(db.from('transactions').update(patch).eq('user_id', uid).eq('id', id));
   }

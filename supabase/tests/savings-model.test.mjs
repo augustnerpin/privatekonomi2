@@ -87,3 +87,30 @@ test('rader utan motpart (äldre sparrader utan text) ändras inte; tabellen per
   assert.deepEqual(applySavingsModel(rows, S), []);
   const t = savingsByPeriod(rows, []); assert.deepEqual(t, [{ period: '2026-10', before: 7000, after: 7000, diff: 0 }]);
 });
+
+test('6: överföring till AMEX-kontot med eget meddelande ("VIN FARMOR") blir AMEX (väntande), även i appen', async () => {
+  const pay = () => [
+    row('lonekonto', 'expense', 'Bjuda andra/presenter', 375, '2026-09-29', 'VIN FARMOR 122657943444', { review: true }), // AI:ns gissning
+    row('amexk', 'transfer', 'Egen överföring', 375, '2026-09-29', 'VIN FARMOR'),
+    row('lonekonto', 'transfer', 'Kreditkortsbetalning', -500, '2026-09-10', 'VIN'),                                     // redan avräknad: rörs inte
+    row('amexk', 'transfer', 'Egen överföring', 500, '2026-09-10', 'VIN'),
+  ];
+  const rows = pay();
+  const ch = applySavingsModel(rows, S);
+  const c = ch.find((x) => x.id === rows[0].id);
+  assert.deepEqual(c.after, { type: 'expense', category: 'AMEX (väntande)', amount: 375 });
+  assert.equal(c.clear_review, true);
+  assert.equal(ch.find((x) => x.id === rows[2].id)?.after?.category ?? 'Kreditkortsbetalning', 'Kreditkortsbetalning');
+  assert.equal(ch.find((x) => x.id === rows[1].id)?.after?.type ?? 'transfer', 'transfer'); // AMEX-kontots sida neutral
+  // Appens egen kod ger samma
+  const { appFns } = await import('./app.mjs');
+  const descNumber = (d) => { const m = String(d || '').replace(/\s/g, '').match(/^\d{6,}$/); return m ? m[0] : null; };
+  const app = appFns(['accClassApp', 'rawOfTx', 'applySavingsModelApp'], {
+    getAccounts: () => S.accounts, getOwnerName: () => S.owner_name, getSavCats: () => S.cats_sav, getExpCats: () => S.cats_exp, descNumber,
+    parseLocalDate: (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }, AMORT_CAT: 'Amortering', PENDING_CARD_CAT: 'AMEX (väntande)',
+  });
+  const txs = pay().map(({ category, tx_date, description, extra, ...r }) => ({ ...r, cat: category, date: tx_date, desc: description, ...extra }));
+  const a = app.applySavingsModelApp(txs).find((x) => x.id === txs[0].id);
+  assert.deepEqual(a.after, { type: 'expense', cat: 'AMEX (väntande)', amount: 375 });
+  assert.equal(app.applySavingsModelApp(txs).find((x) => x.id === txs[2].id), undefined);
+});

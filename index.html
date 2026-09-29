@@ -6180,7 +6180,7 @@ function saveImport(){
   {const imp=txs.filter(t=>t.importId===impId).map(t=>t.date).sort();
     if(imp.length){const lo=ymdOf(new Date(parseLocalDate(imp[0]).getTime()-5*864e5)),hi=ymdOf(new Date(parseLocalDate(imp[imp.length-1]).getTime()+5*864e5));
       const win=txs.filter(t=>t.date>=lo&&t.date<=hi);
-      applySavingsModelApp(win).forEach(c=>{const t=txs.find(x=>x.id===c.id);if(!t)return;t.type=c.after.type;t.cat=c.after.cat;t.amount=c.after.amount;if(c.pair)t.transfer_pair_id=c.pair})}}
+      applySavingsModelApp(win).forEach(c=>{const t=txs.find(x=>x.id===c.id);if(!t)return;if(t.type!==c.after.type||t.cat!==c.after.cat)delete t.review;t.type=c.after.type;t.cat=c.after.cat;t.amount=c.after.amount;if(c.pair)t.transfer_pair_id=c.pair})}}
   // Kortfakturan för perioden: de väntande AMEX-raderna ersätts av fakturans köp (blir kortbetalningar)
   const settled=[];
   const cardImport=on.some(g=>g.rows.some(r=>getAccounts().find(a=>a.id===r.account)?.kind==='card'));
@@ -6902,6 +6902,11 @@ function applySavingsModelApp(txs){
   cand.forEach(t=>{if(pair.has(t.id))return;const c=Math.round(rawOfTx(t)*100);
     const h=cand.filter(o=>o!==t&&!pair.has(o.id)&&o.account!==t.account&&Math.round(rawOfTx(o)*100)===-c&&Math.abs(parseLocalDate(o.date)-parseLocalDate(t.date))<=3*864e5);
     if(h.length===1){pair.set(t.id,h[0]);pair.set(h[0].id,t)}});
+  // AMEX-kontot (card_payment) får bara pengar från egna konton: insättningen paras även med en utgående rad med eget meddelande
+  const cardPay=new Set(accs.filter(a=>a.role==='card_payment').map(a=>a.id)),free=t=>!pair.has(t.id)&&!skip(t);
+  txs.filter(t=>free(t)&&cardPay.has(t.account)&&rawOfTx(t)>0&&like(t)).forEach(t=>{const c=Math.round(rawOfTx(t)*100);
+    const h=txs.filter(o=>o!==t&&free(o)&&o.account!==t.account&&!cardPay.has(o.account)&&Math.round(rawOfTx(o)*100)===-c&&Math.abs(parseLocalDate(o.date)-parseLocalDate(t.date))<=3*864e5);
+    if(h.length===1){pair.set(t.id,h[0]);pair.set(h[0].id,t)}});
   const cp=(t,p)=>{const raw=rawOfTx(t),ex=raw<0?t.to_account:t.from_account;if(ex)return accs.find(a=>a.id===ex)||null;if(p)return accs.find(a=>a.id===p.account)||null;
     const n=descNumber(t.desc);if(n){const a=accs.find(a=>a.id!==t.account&&a.number&&String(a.number).replace(/\D/g,'')===n);if(a)return a}
     const d=String(t.desc||'').toUpperCase();return accs.find(a=>a.id!==t.account&&(a.match||[]).some(m=>m&&d.includes(String(m).toUpperCase())&&!d.startsWith('K*')))||null};
@@ -6910,7 +6915,9 @@ function applySavingsModelApp(txs){
     if(skip(t)||(t.type==='savings'&&t.cat===AMORT_CAT))return;
     const X=accs.find(a=>a.id===t.account),p=pair.get(t.id)||null,Y=cp(t,p);if(!X||!Y)return;
     const raw=rawOfTx(t),cx=accClassApp(X),cy=accClassApp(Y),neutral={type:'transfer',cat:'Egen överföring',amount:raw};let after;
-    if(cx==='passage')after=neutral;else if(cy==='passage')return;else if(raw<0&&Y.role==='card_payment')return;
+    if(cx==='passage')after=neutral;else if(cy==='passage')return;
+    // Pengar till AMEX-kontot = AMEX (väntande), oavsett meddelandet; redan avräknade (Kreditkortsbetalning) rörs inte
+    else if(raw<0&&Y.role==='card_payment'){if(X.role==='card_payment'||(t.type==='transfer'&&t.cat==='Kreditkortsbetalning')||!getExpCats().includes(PENDING_CARD_CAT))return;after={type:'expense',cat:PENDING_CARD_CAT,amount:-raw}}
     else if(cx==='regular'&&cy==='saving')after={type:'savings',cat:savCat(Y),amount:-raw};
     else if(cx==='saving'&&cy==='regular')after=p&&p.account===Y.id?neutral:{type:'savings',cat:savCat(X),amount:raw};
     else after=neutral;
