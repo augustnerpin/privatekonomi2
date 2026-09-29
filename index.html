@@ -2651,12 +2651,12 @@ function investHtml(){
   // Hävstång
   const lv=v.leverage;
   if(lv)b.push(invBlock('Lånat kapital',`<div style="padding:2px 0 6px;font-size:13px">${esc(lv.text)}</div>`+
-    invRow('Lånat kapital'+(lv.borrowed_source==='estimated'?' (uppskattat)':''),fmt(lv.borrowed_capital))+invRow('Avkastning (Avanza, sedan köp)',fmtSigned(lv.return_kr))+
+    invRow('Lånat kapital'+(lv.borrowed_source==='estimated'?' (uppskattat)':''),fmt(lv.borrowed_capital))+invRow('Avkastning (sedan köp'+(lv.return_derived?', härledd ur innehaven':', Avanza')+')',fmtSigned(lv.return_kr))+
     (lv.interest_pct!=null?invRow(`Ränta ${pctTxt(lv.interest_pct)} efter ${pctTxt(lv.deduction_pct)} avdrag, per år`,lv.cost_per_year_after_deduction!=null?'−'+fmt(lv.cost_per_year_after_deduction):'—'):'')+
     (lv.cost_after_deduction!=null?invRow(`Räntekostnad sedan ${esc(lv.since)} (${lv.days} dagar)`,'−'+fmt(lv.cost_after_deduction)):'')+(lv.net!=null?invRow('<b>Netto</b>',`<b style="color:${lv.net>=0?'var(--green)':'var(--red)'}">${fmtSigned(lv.net)}</b>`):'')+
     (lv.notes||[]).map(n=>`<div style="font-size:11px;color:var(--sub2);padding-top:3px">${esc(n)}</div>`).join('')));
   // Varningar (bara fakta)
-  if(v.warnings.length)b.push(`<div style="padding:10px 17px;border-top:1px solid var(--line)">${v.warnings.map(w=>`<div style="margin:3px 0;padding:7px 10px;border-radius:10px;background:var(--amber2);font-size:11.5px;line-height:1.5">⚠️ ${esc(w.text)}</div>`).join('')}</div>`);
+  if(v.warnings.length||v.info?.length)b.push(`<div style="padding:10px 17px;border-top:1px solid var(--line)">${v.warnings.map(w=>`<div style="margin:3px 0;padding:7px 10px;border-radius:10px;background:var(--amber2);font-size:11.5px;line-height:1.5">⚠️ ${esc(w.text)}</div>`).join('')}${(v.info||[]).map(x=>`<div style="margin:3px 0;font-size:11px;color:var(--sub2)">ℹ︎ ${esc(x.text)}</div>`).join('')}</div>`);
   // Fördelning och fem största
   b.push(invBlock(`Fördelning <span style="float:right;font-family:var(--mono)">${fmt(v.portfolio_value)} kr</span>`,v.allocation.filter(x=>x.value).map(x=>invRow(`${esc(x.label)} <span style="color:var(--sub2);font-size:11px">${pctTxt(x.pct)}</span>`,fmt(x.value))).join('')+
     `<div style="font-size:11px;color:var(--sub2);padding-top:3px">${esc(v.invested_note)}</div>`));
@@ -2706,7 +2706,7 @@ function avzPasteHtml(){
       <div>Saldo på ${esc(pv.account)}: ${pv.current_balance?fmt(pv.current_balance.value)+' → ':''}${fmt(pv.balance_to_set)} kr</div>
       ${pv.change_since_previous?`<div>Sedan ${esc(pv.change_since_previous.from)}: ${fmtSigned(pv.change_since_previous.value_change)} kr (insatt ${fmt(pv.change_since_previous.deposits)}, avkastning ${fmtSigned(pv.change_since_previous.return)})</div>`:''}
       <div style="color:${pv.sum_check.ok?'var(--green)':'var(--red)'}">${esc(pv.sum_check.text)}</div>
-      ${pv.warnings.map(w=>`<div style="color:var(--amber)">⚠️ ${esc(w.text)}</div>`).join('')}
+      ${pv.warnings.map(w=>`<div style="color:var(--amber)">⚠️ ${esc(w.text)}</div>`).join('')}${(pv.info||[]).map(x=>`<div style="color:var(--sub2)">ℹ︎ ${esc(x.text)}</div>`).join('')}
       ${(r.changes||[]).map(c=>`<div>• ${esc(c.text)}</div>`).join('')}
       ${pv.sum_check.ok&&!r.duplicate&&!r.errors?.length?`<button class="sb-btn" style="margin-top:8px" onclick="avzSave()">Spara bilden</button>`:''}`:''}
     <button class="sb-btn sb-btn2" style="margin-top:8px" onclick="_avzPending=null;renderNetWorth()">Avbryt</button></div>`:'';
@@ -4836,6 +4836,9 @@ function renderSyncSettings(){
 const SB_DEF_URL='https://qchasvatuhndtswxlucr.supabase.co';
 const SB_DEF_KEY='sb_publishable_LWG9VW6d9slSZ96FsCACmw_CAnBAXa4'; // publik nyckel — skyddas av inloggning + RLS
 const SB_STATE_KEYS=[...SYNC_KEYS].filter(k=>k!=='txs'&&k!=='nws');
+// Appen äger bara sina egna nycklar i user_state. Nycklar som servern skriver (t.ex. invest_settings) hämtas aldrig in i
+// synken och kan därför aldrig tolkas som "borttagna lokalt" och raderas (så försvann invest_settings 2026-09-29).
+const sbOwnsState=k=>SB_STATE_KEYS.includes(k);
 function sbCfg(){return{url:String(ld('sb_url','')||SB_DEF_URL).trim().replace(/\/+$/,''),key:String(ld('sb_key','')||SB_DEF_KEY).trim()}}
 let _sb=null,_sbP=null,_sbInit=null,_sbUser=null,_sbBusy=false,_sbAgain=false,_sbTimer=null;
 function loadSbLib(){
@@ -5077,7 +5080,7 @@ const SB_TABLES=[
     rowKey:r=>r.period,
     save:arr=>localStorage.setItem('nws',JSON.stringify(arr.sort((a,b)=>a.period.localeCompare(b.period))))},
   {name:'user_state',sk:'st',pk:'key',conflict:'user_id,key',
-    list:()=>SB_STATE_KEYS.filter(k=>localStorage.getItem(k)!==null).map(k=>({key:k,value:ld(k,null)})),key:o=>o.key,pkVal:k=>k,
+    list:()=>SB_STATE_KEYS.filter(k=>localStorage.getItem(k)!==null).map(k=>({key:k,value:ld(k,null)})),key:o=>o.key,pkVal:k=>k,owns:sbOwnsState,
     toRow:(o,uid)=>({user_id:uid,key:o.key,value:o.value,deleted:false}),
     fromRow:r=>({key:r.key,value:r.value}),rowKey:r=>r.key,
     // Inställningar sparas per nyckel direkt i localStorage (inte som en lista)
@@ -5150,7 +5153,7 @@ async function sbPush(sb,T,sh,uid){
     }
   }
   // Rader som fanns vid förra synken men inte längre lokalt = borttagna
-  const del=Object.keys(sh[T.sk]).filter(k=>!seen.has(k));
+  const del=sbGone(T,sh,seen);
   for(let i=0;i<up.length;i+=500){
     const part=up.slice(i,i+500);
     const{error}=await sb.from(T.name).upsert(part.map(x=>x[2]),{onConflict:T.conflict});if(error)throw error;
@@ -5163,11 +5166,19 @@ async function sbPush(sb,T,sh,uid){
   }
   return{up:up.length+merge.length,del:del.length,bad,merged};
 }
+// Rader som fanns vid förra synken men inte längre lokalt = borttagna. Bara rader appen äger (T.owns); andra rensas
+// ur skuggan (äldre versioner av appen hämtade in serverns nycklar dit).
+function sbGone(T,sh,seen){
+  const out=[];
+  for(const k of Object.keys(sh[T.sk])){if(seen.has(k))continue;if(T.owns&&!T.owns(k)){delete sh[T.sk][k];if(sh.base)delete sh.base[k];continue}out.push(k)}
+  return out;
+}
 // Returnerar hur många rader som faktiskt ändrades (överlappet i sbPull hämtar samma rader igen)
 function sbApply(T,rows,sh){
   let changed=0;
   if(T.applyState){
     rows.forEach(r=>{
+      if(T.owns&&!T.owns(r.key))return; // serverns nyckel: rörs inte av appen
       sh.base||={};const mergeable=!SB_MERGE_SKIP.has(r.key);
       if(r.deleted){if(localStorage.getItem(r.key)!==null)changed++;localStorage.removeItem(r.key);delete sh.st[r.key];delete sh.base[r.key];if(r.key==='ai_history')reloadAiHistory();return}
       const fp=sbFp(T.fromRow(r));

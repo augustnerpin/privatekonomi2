@@ -170,6 +170,15 @@ export const countedAccounts = (s: Obj, st: Obj) => s.accounts.filter((a: Obj) =
 export const balanceFor = (s: Obj, st: Obj) => sum(countedAccounts(s, st).map((a: Obj) => a.value));
 // Lånefinansierat: flaggan i bilden, annars användarens lista över kontonamn (invest_settings.funded_by_loan)
 export const fundedByLoan = (a: Obj, st: Obj) => (a.funded_by_loan != null ? !!a.funded_by_loan : (st.funded_by_loan || []).some((n: string) => low(n) === low(a.name)));
+// Utveckling sedan köp: Avanzas siffra på kontot, annars summan av gain_kr på kontots innehav (derived = härlett).
+// Konto utan siffra och utan innehav med gain_kr (t.ex. ett sparkonto): null.
+export function sincePurchase(a: Obj, s: Obj) {
+  if (a.since_purchase_kr != null) return { value: Number(a.since_purchase_kr), derived: false };
+  const hs = (s.holdings || []).filter((h: Obj) => h.account === a.name && h.gain_kr != null);
+  return hs.length ? { value: sum(hs.map((h: Obj) => Number(h.gain_kr))), derived: true } : { value: null, derived: false };
+}
+// Avrundning: innehavens värden avrundas var för sig, så innehav + kontanter får skilja upp till 1 kr per innehav (minst 1 kr)
+export const roundingTolerance = (holdings: number) => Math.max(1, holdings);
 // Är sparandet från banken (autogiro) eller en flytt mellan Avanza-konton?
 export const isInternal = (m: Obj, s: Obj) => s.accounts.some((a: Obj) => low(a.name) === low(m.from));
 
@@ -207,7 +216,7 @@ export function changeBetween(prev: Obj, cur: Obj, st: Obj, txs: Obj[], cats: st
   const total = r2(balanceFor(b, st) - balanceFor(a, st)), deposits = depositsBetween(txs, cats, prev.snap_date, cur.snap_date);
   const names = [...new Set([...countedAccounts(a, st), ...countedAccounts(b, st)].map((x: Obj) => x.name))];
   const val = (s: Obj, n: string) => countedAccounts(s, st).find((x: Obj) => x.name === n)?.value || 0;
-  const sp = (s: Obj) => sum(countedAccounts(s, st).map((x: Obj) => Number(x.since_purchase_kr) || 0));
+  const sp = (s: Obj) => sum(countedAccounts(s, st).map((x: Obj) => sincePurchase(x, s).value || 0));
   return { from: prev.snap_date, to: cur.snap_date, value_change: total, deposits, return: r2(total - deposits), since_purchase_change: r2(sp(b) - sp(a)),
     by_account: names.map((n) => ({ name: n, change: r2(val(b, n) - val(a, n)) })).filter((x) => x.change),
     note: 'Avkastning = värdeförändring − insättningar från banken. Flyttar mellan Avanza-konton påverkar varken sparande eller avkastning. since_purchase_change = Avanzas egen siffra, som kontroll.' };
@@ -220,11 +229,14 @@ function leverage(s: Obj, st: Obj, loans: Obj[], accounts: Obj[], balances: Obj[
   if (!funded.length && !app.length) return null;
   const notes: string[] = [];
   const appRows = app.map((a) => { const b = valueAt(balances.filter((x) => x.account === a.id), date) || a.balance || null; return { name: a.name, value: b ? Number(b.value) : 0 }; });
-  const principal = sum([...funded.map((a: Obj) => a.value - (Number(a.since_purchase_kr) || 0)), ...appRows.map((x: Obj) => x.value)]);
+  const sp = (a: Obj) => sincePurchase(a, s);
+  const principal = sum([...funded.map((a: Obj) => a.value - (sp(a).value || 0)), ...appRows.map((x: Obj) => x.value)]);
   const borrowed = lv.borrowed_kr != null && isFinite(Number(lv.borrowed_kr)) ? Number(lv.borrowed_kr) : principal;
   if (lv.borrowed_kr == null) notes.push('Lånat belopp = insatt kapital på de lånefinansierade kontona (värde − utveckling sedan köp). Ange det exakta lånebeloppet i inställningarna (leverage.borrowed_kr).');
-  const gain = sum(funded.map((a: Obj) => Number(a.since_purchase_kr) || 0));
-  if (funded.some((a: Obj) => a.since_purchase_kr == null)) notes.push(`Utveckling sedan köp saknas för ${funded.filter((a: Obj) => a.since_purchase_kr == null).map((a: Obj) => a.name).join(', ')} (räknas som 0).`);
+  const gain = sum(funded.map((a: Obj) => sp(a).value || 0));
+  const derived = funded.filter((a: Obj) => sp(a).derived), none = funded.filter((a: Obj) => sp(a).value == null);
+  if (derived.length) notes.push(`Utveckling sedan köp är härledd ur innehavens gain_kr för ${derived.map((a: Obj) => a.name).join(', ')} (Avanza angav ingen siffra för kontot).`);
+  if (none.length) notes.push(`Utveckling sedan köp saknas för ${none.map((a: Obj) => a.name).join(', ')} (räknas som 0).`);
   if (appRows.length) notes.push(`${appRows.map((x: Obj) => x.name).join(', ')} räknas som lånat kapital men avkastningen där är okänd (räknas som 0).`);
   // Räntan: lånet i inställningarna (leverage.loan_id), annars skuldviktat snitt av alla lån med räntesats
   const ls = (lv.loan_id ? loans.filter((l) => l.id === lv.loan_id) : loans).filter((l) => l.interest_pct != null);
@@ -239,7 +251,8 @@ function leverage(s: Obj, st: Obj, loans: Obj[], accounts: Obj[], balances: Obj[
   if (!lv.since) notes.push('Ange när lånet investerades (leverage.since) för att räkna kostnaden hittills.');
   const cost = perYear != null && days != null ? r2(perYear * days / 365) : null;
   const net = cost != null ? r2(gain - cost) : null;
-  return { accounts: [...funded.map((a: Obj) => ({ name: a.name, value: a.value, since_purchase_kr: a.since_purchase_kr })), ...appRows.map((x: Obj) => ({ ...x, app_account: true }))],
+  return { accounts: [...funded.map((a: Obj) => ({ name: a.name, value: a.value, since_purchase_kr: sp(a).value, ...(sp(a).derived ? { since_purchase_derived: true } : {}) })), ...appRows.map((x: Obj) => ({ ...x, app_account: true }))],
+    ...(derived.length ? { return_derived: true } : {}),
     borrowed_capital: r2(borrowed), borrowed_source: lv.borrowed_kr != null ? 'settings' : 'estimated', return_kr: gain, interest_pct: rate, deduction_pct: ded, since: lv.since || null, days,
     cost_per_year_after_deduction: perYear, cost_after_deduction: cost, net,
     text: cost != null ? `Lånat kapital gav ${signed(gain)}, kostade −${kr(cost)}, netto ${signed(net!)}.` : `Lånat kapital gav ${signed(gain)}${perYear != null ? `; räntan kostar −${kr(perYear)}/år efter avdrag` : ''}.`,
@@ -285,12 +298,14 @@ export function investView(p: ViewInput) {
   const hold = (s.holdings || []).filter((h: Obj) => counted.has(h.account));
   const share = (v: number) => (portfolio ? r2(v / portfolio * 100) : 0);
   const available = (a: Obj) => r2((a.cash || 0) - (a.reserved_cash || 0));
-  const warnings: Obj[] = [];
+  const warnings: Obj[] = [], info: Obj[] = [];
   const accounts = s.accounts.map((a: Obj) => {
     const hs = (s.holdings || []).filter((h: Obj) => h.account === a.name).sort((x: Obj, y: Obj) => y.value - x.value);
-    const diff = hs.length ? r2(sum(hs.map((h: Obj) => h.value)) + (a.cash || 0) - a.value) : 0;
-    if (Math.abs(diff) >= 1) warnings.push({ kind: 'account_sum', account: a.name, diff, text: `${a.name}: innehav + kontanter skiljer sig ${signed(diff)} från kontots värde` });
-    return { name: a.name, type: a.type, value: a.value, cash: a.cash, available_cash: available(a), reserved_cash: a.reserved_cash, since_purchase_kr: a.since_purchase_kr, ytd_pct: a.ytd_pct,
+    const diff = hs.length ? r2(sum(hs.map((h: Obj) => h.value)) + (a.cash || 0) - a.value) : 0, tol = roundingTolerance(hs.length);
+    if (Math.abs(diff) > tol) warnings.push({ kind: 'account_sum', account: a.name, diff, text: `${a.name}: innehav + kontanter skiljer sig ${signed(diff)} från kontots värde` });
+    else if (diff) info.push({ kind: 'account_rounding', account: a.name, diff, tolerance: tol, text: `${a.name}: avrundning ${signed(diff)} mellan innehav och konto (inom ±${tol} kr)` });
+    const sp = sincePurchase(a, s);
+    return { name: a.name, type: a.type, value: a.value, cash: a.cash, available_cash: available(a), reserved_cash: a.reserved_cash, since_purchase_kr: sp.value, ...(sp.derived ? { since_purchase_derived: true } : {}), ytd_pct: a.ytd_pct,
       hidden: a.hidden, counted: counted.has(a.name), funded_by_loan: fundedByLoan(a, st), holdings: hs.map((h: Obj) => ({ ...h, share_pct: share(h.value) })) };
   });
   // Samma värdepapper på flera konton räknas ihop
@@ -327,12 +342,12 @@ export function investView(p: ViewInput) {
     accounts, holdings: all, top5: all.slice(0, 5), allocation: alloc.map((x) => ({ ...x, pct: share(x.value) })),
     pending_orders: orders, pending_orders_total: ordersSum, monthly_savings: (s.monthly_savings || []).map((m: Obj) => ({ ...m, internal: isInternal(m, s) })),
     dividends: { ...s.dividends, per_year: Object.values(perYear) },
-    since_purchase_kr: sum(accs.map((a: Obj) => Number(a.since_purchase_kr) || 0)),
+    since_purchase_kr: sum(accs.map((a: Obj) => sincePurchase(a, s).value || 0)),
     change_since_previous: prev ? changeBetween(prev, cur, st, txs, cats) : null,
     leverage: leverage(s, st, loans, p.accounts || [], balances, date),
     isk_tax: iskTax(p.snaps, st, cur, balances, txs, cats, st.avanza_account || AVANZA_ACCOUNT),
     liquidity: { available_now: sum(liq.map((x) => x.value)), items: liq, note: 'Tillgängligt direkt: bankkonton, Klarna och kontanter hos Avanza som inte är reserverade. Visas separat; förmögenhetskategorierna är oförändrade.' },
-    warnings, concentration_limit_pct: limit,
+    warnings, info, concentration_limit_pct: limit,
     note: 'Bara fakta från Avanza – inga köp- eller säljrekommendationer. Appen kan inte handla eller flytta pengar hos Avanza.',
   };
 }
@@ -444,7 +459,7 @@ export async function importSnapshot(db: any, uid: string, input: any, o: { dryR
     date, taken_at: taken, total_value: s.total_value, balance_to_set: balance, account: acc.name, current_balance: oldBal ? { value: Number(oldBal.value), date: oldBal.date } : null,
     previous_snapshot: prevSnap ? { date: prevSnap.snap_date, total_value: prevSnap.data.total_value } : null,
     change_since_previous: prevSnap ? changeBetween(prevSnap, row, st, d.txs, investCatsOf(d.accounts)) : null,
-    sum_check: sc, warnings: view?.warnings || [], leverage: view?.leverage?.text || null,
+    sum_check: sc, warnings: view?.warnings || [], info: view?.info || [], leverage: view?.leverage?.text || null,
     internal_savings_ignored: s.monthly_savings.filter((m: Obj) => isInternal(m, s)).map((m: Obj) => `${kr(m.amount)} den ${m.day}:e från ${m.from} till ${m.to_account} (intern flytt, ingen förväntad banktransaktion)`),
   };
   if (dup) return { saved: false, dry_run: dryRun, valid: true, duplicate: true, changed: false, hash, preview, changes: [], note: `Samma bild är redan importerad (${dup.snap_date}). Inget ändras.` };

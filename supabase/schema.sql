@@ -361,3 +361,16 @@ drop policy if exists "own rows read" on public.avanza_snapshots;
 create policy "own rows read" on public.avanza_snapshots for select to authenticated using ((select auth.uid()) = user_id);
 revoke all on public.avanza_snapshots from anon, authenticated;
 grant select on public.avanza_snapshots to authenticated;
+
+-- ── Nycklar i user_state som bara servern skriver (functions/_shared/avanza.ts) ──
+-- Appen (inloggad användare) får inte radera eller skriva över dem; servern (service role, auth.uid() = null) får.
+-- Skydd mot äldre versioner av appen, vars synk tolkade serverns nycklar som "borttagna lokalt" (2026-09-29).
+create or replace function public.protect_server_state() returns trigger language plpgsql as $$
+begin
+  if old.key = any (array['invest_settings']) and auth.uid() is not null then
+    new.value := old.value; new.deleted := old.deleted;
+  end if;
+  return new;
+end $$;
+drop trigger if exists user_state_protect_server on public.user_state;
+create trigger user_state_protect_server before update on public.user_state for each row execute function public.protect_server_state();

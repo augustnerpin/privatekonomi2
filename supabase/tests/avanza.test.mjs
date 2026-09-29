@@ -250,3 +250,45 @@ test('koden kan bara läsa: inga anrop till Avanza', () => {
     assert.doesNotMatch(src, /fetch\(|avanza\.se/i);
   }
 });
+
+// Som den riktiga bilden 2026-09-29: Avanza angav ingen utveckling sedan köp på kontona, och innehavens värden är avrundade
+const REAL_SHAPE = {
+  date: '2026-09-29T10:10:00+02:00', total_value: 40000,
+  accounts: [
+    { name: 'ISK A', type: 'ISK', value: 20000, cash: 500, since_purchase_kr: null },   // 2 innehav, −2 kr
+    { name: 'ISK B', type: 'ISK', value: 9000, cash: 300, since_purchase_kr: null },    // 3 innehav, +1 kr
+    { name: 'Utökat lån ISK', type: 'ISK', value: 10000, cash: 0, since_purchase_kr: null }, // 1 innehav, +2 kr = varning
+    { name: 'Utökat lån', type: 'sparkonto', value: 1000, cash: 1000, since_purchase_kr: null }, // inga innehav
+  ],
+  holdings: [
+    { account: 'ISK A', name: 'F1', kind: 'fond', value: 12000, gain_kr: 1500 }, { account: 'ISK A', name: 'F2', kind: 'fond', value: 7498, gain_kr: -200 },
+    { account: 'ISK B', name: 'A1', kind: 'aktie', value: 4000, gain_kr: 100 }, { account: 'ISK B', name: 'A2', kind: 'aktie', value: 3000, gain_kr: null }, { account: 'ISK B', name: 'A3', kind: 'aktie', value: 1701, gain_kr: 50 },
+    { account: 'Utökat lån ISK', name: 'E1', kind: 'ETF', value: 10002, gain_kr: 466 },
+  ],
+};
+test('utveckling sedan köp saknas: härleds ur innehavens gain_kr och markeras som härledd; hävstången blir inte 0', () => {
+  const s = normalizeSnapshot(clone(REAL_SHAPE));
+  const v = investView({ snaps: [{ snap_date: '2026-09-29', taken_at: 'x', data: s }], settings: { interest_deduction_pct: 30, funded_by_loan: ['Utökat lån ISK', 'Utökat lån'], leverage: { since: '2026-06-25' } },
+    loans: [{ id: 'L', interest_pct: 2.76, history: [{ date: '2026-09-28', value: 100000 }] }] });
+  const by = Object.fromEntries(v.accounts.map((a) => [a.name, a]));
+  assert.deepEqual([by['ISK A'].since_purchase_kr, by['ISK A'].since_purchase_derived], [1300, true]);
+  assert.deepEqual([by['ISK B'].since_purchase_kr, by['ISK B'].since_purchase_derived], [150, true]); // innehav utan gain_kr räknas inte
+  assert.deepEqual([by['Utökat lån'].since_purchase_kr, by['Utökat lån'].since_purchase_derived], [null, undefined]);
+  assert.equal(v.since_purchase_kr, 1300 + 150 + 466);
+  const lv = v.leverage;
+  assert.deepEqual([lv.return_kr, lv.return_derived, lv.borrowed_capital], [466, true, (10000 - 466) + 1000]);
+  assert.ok(lv.cost_after_deduction > 0 && lv.net === Math.round((466 - lv.cost_after_deduction) * 100) / 100);
+  assert.match(lv.notes.join(' '), /härledd ur innehavens gain_kr för Utökat lån ISK/);
+  assert.match(lv.notes.join(' '), /saknas för Utökat lån \(räknas som 0\)/);
+  // Avanzas egen siffra går före det härledda
+  const s2 = clone(s); s2.accounts.find((a) => a.name === 'Utökat lån ISK').since_purchase_kr = 400;
+  assert.equal(investView({ snaps: [{ snap_date: '2026-09-29', taken_at: 'x', data: s2 }], settings: { funded_by_loan: ['Utökat lån ISK'] } }).leverage.return_kr, 400);
+});
+
+test('avrundning mellan innehav och konto (±1 kr per innehav) är information, inte varning', () => {
+  const s = normalizeSnapshot(clone(REAL_SHAPE));
+  const v = investView({ snaps: [{ snap_date: '2026-09-29', taken_at: 'x', data: s }], settings: {} });
+  assert.deepEqual(v.info.map((x) => [x.account, x.diff, x.tolerance]), [['ISK A', -2, 2], ['ISK B', 1, 3]]);
+  assert.match(v.info[0].text, /avrundning −2 kr/);
+  assert.deepEqual(v.warnings.filter((x) => x.kind === 'account_sum').map((x) => [x.account, x.diff]), [['Utökat lån ISK', 2]]);
+});
