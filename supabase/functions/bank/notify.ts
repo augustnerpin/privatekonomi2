@@ -1,7 +1,7 @@
 // Nattens notis: en sammanfattning av det som hänt, högst en gång per händelse (nyckel i tabellen notifications).
 // Ren logik utan nätverk (testas i supabase/tests/notify.test.mjs).
 // deno-lint-ignore-file no-explicit-any
-import { type Obj, dayDiff } from '../_shared/finance.ts';
+import { type Obj, dayDiff, addBankDays, addDays } from '../_shared/finance.ts';
 
 const kr = (n: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(Math.round(n)).replace(/[  ]/g, ' ').replace(/−/g, '-') + ' kr';
 const BIG = 1500; // köp från och med detta belopp nämns var för sig
@@ -59,7 +59,9 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
     }
   }
   // Förväntade transaktioner som uteblivit (en gång per period)
-  for (const e of p.missing || []) add(`forvantad:${e.id}:${p.period.id}`, e.due_day ? `⏰ ${e.name} har inte kommit – skulle senast den ${e.due_day}:e` : `⏰ ${e.name} har inte kommit – ${Math.round(dayDiff(e.salary, p.today))} dagar sedan lönen`, 'expected');
+  // Autogiro till Avanza (grace_bank_days): "Autogiro 10 000 kr till Fondkonto har inte dragits. Saldo på Lönekonto: 8 446 kr."
+  for (const e of p.missing || []) add(`forvantad:${e.id}:${p.period.id}`, e.grace_bank_days != null ? `⏰ ${e.name} har inte dragits.${e.from_name && e.balance != null ? ` Saldo på ${e.from_name}: ${kr(e.balance)}.` : ''}`
+    : e.due_day ? `⏰ ${e.name} har inte kommit – skulle senast den ${e.due_day}:e` : `⏰ ${e.name} har inte kommit – ${Math.round(dayDiff(e.salary, p.today))} dagar sedan lönen`, 'expected');
   // Lönen har kommit men värdet på t.ex. Avanza har inte uppdaterats sedan dess (en gång per period)
   if (p.salaryDate && (p.stale || []).length) add(`uppdatera:${p.period.id}`, `📈 Lönen har kommit – uppdatera ${p.stale!.map((x: Obj) => `${x.name}${x.date ? ` (senast ${x.date})` : ''}`).join(', ')}`, 'update');
   // Takt: klart mer utgifter än vanligt vid samma dag i perioden (högst en gång per vecka)
@@ -83,6 +85,8 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
 // Förväntade transaktioner (expected_tx): [{id, name, type, cat, match?, days | due_day}]. Fönstret är antingen
 // `days` dagar efter att lönen kom in i perioden, eller en fast dag i månaden (`due_day`, t.ex. 28 = "senast den 28:e";
 // första gången den dagen infaller i perioden, klämd till månadens sista dag). Returnerar de som uteblivit.
+// Autogiron från Avanza-bilden (source 'avanza') har dessutom grace_bank_days (notis först när så många bankdagar gått
+// efter dagen), amount (dragningen ska vara samma belopp, ±1 kr), types (sparande eller överföring) och match ('avanza').
 export function dueDateIn(periodStart: string, dueDay: number) {
   const [y, m] = periodStart.split('-').map(Number);
   const at = (yy: number, mm: number) => { const last = new Date(Date.UTC(yy, mm, 0)).getUTCDate(); return `${yy}-${String(mm).padStart(2, '0')}-${String(Math.min(dueDay, last)).padStart(2, '0')}`; };
@@ -96,9 +100,12 @@ export function missingExpected(expected: Obj[], rows: Obj[], today: string, per
     let due: string | null = null;
     if (e.due_day && periodStart) due = dueDateIn(periodStart, Number(e.due_day));
     else if (!e.due_day && salary) due = new Date(Date.parse(salary + 'T00:00:00Z') + (Number(e.days) || 5) * 864e5).toISOString().slice(0, 10);
+    const day = due;
+    if (due && e.grace_bank_days != null) { due = addBankDays(due, Number(e.grace_bank_days)); if (today <= due) return null; }
     if (!due || today < due) return null;
-    const q = String(e.match || '').toLowerCase();
-    const hit = live.some((r) => r.type === e.type && (!e.cat || (r.category ?? r.cat) === e.cat) && (!q || String(r.description ?? r.desc ?? '').toLowerCase().includes(q)));
-    return hit ? null : { ...e, salary: salary || null, due };
+    const q = String(e.match || '').toLowerCase(), types: string[] = Array.isArray(e.types) ? e.types : [e.type];
+    const hit = live.some((r) => types.includes(r.type) && (!e.cat || (r.category ?? r.cat) === e.cat) && (!q || String(r.description ?? r.desc ?? '').toLowerCase().includes(q))
+      && (e.amount == null || Math.abs(Math.abs(Number(r.amount)) - Number(e.amount)) <= 1) && (e.grace_bank_days == null || !day || (r.tx_date ?? r.date) >= addDays(day, -3)));
+    return hit ? null : { ...e, salary: salary || null, due, ...(e.grace_bank_days != null ? { scheduled: day } : {}) };
   }).filter(Boolean) as Obj[];
 }

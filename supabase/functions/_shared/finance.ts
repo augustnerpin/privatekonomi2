@@ -60,6 +60,9 @@ function swedishHolidays(y: number) {
   const allS = new Date(y, 9, 31); while (allS.getDay() !== 6) allS.setDate(allS.getDate() + 1);
   return new Set([D(1, 1), D(1, 6), D(5, 1), D(6, 6), D(12, 24), D(12, 25), D(12, 26), D(12, 31), off(-2), off(1), off(39), mid, allS].map(ymd));
 }
+// Bankdag = vardag som inte är helgdag. addBankDays('2026-09-25', 3) = 2026-09-30 (fredag + mån, tis, ons)
+export function isBankDay(d: string) { const x = new Date(d + 'T12:00:00'); return x.getDay() !== 0 && x.getDay() !== 6 && !swedishHolidays(x.getFullYear()).has(d); }
+export function addBankDays(d: string, n: number) { let x = d; for (let i = 0; i < n;) { x = addDays(x, 1); if (isBankDay(x)) i++; } return x; }
 // Lönen den 25:e (eller närmaste vardag före) startar nästa månads period
 function suggestedPayDate(y: number, m0: number) {
   const hols = swedishHolidays(y); const d = new Date(y, m0, 25);

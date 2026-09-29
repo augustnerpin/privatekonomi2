@@ -163,3 +163,30 @@ och att en användare aldrig kan läsa eller ändra någon annans data.
 - Databasen sparar bara SHA-256-hashen av nyckeln.
 - Funktionen använder projektets hemliga nyckel på servern, som kringgår RLS. Varje fråga i
   `index.ts` filtreras därför på nyckelns `user_id`. Den hemliga nyckeln lämnar aldrig Supabase.
+
+## Avanza (ögonblicksbilder, bara läsning)
+
+Avanza har inget API för privatpersoner. I stället läser Claude av Avanza, t.ex. i en Chrome-session, och
+importerar en ögonblicksbild (`avanza_snapshot`) med MCP-verktyget `import_avanza_snapshot`. Ingenting här kan
+handla, föra över pengar eller ändra något hos Avanza. Logiken finns i
+[`functions/_shared/avanza.ts`](functions/_shared/avanza.ts).
+
+- **Förhandsgranska först:** `dry_run` är `true` som standard och visar totalvärdet, saldot som sätts på Avanza ISK,
+  förändringen sedan förra bilden, summakontrollen och varningarna. Bara `dry_run: false` sparar, och det kräver en
+  nyckel med skrivbehörighet.
+- **Summakontroll:** kontona som inte är dolda måste bli `total_value` (±1 kr). Stämmer det inte sparas ingenting.
+- **Samma bild två gånger** (samma hash) ändrar ingenting.
+- **I förmögenheten** är Avanza ISK fortfarande ett konto. Saldot blir summan av underkontona (dolda konton räknas
+  med bara om `include_hidden` är på). Flyttar mellan underkonton är neutrala.
+- **Autogiro:** månadssparande från banken blir en förväntad transaktion (`source: 'avanza'`). Syns ingen
+  dragning med samma belopp och texten AVANZA inom 3 bankdagar skickar nattjobbet en notis. Interna flyttar
+  blir inga förväntade transaktioner.
+- `get_investments` visar innehav, fördelning, fem största, koncentrationsvarning, utdelningar, hävstång
+  (lånat kapital, avkastning, räntekostnad efter avdrag, netto), en ISK-skatteprognos (uppskattning) och
+  "tillgängligt direkt". `set_investment_settings` ändrar inställningarna (`user_state.invest_settings`).
+- **I appen:** Förmögenhet → Investeringar (hämtas via `bank/investments`). Inklistring av text (`bank/avanza-parse`,
+  tolkas med AI) är en reserv, och sparas först när du trycker Spara efter förhandsgranskningen.
+
+Installera: kör `schema.sql` (tabellen `avanza_snapshots`), sedan
+[`data-migrations/2026-09-29-02-avanza.sql`](data-migrations/2026-09-29-02-avanza.sql) (inställningarna), och
+driftsätt `mcp` och `bank`.

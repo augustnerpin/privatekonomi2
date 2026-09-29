@@ -4,6 +4,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { goalProgress, avgSavings12, goalPct, resolveGoalStart } from '../_shared/goal.ts';
 import { saveMerged, type StateIo } from '../_shared/merge.ts';
 import { decompose, debtAt as debtAtStart, manualValues } from '../_shared/networth.ts';
+import { SNAPSHOT_SCHEMA, SETTINGS_SCHEMA, importSnapshot, investmentsFor, loadInvest, investView, avanzaStepReturns, mergeSettings, investCatsOf } from '../_shared/avanza.ts';
 
 // Privatekonomi som MCP-server (Model Context Protocol, "Streamable HTTP", tillståndslös).
 // Låter Claude och andra AI-appar läsa och ändra din ekonomi i Supabase.
@@ -478,7 +479,12 @@ export const TOOLS: Tool[] = [
         const av = (await mayMust<Obj[]>(uq(c, 'asset_values', 'asset,val_date').eq('deleted', false))) || [];
         const valueDates: Obj = {};
         for (const k of ['stocks', 'pension']) { const ids = st.accounts.filter((x: Obj) => nwOf(x) === k).map((x: Obj) => x.id); valueDates[k] = [...bal.filter((b) => ids.includes(b.account)).map((b) => b.bal_date), ...av.filter((x) => x.asset === k).map((x) => x.val_date)]; }
+        // En Avanza-bild är också ett känt värde på aktier/fonder (varningen försvinner när en bild ligger inom 5 dagar)
+        const inv = await loadInvest(c.db, c.uid);
+        valueDates.stocks.push(...inv.snaps.map((x: Obj) => x.snap_date));
         extra.breakdown = decompose({ snaps: rows.map((r) => ({ period: r.period, total: Number(r.total), amounts: r.amounts || {} })), txs: sav, loans: loans || [], starts, investCats, pensionPerMonth: pension, valueDates });
+        const ar = avanzaStepReturns(extra.breakdown.steps, starts, inv.snaps, inv.settings, inv.txs, investCatsOf(inv.accounts));
+        if (ar.length) { extra.avanza_returns = ar; extra.avanza_returns_note = 'Avkastning på Avanza enligt ögonblicksbilderna närmast periodgränserna: värdeförändring − insättningar från banken (since_purchase_change = Avanzas egen siffra som kontroll).'; }
         extra.breakdown_explanation = 'Förmögenhetsbilden för P = läget när P börjar. warnings = aktier/pension saknar värde inom 5 dagar från periodgränsen (avkastningen kan då vara missvisande). Skulden före första kända lånesaldot räknas bakåt med amorteringen. sparande = sparandetransaktioner utom Amortering; amortering = minskad skuld (eller kategorin Amortering); avkastning = aktier/fonder + pension minus insättningar; omvärdering = övriga tillgångar minus amortering (engångsposter); övrigt = resten.';
       }
       if (loans?.length) {
@@ -511,11 +517,56 @@ export const TOOLS: Tool[] = [
       const latest = last ? { period: last.period, total: last.total, ...(mv.some((x) => x.estimated || x.stale) ? { contains_estimates: mv.filter((x) => x.estimated || x.stale).map((x) => x.name) } : {}), goal_progress_pct: gp?.progress_pct ?? null, goal_start: gp?.start ?? null, moved_since_goal_start: gp?.moved_since_start ?? null,
         goal_progress_note: 'goal_progress_pct = andel av vägen från goal_start.total (förmögenhetsbilden för goal_start.period, som den ser ut nu) till målet (0 % under startvärdet), inte total/mål.', left_to_goal: round(s.goal - last.total),
         ...(last.net != null ? { assets: last.assets, liabilities: last.liabilities, liabilities_already_in_assets: last.liabilities_already_in_assets, net: last.net, gross_assets: last.gross_assets } : {}) } : null;
+      // Avanza ISK är ett konto i förmögenheten; underkontona, lånat kapital och hävstångsnettot från senaste bilden
+      const iv = await investmentsFor(c.db, c.uid).catch(() => null);
+      if (iv && (iv as Obj).accounts) {
+        const v = iv as Obj;
+        extra.avanza = { date: v.date, total_value: v.total_value, balance_in_net_worth: v.portfolio_value, sum_check: v.sum_check.text,
+          accounts: v.accounts.map((a: Obj) => ({ name: a.name, type: a.type, value: a.value, available_cash: a.available_cash, reserved_cash: a.reserved_cash, hidden: a.hidden, counted: a.counted, funded_by_loan: a.funded_by_loan })),
+          borrowed_capital: v.leverage?.borrowed_capital ?? null, leverage_net: v.leverage?.net ?? null, leverage: v.leverage?.text ?? null, available_now: v.liquidity.available_now,
+          note: 'Avanza ISK är ett konto i förmögenheten (stocks); underkontona är detaljer och summan stämmer med saldot. Flyttar mellan underkonton är neutrala. Mer i get_investments.' };
+      }
       return { goal: +s.goal, latest, categories: s.cats_nw, snapshots: snaps, ...extra };
     },
   },
+  {
+    name: 'get_investments',
+    title: 'Investeringar (Avanza)',
+    description: 'Senaste Avanza-bilden (eller den senaste på/före date): konton, innehav per konto och totalt, fördelning (fonder, aktier, ETF, reserverat, kontanter), fem största innehaven som andel av portföljen, varningar (t.ex. ett innehav över koncentrationsgränsen), utdelningar per år, förändring sedan förra bilden, hävstångsvyn (lånat kapital, avkastning, räntekostnad efter avdrag, netto), prognos för ISK-skatten (uppskattning) och likviditet "tillgängligt direkt". Bara fakta – ge inga köp- eller säljrekommendationer.',
+    inputSchema: { type: 'object', properties: { date: { ...S.date, description: 'Bilden på eller före datumet (standard: senaste)' } } },
+    annotations: RO,
+    async run(c, a) { return await investmentsFor(c.db, c.uid, a.date || null); },
+  },
 
   // ── Skrivande verktyg (kräver en nyckel med behörigheten "läsa och ändra") ──
+  {
+    name: 'import_avanza_snapshot',
+    title: 'Importera Avanza-bild',
+    description: 'Importerar en ögonblicksbild av Avanza (avanza_snapshot), t.ex. avläst i en Chrome-session: konton, innehav, kontanter, månadssparande, utdelningar och väntande order. Läser bara – appen kan aldrig handla eller flytta pengar hos Avanza. dry_run är standard (true): returnerar en förhandsgranskning (totalvärde, saldot som sätts på Avanza ISK, förändring sedan förra bilden, summakontroll, varningar och vad som ändras) utan att spara. Visa den för användaren och kör med dry_run: false först när hen godkänt. Summakontroll: konton som inte är dolda måste bli total_value (±1 kr), annars sparas inget. Samma bild två gånger ändrar ingenting. Sparar bilden med historik, sätter saldot på Avanza ISK till summan av kontona (dolda räknas med om inställningen include_hidden är på) och gör månadssparande från banken till förväntade transaktioner (notis om autogirot inte dragits inom 3 bankdagar). Flyttar mellan Avanza-konton blir inga förväntade banktransaktioner.',
+    write: true,
+    inputSchema: { type: 'object', required: ['snapshot'], properties: { snapshot: SNAPSHOT_SCHEMA, dry_run: { type: 'boolean', default: true, description: 'true (standard) = bara förhandsgranskning; false = spara' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const r: Obj = await importSnapshot(c.db, c.uid, a.snapshot, { dryRun: a.dry_run !== false, source: 'mcp' });
+      if (r.valid === false) throw new UserError('Bilden följer inte schemat: ' + r.errors.join('; '));
+      if (r.errors?.length) throw new UserError(r.errors.join('; '));
+      return r;
+    },
+  },
+  {
+    name: 'set_investment_settings',
+    title: 'Inställningar för investeringar',
+    description: 'Ändrar inställningarna för Avanza-vyn (bara angivna fält; null tar bort): include_hidden, concentration_pct (varningsgräns, standard 15), interest_deduction_pct (ränteavdrag), funded_by_loan (namn på lånefinansierade Avanza-konton), autogiro_grace_bank_days, leverage {since, borrowed_kr, loan_id, app_accounts}, isk {tax_pct, extra_pct, min_pct, years: {"2026": {gov_rate_pct, tax_free}}}. Ändrar inget hos Avanza.',
+    write: true,
+    inputSchema: SETTINGS_SCHEMA,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    async run(c, a) {
+      const s = await loadState(c, ['invest_settings']);
+      const next = mergeSettings(s.invest_settings || {}, a);
+      await saveState(c, 'invest_settings', next);
+      return { settings: next };
+    },
+  },
   {
     name: 'add_transaction',
     title: 'Lägg till transaktion',
@@ -1589,6 +1640,7 @@ const INSTRUCTIONS = `Privatekonomi: användarens egna transaktioner, budget och
 - Utgift/sparande: positivt belopp = pengar ut. Inkomst: positivt = in. Överföring (transfer) räknas inte som utgift; negativt = flyttat till eget konto.
 - Använd summarize_transactions och get_month_summary för analys i stället för att hämta alla rader.
 - Förmögenhet: get_net_worth visar tillgångar, skulder (lån) och netto. Lån med netted_in_assets är redan avdragna i en tillgång.
+- Avanza: läs av Avanza och importera med import_avanza_snapshot (dry_run först, spara efter godkännande). get_investments visar innehav, risk, hävstång och ISK-skatt. Bara fakta, inga köp- eller säljråd. Servern kan inte handla eller flytta pengar hos Avanza.
 - Städning: get_settings visar orphan_categories; slå ihop med merge_categories. Namnlösa Swish-nummer finns i list_contacts. Överföringar mellan egna konton paras med match_transfers.
 - Förhandsgranska innan du ändrar: bulk_update_transactions (dry_run är standard), update_transaction/split_transaction/update_rule/merge_categories/rename_category med dry_run: true, match_transfers utan confirm. Visa resultatet och fråga användaren innan du sparar.
 - Ändringar av regler går att ångra: update_transaction och delete_rule returnerar undo.`;

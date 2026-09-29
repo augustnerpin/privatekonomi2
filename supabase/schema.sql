@@ -337,3 +337,27 @@ alter table public.mcp_tokens add column if not exists expires_at timestamptz;
 -- alltid som bekräftade, se valueStatus i functions/_shared/networth.ts). Bakåtkompatibelt: standard false.
 alter table public.account_balances add column if not exists confirmed boolean not null default false;
 alter table public.asset_values add column if not exists confirmed boolean not null default false;
+
+-- ── Avanza: ögonblicksbilder (konton, innehav, månadssparande, utdelningar, väntande order) ──
+-- Importeras via MCP (import_avanza_snapshot) eller appen, se functions/_shared/avanza.ts. Appen och servern
+-- läser bara data – inget här kan handla eller flytta pengar hos Avanza. hash = samma bild importeras bara en gång.
+-- Bara servern skriver (service role); en inloggad användare kan läsa sina egna rader.
+create table if not exists public.avanza_snapshots (
+  id         bigserial     primary key,
+  user_id    uuid          not null references auth.users(id) on delete cascade,
+  taken_at   timestamptz   not null,                 -- när Avanza lästes av
+  snap_date  date          not null,                 -- datumet (Europe/Stockholm), samma som saldoraden på Avanza ISK
+  total      numeric(16,2) not null,                 -- Avanzas totalvärde (konton som inte är dolda)
+  hash       text          not null,                 -- sha256 av bilden i normaliserad form
+  data       jsonb         not null,                 -- hela bilden (avanza_snapshot)
+  source     text,                                   -- 'mcp' | 'app'
+  deleted    boolean       not null default false,
+  created_at timestamptz   not null default now(),
+  unique (user_id, hash)
+);
+create index if not exists avanza_snapshots_user_idx on public.avanza_snapshots (user_id, snap_date);
+alter table public.avanza_snapshots enable row level security;
+drop policy if exists "own rows read" on public.avanza_snapshots;
+create policy "own rows read" on public.avanza_snapshots for select to authenticated using ((select auth.uid()) = user_id);
+revoke all on public.avanza_snapshots from anon, authenticated;
+grant select on public.avanza_snapshots to authenticated;

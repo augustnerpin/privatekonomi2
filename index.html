@@ -2428,6 +2428,7 @@ async function refreshLoans(){
     _loans=next;_assets=nextA;_balances=nextB;localStorage.setItem('loans_cache',JSON.stringify(next));
     localStorage.setItem('assets_cache',JSON.stringify(nextA));localStorage.setItem('balances_cache',JSON.stringify(nextB));
     if(changed)renderNetWorth();
+    if(Date.now()-_investAt>60e3)refreshInvest();
   }catch(e){console.warn('Lån:',e.message||e)}
 }
 function loansHtml(latest){
@@ -2607,7 +2608,7 @@ function wealthSourcesHtml(){
       const man=b&&valueStatusApp(b,'account').manual;
       lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}${b&&!man?` <span style="color:var(--sub2);font-size:11px">${esc(b.date)}</span>`:''}</span>
         <span style="display:flex;gap:6px;align-items:center;flex-shrink:0"><span style="font-family:var(--mono)">${b?fmt(b.value):'—'}</span>${btn('Saldo',`openValModal('acc',${jsArg(a.id)})`)}</span></div>`+(man?valueStatusHtml(b,'acc',a.id):'')+
-        (r?`<div style="font-size:11px;color:${r.ret>=0?'var(--green)':'var(--red)'};padding:0 0 3px">Avkastning sedan ${esc(r.from)}: ${fmtSigned(r.ret)} kr (insatt ${fmt(r.deposits)} kr)</div>`:''))});
+        (r?`<div style="font-size:11px;color:${r.ret>=0?'var(--green)':'var(--red)'};padding:0 0 3px">Avkastning sedan ${esc(r.from)}: ${fmtSigned(r.ret)} kr (insatt ${fmt(r.deposits)} kr)</div>`:'')+avanzaSubHtml(a))});
     const av=latestOf(_assets.filter(x=>x.asset===c.key));
     if(av)lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub)">Värde</span><span style="display:flex;gap:6px;align-items:center"><span style="font-family:var(--mono)">${fmt(av.value)}</span>${btn('Uppdatera',`openValModal('asset',${jsArg(c.key)})`)}</span></div>`);
     _loans.filter(l=>l.secured_by===c.key).forEach(l=>{const d=loanDebt(l);if(d)lines.push(`<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span style="color:var(--sub)">− ${esc(l.name)}</span><span style="font-family:var(--mono);color:var(--red)">−${fmt(d.value)}</span></div>`)});
@@ -2617,6 +2618,116 @@ function wealthSourcesHtml(){
   const mv=manualValuesApp(),est=mv.filter(x=>x.estimated).length,old=mv.filter(x=>x.stale).length;
   const note=est||old?`<div style="padding:10px 17px;font-size:11.5px;color:var(--sub);line-height:1.5">${est?`${est} ${est===1?'värde är':'värden är'} <span style="color:var(--amber)">uppskattade</span> (inmatade för hand och inte bekräftade). `:''}${old?`${old} ${old===1?'är':'är'} <span style="color:var(--red)">äldre än 6 månader</span>. `:''}Uppdatera eller tryck Bekräfta när värdet stämmer exakt.</div>`:'';
   return`<div class="sec"><span class="sec-t">Konton & värden</span><span class="sec-sub">räknas in automatiskt</span></div><div class="txl" style="padding-top:0">${note}${blocks}</div>`;
+}
+// ═══════════════════════════════════════════
+// INVESTERINGAR (Avanza) — vyn räknas på servern (investView i supabase/functions/_shared/avanza.ts) och cachas här.
+// Bilderna importeras i första hand via MCP (import_avanza_snapshot från en Chrome-session); fältet nedan är reserv.
+// Appen läser bara: den kan inte handla, föra över pengar eller ändra något hos Avanza.
+// ═══════════════════════════════════════════
+let _invest=ld('invest_cache',null),_investAt=0,_avzPending=null;
+async function refreshInvest(){
+  if(!_sbUser)return;_investAt=Date.now();
+  try{const v=await bankCall('investments');const ch=JSON.stringify(v)!==JSON.stringify(_invest);_invest=v;localStorage.setItem('invest_cache',JSON.stringify(v));if(ch)renderNetWorth()}
+  catch(e){console.warn('Investeringar:',e.message||e)}
+}
+const pctTxt=n=>n==null?'—':String(Math.round(n*10)/10).replace('.',',')+' %';
+const invRow=(l,r,sub)=>`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0"><span style="color:var(--sub);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l}</span><span style="font-family:var(--mono);flex-shrink:0">${r}</span></div>${sub?`<div style="font-size:11px;color:var(--sub2);padding:0 0 3px">${sub}</div>`:''}`;
+const invBlock=(title,body)=>`<div style="padding:10px 17px;border-top:1px solid var(--line);font-size:12.5px"><div style="font-weight:600;margin-bottom:4px">${title}</div>${body}</div>`;
+// Underkontona som detaljer under Avanza ISK (summan = saldot i förmögenheten)
+function avanzaSubHtml(a){
+  const v=_invest;if(!v?.accounts||a.id!==(v.settings?.avanza_account||'avanza_isk'))return'';
+  const rows=v.accounts.map(x=>invRow(`${esc(x.name)} <span style="color:var(--sub2);font-size:11px">${esc(x.type)}${x.hidden?' · dolt'+(x.counted?'':', räknas inte'):''}${x.funded_by_loan?' · lånat':''}</span>`,fmt(x.value))).join('');
+  const sc=v.sum_check;
+  return`<details style="margin:0 0 4px 10px"><summary style="font-size:11.5px;color:var(--sub2);cursor:pointer">${v.accounts.length} konton hos Avanza · bild ${esc(v.date)}</summary>${rows}
+    <div style="font-size:11px;padding:3px 0;color:${sc.ok?'var(--green)':'var(--red)'}">${sc.ok?`Summa ${fmt(v.portfolio_value)} kr = saldot ✓`:esc(sc.text)}</div></details>`;
+}
+function investHtml(){
+  if(!_sbUser)return'';
+  const v=_invest,head=`<div class="sec"><span class="sec-t">Investeringar</span><span class="sec-sub">${v?.date?'Avanza '+esc(v.date):'Avanza'}</span></div>`;
+  if(!v?.accounts)return head+`<div class="txl" style="padding-top:0">${invBlock('Ingen Avanza-bild ännu',`<div style="font-size:12px;color:var(--sub);line-height:1.5">Låt Claude läsa Avanza och importera med MCP-verktyget import_avanza_snapshot (förhandsgranskning först). ${v?.note?esc(v.note):''}</div>`)}${avzPasteHtml()}</div>`;
+  const b=[];
+  // Tillgängligt direkt (separat, ändrar inte förmögenhetskategorierna)
+  const L=v.liquidity;b.push(invBlock(`Tillgängligt direkt <span style="float:right;font-family:var(--mono)">${fmt(L.available_now)} kr</span>`,L.items.map(x=>invRow(esc(x.name),fmt(x.value))).join('')));
+  // Hävstång
+  const lv=v.leverage;
+  if(lv)b.push(invBlock('Lånat kapital',`<div style="padding:2px 0 6px;font-size:13px">${esc(lv.text)}</div>`+
+    invRow('Lånat kapital'+(lv.borrowed_source==='estimated'?' (uppskattat)':''),fmt(lv.borrowed_capital))+invRow('Avkastning (Avanza, sedan köp)',fmtSigned(lv.return_kr))+
+    (lv.interest_pct!=null?invRow(`Ränta ${pctTxt(lv.interest_pct)} efter ${pctTxt(lv.deduction_pct)} avdrag, per år`,lv.cost_per_year_after_deduction!=null?'−'+fmt(lv.cost_per_year_after_deduction):'—'):'')+
+    (lv.cost_after_deduction!=null?invRow(`Räntekostnad sedan ${esc(lv.since)} (${lv.days} dagar)`,'−'+fmt(lv.cost_after_deduction)):'')+(lv.net!=null?invRow('<b>Netto</b>',`<b style="color:${lv.net>=0?'var(--green)':'var(--red)'}">${fmtSigned(lv.net)}</b>`):'')+
+    (lv.notes||[]).map(n=>`<div style="font-size:11px;color:var(--sub2);padding-top:3px">${esc(n)}</div>`).join('')));
+  // Varningar (bara fakta)
+  if(v.warnings.length)b.push(`<div style="padding:10px 17px;border-top:1px solid var(--line)">${v.warnings.map(w=>`<div style="margin:3px 0;padding:7px 10px;border-radius:10px;background:var(--amber2);font-size:11.5px;line-height:1.5">⚠️ ${esc(w.text)}</div>`).join('')}</div>`);
+  // Fördelning och fem största
+  b.push(invBlock(`Fördelning <span style="float:right;font-family:var(--mono)">${fmt(v.portfolio_value)} kr</span>`,v.allocation.filter(x=>x.value).map(x=>invRow(`${esc(x.label)} <span style="color:var(--sub2);font-size:11px">${pctTxt(x.pct)}</span>`,fmt(x.value))).join('')+
+    `<div style="font-size:11px;color:var(--sub2);padding-top:3px">${esc(v.invested_note)}</div>`));
+  b.push(invBlock('Fem största innehaven',v.top5.map(h=>invRow(`${esc(h.name)} <span style="color:var(--sub2);font-size:11px">${esc(h.kind)}</span>`,`${pctTxt(h.share_pct)} · ${fmt(h.value)}`)).join('')));
+  // Innehav per konto
+  b.push(invBlock('Innehav per konto',v.accounts.map(a=>`<details style="margin:2px 0"><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:8px"><span style="color:var(--sub)">${esc(a.name)} <span style="color:var(--sub2);font-size:11px">${esc(a.type)}${a.ytd_pct!=null?' · i år '+pctTxt(a.ytd_pct):''}</span></span><span style="font-family:var(--mono)">${fmt(a.value)}</span></summary>
+    ${a.holdings.map(h=>invRow(`${esc(h.name)}${h.gain_pct!=null?` <span style="color:${h.gain_pct>=0?'var(--green)':'var(--red)'};font-size:11px">${pctTxt(h.gain_pct)}</span>`:''}`,fmt(h.value))).join('')}${invRow('Kontanter'+(a.reserved_cash?` (varav reserverat ${fmt(a.reserved_cash)})`:''),fmt(a.cash||0))}</details>`).join('')));
+  // Utdelningar
+  const d=v.dividends||{};
+  if(d.per_year?.length||d.paid_total!=null)b.push(invBlock('Utdelningar',(d.per_year||[]).map(x=>invRow(esc(x.year)+(x.year===v.date.slice(0,4)?' (hittills)':''),fmt(x.ytd))).join('')+(d.pending?invRow('Kommande',fmt(d.pending)):'')+(d.paid_total!=null?invRow('Totalt utbetalt',fmt(d.paid_total)):'')));
+  // ISK-skatt
+  const t=v.isk_tax;
+  if(t)b.push(invBlock(`ISK-skatt ${esc(t.year)} (uppskattning)${t.tax!=null?`<span style="float:right;font-family:var(--mono)">≈ ${fmt(t.tax)} kr</span>`:''}`,t.missing?`<div style="font-size:11.5px;color:var(--sub)">Inställningar saknas: ${t.missing.map(esc).join(', ')}.</div>`:
+    invRow('Kapitalunderlag',fmt(t.capital_base))+invRow('Skattefri nivå','−'+fmt(t.tax_free))+invRow(`Schablon ${pctTxt(t.schablon_pct)}, skatt`,fmt(t.tax))+`<div style="font-size:11px;color:var(--sub2);padding-top:3px">${esc(t.note)}</div>`));
+  // Förändring sedan förra bilden
+  const c=v.change_since_previous;
+  if(c)b.push(invBlock(`Sedan ${esc(c.from)}`,invRow('Värdeförändring',fmtSigned(c.value_change))+invRow('Insättningar från banken',fmtSigned(c.deposits))+invRow('Avkastning',fmtSigned(c.return))+`<div style="font-size:11px;color:var(--sub2);padding-top:3px">Flyttar mellan Avanza-konton är neutrala.</div>`));
+  b.push(investSettingsHtml(v.settings||{}));
+  return head+`<div class="txl" style="padding-top:0">${b.join('')}${avzPasteHtml()}<div style="padding:8px 17px 12px;font-size:11px;color:var(--sub2)">${esc(v.note)}</div></div>`;
+}
+function investSettingsHtml(s){
+  const lv=s.leverage||{},inp=(id,val,ph,w=90,type='number')=>`<input id="${id}" type="${type}" class="sb-inp" value="${esc(val??'')}" placeholder="${ph}" style="width:${w}px;margin:0">`;
+  return`<details style="padding:10px 17px;border-top:1px solid var(--line);font-size:12.5px"><summary style="cursor:pointer;font-weight:600">Inställningar</summary>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;margin-top:8px">
+      <span>Varning när ett innehav är mer än (%)</span>${inp('inv-conc',s.concentration_pct??15,'15')}
+      <span>Ränteavdrag (%)</span>${inp('inv-ded',s.interest_deduction_pct,'30')}
+      <span>Lånat belopp (kr)</span>${inp('inv-borrowed',lv.borrowed_kr,'uppskattas',110)}
+      <span>Lånet investerades</span>${inp('inv-since',lv.since,'',140,'date')}
+      <span>Lånefinansierade konton (komma)</span>${inp('inv-funded',(s.funded_by_loan||[]).join(', '),'Utökat lån ISK',170,'text')}
+      <span>Räkna med dolda konton</span><label class="toggle"><input type="checkbox" id="inv-hidden"${s.include_hidden?' checked':''}><span class="tsl"></span></label>
+    </div><button class="sb-btn sb-btn2" style="margin-top:10px" onclick="saveInvestSettings()">Spara</button>
+    <div style="font-size:11px;color:var(--sub2);margin-top:6px">Räntesatsen hämtas från lånen. ISK-nivåerna (statslåneränta, skattefri nivå) ändras via MCP (set_investment_settings).</div></details>`;
+}
+async function saveInvestSettings(){
+  const g=k=>document.getElementById(k).value.trim(),n=k=>g(k)===''?null:+g(k);
+  const settings={concentration_pct:n('inv-conc')??15,interest_deduction_pct:n('inv-ded'),include_hidden:document.getElementById('inv-hidden').checked,
+    funded_by_loan:g('inv-funded').split(',').map(x=>x.trim()).filter(Boolean),leverage:{borrowed_kr:n('inv-borrowed'),since:g('inv-since')||null}};
+  try{await bankCall('invest-settings',{settings});toast('Sparat ✓');await refreshInvest()}catch(e){toast(e.message,'err')}
+}
+// Reserv: klistra in text från Avanza eller en Claude-sammanställning → tolkas på servern → förhandsgranskning → spara
+function avzPasteHtml(){
+  const p=_avzPending,r=p?.result,pv=r?.preview;
+  const prev=r?`<div id="avz-preview" style="margin-top:8px;padding:10px;border-radius:10px;background:var(--fill);font-size:12px;line-height:1.55">
+    ${r.duplicate?`<div>${esc(r.note)}</div>`:''}
+    ${r.errors?.length?`<div style="color:var(--red)">${r.errors.map(esc).join('<br>')}</div>`:''}
+    ${pv?`<div><b>Totalvärde ${fmt(pv.total_value)} kr</b> · ${esc(pv.date)}</div>
+      <div>Saldo på ${esc(pv.account)}: ${pv.current_balance?fmt(pv.current_balance.value)+' → ':''}${fmt(pv.balance_to_set)} kr</div>
+      ${pv.change_since_previous?`<div>Sedan ${esc(pv.change_since_previous.from)}: ${fmtSigned(pv.change_since_previous.value_change)} kr (insatt ${fmt(pv.change_since_previous.deposits)}, avkastning ${fmtSigned(pv.change_since_previous.return)})</div>`:''}
+      <div style="color:${pv.sum_check.ok?'var(--green)':'var(--red)'}">${esc(pv.sum_check.text)}</div>
+      ${pv.warnings.map(w=>`<div style="color:var(--amber)">⚠️ ${esc(w.text)}</div>`).join('')}
+      ${(r.changes||[]).map(c=>`<div>• ${esc(c.text)}</div>`).join('')}
+      ${pv.sum_check.ok&&!r.duplicate&&!r.errors?.length?`<button class="sb-btn" style="margin-top:8px" onclick="avzSave()">Spara bilden</button>`:''}`:''}
+    <button class="sb-btn sb-btn2" style="margin-top:8px" onclick="_avzPending=null;renderNetWorth()">Avbryt</button></div>`:'';
+  return`<details style="padding:10px 17px;border-top:1px solid var(--line);font-size:12.5px"${p?' open':''}><summary style="cursor:pointer;font-weight:600">Klistra in från Avanza (reserv)</summary>
+    <textarea id="avz-text" class="sb-inp" rows="5" style="width:100%;margin:8px 0 0;font-size:12px" placeholder="Klistra in översikten, konton och innehav från Avanza – eller en sammanställning från Claude">${esc(p?.text||'')}</textarea>
+    <button class="sb-btn sb-btn2" style="margin-top:8px" onclick="avzParse()">Tolka och förhandsgranska</button>${prev}</details>`;
+}
+async function avzParse(){
+  const text=document.getElementById('avz-text').value;
+  try{toast('Tolkar…');const r=await bankCall('avanza-parse',{text});_avzPending={text,snapshot:r.snapshot,result:r};renderNetWorth()}
+  catch(e){toast('Kunde inte tolka: '+e.message,'err')}
+}
+async function avzSave(){
+  const p=_avzPending;if(!p?.snapshot)return;
+  try{
+    const r=await bankCall('avanza-import',{snapshot:p.snapshot,dry_run:false});
+    if(!r.saved){_avzPending={...p,result:r};renderNetWorth();toast(r.blocked||r.note||'Inget sparat','warn');return}
+    // Servern ändrade konton och förväntade transaktioner: synken hämtar dem (sammanslagning fält för fält, inget skrivs över)
+    if(typeof sbSync==='function')await sbSync({silent:true}).catch(()=>{});
+    _avzPending=null;toast('Avanza-bilden sparad ✓');await refreshLoans();await refreshInvest();renderNetWorth();
+  }catch(e){toast('Kunde inte spara: '+e.message,'err')}
 }
 // Nytt saldo (konto) eller värde (tillgång) per datum
 let _valEdit=null;
@@ -2668,7 +2779,7 @@ function debtAtApp(l,date){const h=[...(l.history||[])].sort((a,b)=>a.date.local
   let n=0,t=h[0].date;while(t>date&&n<600){n++;t=shiftMD(t,-1)}return{date,value:h[0].value+(+l.amortization||0)*n,estimated:true}}
 // Datum då aktier/fonder och pension har ett känt värde (saldon på konton i kategorin + manuella värden)
 function investValueDates(){const out={};NW_INVEST.forEach(k=>{const accs=getAccounts().filter(a=>nwCatOfAcc(a)===k).map(a=>a.id);
-  out[k]=[..._balances.filter(b=>accs.includes(b.account)).map(b=>b.bal_date),..._assets.filter(x=>x.asset===k).map(x=>x.val_date)]});return out}
+  out[k]=[..._balances.filter(b=>accs.includes(b.account)).map(b=>b.bal_date),..._assets.filter(x=>x.asset===k).map(x=>x.val_date),...(k==='stocks'?_invest?.snapshot_dates||[]:[])]});return out}
 function valueGapWarningsApp(vd,boundary,period){return NW_INVEST.map(cat=>{const g=(vd[cat]||[]).map(d=>Math.abs(parseLocalDate(d)-parseLocalDate(boundary))/864e5);const gap=g.length?Math.round(Math.min(...g)):null;
   return gap==null||gap>5?{cat,period,boundary,gap_days:gap}:null}).filter(Boolean)}
 function decomposeNW(){
@@ -3592,6 +3703,7 @@ function renderNetWorth(){
 
   // ── 4a. KONTON & VÄRDEN (källorna) ──
   html+=wealthSourcesHtml();
+  html+=investHtml();
 
   // ── 4b. LÅN & SKULDER ──
   html+=loansHtml(latest);
@@ -6647,14 +6759,15 @@ function expectedHistory(e){
   for(let i=1;i<=12;i++){const p=periodShift(cur,-i),pt=txs.filter(t=>t.month===p);
     const sal=pt.filter(t=>t.type==='income'&&t.cat==='Lön').map(t=>t.date).sort()[0];if(!sal&&!e.due_day)continue;periods++;
     const limit=e.due_day?parseLocalDate(dueDateInApp(getPeriodStart(p),+e.due_day)):new Date(parseLocalDate(sal).getTime()+(+e.days||5)*864e5),q=String(e.match||'').toLowerCase();
-    if(!pt.some(t=>t.type===e.type&&(!e.cat||t.cat===e.cat)&&(!q||(t.desc||'').toLowerCase().includes(q))&&parseLocalDate(t.date)<=limit))missed++}
+    const types=Array.isArray(e.types)?e.types:[e.type],lim=new Date(limit.getTime()+(e.grace_bank_days!=null?(+e.grace_bank_days+2)*864e5:0));
+    if(!pt.some(t=>types.includes(t.type)&&(!e.cat||t.cat===e.cat)&&(!q||(t.desc||'').toLowerCase().includes(q))&&(e.amount==null||Math.abs(Math.abs(t.amount)-e.amount)<=1)&&parseLocalDate(t.date)<=lim))missed++}
   return{periods,missed};
 }
 function renderExpectedSettings(){
   const el=document.getElementById('expected-list');if(!el)return;
   const TL={expense:'Utgift',income:'Inkomst',savings:'Sparande',transfer:'Överföring'};
   el.innerHTML=(getExpected().map((e,i)=>{const h=expectedHistory(e);return`<div class="s-row"><div style="min-width:0;flex:1"><div class="s-row-lbl">${esc(e.name)}</div>
-      <div class="s-row-sub">${TL[e.type]||e.type}${e.cat?' · '+esc(e.cat):''}${e.match?` · text "${esc(e.match)}"`:''} · ${e.due_day?`senast den ${e.due_day}:e`:`senast ${e.days||5} dagar efter lönen`}${h.periods?` · uteblev/sent ${h.missed} av ${h.periods} perioder`:''}</div></div>
+      <div class="s-row-sub">${TL[e.type]||e.type}${e.cat?' · '+esc(e.cat):''}${e.match?` · text "${esc(e.match)}"`:''} · ${e.grace_bank_days!=null?`den ${e.due_day}:e + ${e.grace_bank_days} bankdagar${e.source==='avanza'?' · från Avanza-bilden':''}`:e.due_day?`senast den ${e.due_day}:e`:`senast ${e.days||5} dagar efter lönen`}${h.periods?` · uteblev/sent ${h.missed} av ${h.periods} perioder`:''}</div></div>
       <label class="toggle"><input type="checkbox"${e.enabled!==false?' checked':''} onchange="setExpected(${i},'enabled',this.checked)"><span class="tsl"></span></label><button class="tag-rm" onclick="removeExpected(${i})">×</button></div>`}).join('')||'<div style="padding:12px 16px;font-size:13px;color:var(--sub2)">Inga ännu.</div>')+
     `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px 12px"><input id="ex-name" class="sb-inp" placeholder="Namn, t.ex. Hyra från inneboende" style="flex:1 1 140px;margin:0">
       <select id="ex-type" class="sb-inp" style="width:auto;margin:0" onchange="document.getElementById('ex-cat').innerHTML=catsForType(this.value).map(c=>'<option>'+esc(c)+'</option>').join('')">${Object.entries(TL).map(([k,l])=>`<option value="${k}"${k==='savings'?' selected':''}>${l}</option>`).join('')}</select>

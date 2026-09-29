@@ -12,6 +12,7 @@ import { type Obj, CAT_KEY, DEF, numberKind, descNumber, today, addDays, dayDiff
 import { computeNetWorth, DEF_NW_CATS, shiftMonthDay } from '../_shared/networth.ts';
 import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText, CLOSING_SCHEMA, WEEKLY_SCHEMA } from './review.ts';
 import { sendPush } from '../_shared/push.ts';
+import { investmentsFor, importSnapshot, SNAPSHOT_SCHEMA, SETTINGS_SCHEMA, mergeSettings } from '../_shared/avanza.ts';
 import { buildDigest, missingExpected } from './notify.ts';
 import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, loanUpdates, splitMortgageRows, applySavingsModel, savingsByPeriod } from './core.ts';
 
@@ -338,7 +339,7 @@ async function notify(uid: string, r: Obj) {
   const paceRows = await pages(() => db.from('transactions').select('month,type,amount,tx_date').eq('user_id', uid).eq('deleted', false).eq('type', 'expense').in('month', pm).order('id'));
   // Förväntade transaktioner (t.ex. sparandet till Avanza inom 5 dagar efter lönen)
   const expected = await loadKey(uid, 'expected_tx');
-  const curRows = await pages(() => db.from('transactions').select('type,category,description,tx_date').eq('user_id', uid).eq('deleted', false).eq('month', pid).order('id'));
+  const curRows = await pages(() => db.from('transactions').select('type,category,description,tx_date,amount,account').eq('user_id', uid).eq('deleted', false).eq('month', pid).order('id'));
   const salaryDate = curRows.filter((x) => x.type === 'income' && x.category === 'Lön').map((x) => x.tx_date).sort()[0] || null;
   // Manuella investeringskonton (t.ex. Avanza) vars värde inte uppdaterats sedan lönen kom
   const stale: Obj[] = [];
@@ -346,8 +347,16 @@ async function notify(uid: string, r: Obj) {
     const last = (await must<Obj[]>(db.from('account_balances').select('bal_date').eq('user_id', uid).eq('account', a.id).eq('deleted', false).order('bal_date', { ascending: false }).limit(1)))[0];
     if (!last || last.bal_date < salaryDate) stale.push({ id: a.id, name: a.name, date: last?.bal_date || null });
   }
+  // Autogiro som inte dragits: saldot på kontot det dras från (senaste saldo)
+  const missing = missingExpected(Array.isArray(expected) ? expected : [], curRows, day, range.start);
+  for (const e of missing) if (e.from_account) {
+    const a = s.accounts.find((x: Obj) => x.id === e.from_account); if (!a) continue;
+    const last = (await must<Obj[]>(db.from('account_balances').select('bal_date,value').eq('user_id', uid).eq('account', a.id).eq('deleted', false).order('bal_date', { ascending: false }).limit(1)))[0];
+    const b = last && (!a.balance?.date || last.bal_date >= a.balance.date) ? Number(last.value) : a.balance ? Number(a.balance.value) : null;
+    Object.assign(e, { from_name: a.name, balance: b });
+  }
   const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal, pace: pace(paceRows, pid, starts, day),
-    missing: missingExpected(Array.isArray(expected) ? expected : [], curRows, day, range.start), salaryDate, stale };
+    missing, salaryDate, stale };
   const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
   const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
   const d = buildDigest({ ...input, sent });
@@ -474,6 +483,38 @@ export async function maybeWeekly(uid: string, s: Obj, force = false) {
   return { date: day, push, spent: kr0(facts.spent) };
 }
 
+// ── Avanza-text → avanza_snapshot (AI, strukturerat svar enligt schemat) ─
+const pickKeys = (o: Obj, schema: Obj) => Object.fromEntries(Object.entries(o).filter(([k]) => k in schema.properties));
+// Structured outputs vill ha additionalProperties: false på varje objekt och alla fält i required (null = saknas)
+function strictSchema(x: Obj): Obj {
+  if (x.anyOf) return { anyOf: x.anyOf.map(strictSchema) };
+  const o: Obj = { type: x.type === 'integer' ? 'integer' : x.type, ...(x.enum ? { enum: x.enum } : {}), ...(x.description ? { description: x.description } : {}) };
+  if (x.type === 'object') { const p = x.properties || {}; o.properties = Object.fromEntries(Object.entries(p).map(([k, v]) => [k, strictSchema(v as Obj)])); o.required = Object.keys(p); o.additionalProperties = false; }
+  if (x.type === 'array') o.items = strictSchema(x.items);
+  return o;
+}
+async function parseAvanzaText(text: string) {
+  const key = Deno.env.get('ANTHROPIC_API_KEY'); if (!key) throw new Error('AI saknas på servern (ANTHROPIC_API_KEY)');
+  if (text.trim().length < 20) throw new Error('Klistra in texten från Avanza först');
+  if (text.length > 60000) throw new Error('Texten är för lång (högst 60 000 tecken)');
+  const system = `Du gör om text från Avanza (översikt, konton, innehav, månadssparande, utdelningar, order) eller en sammanställning till JSON enligt schemat.
+Regler: belopp i kronor som tal (177 731 kr → 177731). date = avläsningens datum och tid (ISO), annars dagens datum ${today()}. total_value = totalvärdet Avanza visar.
+cash = kontanter inklusive reserverade; reserved_cash = reserverat för order. hidden = dolt konto. funded_by_loan = null om texten inte säger något.
+monthly_savings.from = "bank" för autogiro från banken, annars namnet på Avanza-kontot pengarna flyttas från. Saknas en uppgift: null (eller tom lista). Hitta aldrig på värden.`;
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 16000, output_config: { format: { type: 'json_schema', schema: strictSchema(SNAPSHOT_SCHEMA) } }, system, messages: [{ role: 'user', content: text }] }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('AI: ' + (j.error?.message || r.status));
+  const out = JSON.parse((j.content || []).find((c: Obj) => c.type === 'text')?.text || '{}');
+  // null i valfria fält betyder "saknas"
+  const clean = (v: any): any => Array.isArray(v) ? v.map(clean) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null).map(([k, x]) => [k, clean(x)])) : v;
+  const s = clean(out);
+  for (const a of s.accounts || []) if (a.funded_by_loan === undefined) delete a.funded_by_loan;
+  return s;
+}
+
 // ── Rutter ─────────────────────────────────────────────────────────────
 const safeReturn = (u: unknown) => (typeof u === 'string' && (/^https:\/\/augustnerpin\.github\.io\//.test(u) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(u)) ? u : APP_URL);
 const back = (to: string, params: Obj) => { const u = new URL(to); for (const [k, v] of Object.entries(params)) u.searchParams.set(k, String(v)); return Response.redirect(u.toString(), 302); };
@@ -565,6 +606,28 @@ Deno.serve(async (req) => {
     if (route === 'savings-model') {
       const b = await req.json().catch(() => ({}));
       return json(await savingsModelRun(uid, await loadState(uid), b.dry_run !== false, b.assume || {}));
+    }
+    // Avanza (bara läsning hos Avanza): investeringsvyn, import av en bild (dry_run är standard) och inställningar
+    if (route === 'investments') {
+      const b = await req.json().catch(() => ({}));
+      return json(await investmentsFor(db, uid, /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : null));
+    }
+    if (route === 'avanza-import') {
+      const b = await req.json().catch(() => ({}));
+      return json(await importSnapshot(db, uid, b.snapshot, { dryRun: b.dry_run !== false, source: 'app' }));
+    }
+    // Reserv: text inklistrad från Avanza (eller en sammanställning) → avanza_snapshot med AI, sedan förhandsgranskning
+    if (route === 'avanza-parse') {
+      const b = await req.json().catch(() => ({}));
+      const snapshot = await parseAvanzaText(String(b.text || ''));
+      return json({ snapshot, ...(await importSnapshot(db, uid, snapshot, { dryRun: true, source: 'app' })) });
+    }
+    if (route === 'invest-settings') {
+      const b = await req.json().catch(() => ({}));
+      const cur = (await must<Obj[]>(db.from('user_state').select('value').eq('user_id', uid).eq('key', 'invest_settings')))[0]?.value || {};
+      const next = mergeSettings(cur, pickKeys(b.settings || {}, SETTINGS_SCHEMA));
+      await saveState(uid, 'invest_settings', next);
+      return json({ settings: next });
     }
     if (route === 'push-test') return json(await pushTo(uid, { title: 'Notiser är på ✓', body: 'Här hör appen av sig när lönen kommit, vid stora köp och när budgeten börjar ta slut.', url: APP_URL, tag: 'test' }));
     return json({ error: 'Okänd väg' }, 404);
