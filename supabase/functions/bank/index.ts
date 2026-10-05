@@ -14,6 +14,7 @@ import { periodFacts, weekFacts, pace, closingPrompt, weeklyPrompt, profileText,
 import { sendPush } from '../_shared/push.ts';
 import { investmentsFor, importSnapshot, SNAPSHOT_SCHEMA, SETTINGS_SCHEMA, mergeSettings } from '../_shared/avanza.ts';
 import { buildDigest, missingExpected } from './notify.ts';
+import { watchItems, digestPrompt, checkAiDigest, DIGEST_SCHEMA } from './watch.ts';
 import { pickBalance, mapTx, dedupe, overlap, newAppAccount, categorize, toRows, learnRules, fetchFrom, loanUpdates, splitMortgageRows, applySavingsModel, savingsByPeriod } from './core.ts';
 
 const APP_URL = 'https://augustnerpin.github.io/privatekonomi2/';
@@ -356,15 +357,31 @@ async function notify(uid: string, r: Obj) {
     const b = last && (!a.balance?.date || last.bal_date >= a.balance.date) ? Number(last.value) : a.balance ? Number(a.balance.value) : null;
     Object.assign(e, { from_name: a.name, balance: b });
   }
+  // Prishöjningar och nya abonnemang (sju perioder bakåt), dubbeldragningar bland nattens rader
+  const watchRows = await pages(() => db.from('transactions').select('id,type,category,amount,description,tx_date,month,mkey,account').eq('user_id', uid).eq('deleted', false)
+    .eq('type', 'expense').in('month', [0, 1, 2, 3, 4, 5, 6].map((i) => periodShift(pid, -i))).order('id'));
+  const seen = await loadKey(uid, 'sub_seen').catch(() => null);
+  const watch = watchItems({ rows: watchRows, newRows: r.rows || [], pid, seen: seen && typeof seen === 'object' ? seen : {} });
   const input = { newRows: r.rows || [], spent, budgets: s.cat_budgets || {}, period: { id: pid, ...range }, today: day, conns, loans, goal, pace: pace(paceRows, pid, starts, day),
-    missing, salaryDate, stale };
+    missing, salaryDate, stale, watch };
   const all = buildDigest({ ...input, sent: new Set<string>() }); if (!all) return { sent: 0 };
   const sent = new Set((await must<Obj[]>(db.from('notifications').select('key').eq('user_id', uid).in('key', all.keys))).map((x) => x.key));
   const d = buildDigest({ ...input, sent });
   if (!d) return { sent: 0 };
+  // AI skriver om notisen med det viktigaste först; regeltexten används om den misslyckas eller hittar på tal
+  const ai = await aiDigest(uid, d.items).catch((e) => { console.error('AI-notis misslyckades', e); return null; });
+  if (ai) Object.assign(d, ai);
   const out = await pushTo(uid, { title: d.title, body: d.body, url: APP_URL, tag: 'digest-' + day });
   if (out.sent) await must(db.from('notifications').upsert(d.keys.map((key) => ({ user_id: uid, key, title: d.title, body: d.body })), { onConflict: 'user_id,key' }));
   return out;
+}
+
+// Bara när det finns något att välja mellan: en enda händelse skickas som den är. Stängs av med secret DIGEST_AI=off.
+async function aiDigest(uid: string, items: Obj[]) {
+  if (items.length < 2 || Deno.env.get('DIGEST_AI') === 'off') return null;
+  const profile = profileText(await loadKey(uid, 'ai_profile'));
+  const raw = await claudeJson('claude-haiku-4-5', null, digestPrompt(profile), items.map((i) => i.line).join('\n'), DIGEST_SCHEMA, 600);
+  return checkAiDigest(raw, items);
 }
 
 // ── Förmögenhet från saldon, manuella värden och lån ────────────────────
@@ -422,11 +439,12 @@ async function savingsModelRun(uid: string, s: Obj, dry: boolean, assume: Obj) {
 // ── Månadsbokslut och veckobrev (nattjobbet) ───────────────────────────
 // Sparas i user_state (month_closings = {period: bokslut}, weekly_letters = [brev]) så att appen visar dem,
 // och skickas som notis. Bokslutet skrivs dag 2 i en ny löneperiod, veckobrevet på söndagar.
-async function claudeJson(model: string, effort: string, system: string, user: string, schema: Obj, max_tokens = 4000) {
+async function claudeJson(model: string, effort: string | null, system: string, user: string, schema: Obj, max_tokens = 4000) {
   const key = Deno.env.get('ANTHROPIC_API_KEY'); if (!key) throw new Error('ANTHROPIC_API_KEY saknas');
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens, output_config: { effort, format: { type: 'json_schema', schema } }, system, messages: [{ role: 'user', content: user }] }),
+    // Haiku 4.5 tar inte emot effort (effort = null)
+    body: JSON.stringify({ model, max_tokens, output_config: { ...(effort ? { effort } : {}), format: { type: 'json_schema', schema } }, system, messages: [{ role: 'user', content: user }] }),
   });
   const j = await r.json(); if (!r.ok) throw new Error(j.error?.message || 'HTTP ' + r.status);
   return JSON.parse((j.content || []).filter((b: Obj) => b.type === 'text').map((b: Obj) => b.text).join(''));

@@ -3229,6 +3229,39 @@ function detectRecurring(month){
   return out.sort((a,b)=>b.typical-a.typical);
 }
 
+// Nya abonnemang: en butik som dragit ungefär samma belopp en gång i denna och förra perioden men aldrig
+// under de fem perioderna innan, eller första dragningen någonsin i kategorin Prenumerationer.
+// Samma regler som nattens notis (supabase/functions/bank/watch.ts).
+function detectNewSubs(month){
+  const periods=[...Array(7).keys()].map(i=>periodShift(month,-i)),txs=getTxs();
+  const by={};
+  txs.forEach(t=>{
+    if(t.type!=='expense'||!(t.amount>0))return;
+    const k=mkeyBase(t),m=by[k]||(by[k]={key:k,name:displayDesc(t.desc)||t.cat,cat:t.cat,per:{},first:t.month,last:t});
+    if(t.month<m.first)m.first=t.month;
+    if(t.month===month)m.last=t;
+    if(periods.includes(t.month))(m.per[t.month]||(m.per[t.month]=[])).push(t.amount);
+  });
+  const out=[];
+  Object.values(by).forEach(m=>{
+    const cur=m.per[month],prev=m.per[periods[1]];
+    if(!cur||cur.length!==1||!(cur[0]>=20))return;
+    if(m.first===month&&m.cat==='Prenumerationer'){out.push({key:m.key,name:m.name,cat:m.cat,amount:Math.round(cur[0]),why:'first'});return}
+    if(!prev||prev.length!==1||periods.slice(2).some(p=>m.per[p])||m.first<periods[1])return;
+    if(Math.abs(cur[0]-prev[0])>Math.max(cur[0],prev[0])*0.15)return;
+    out.push({key:m.key,name:m.name,cat:m.cat,amount:Math.round(cur[0]),why:'twice'});
+  });
+  return out.sort((a,b)=>b.amount-a.amount);
+}
+// Säg upp / förhandla: coachen skriver ett färdigt mejl (appen kan inte säga upp något själv)
+function subAsk(kind,name,cur,typical,cat){
+  const yr=fmt(cur*12);
+  homeAsk(kind==='cancel'
+    ?`Jag funderar på att säga upp ${name} (${cat}, ca ${fmt(cur)} kr/mån = ${yr} kr/år). Sök först i mina transaktioner hur länge och hur ofta jag betalat. Skriv sedan ett kort, färdigt uppsägningsmejl på svenska med plats för namn och kundnummer, berätta var man brukar säga upp den här typen av tjänst och vilken uppsägningstid som brukar gälla, och vad jag sparar per år.`
+    :`${name} (${cat}) har gått från ${fmt(typical)} till ${fmt(cur)} kr/mån (+${fmt((cur-typical)*12)} kr/år). Sök i mina transaktioner hur länge jag varit kund. Skriv ett kort, färdigt meddelande på svenska där jag ber om det gamla priset eller ett bättre erbjudande, med 2–3 konkreta argument, och föreslå vad jag kan jämföra med om de säger nej.`);
+}
+function subDismiss(key,amount){const d=ld('sub_seen',{});d[key]=Math.round(amount);sv('sub_seen',d);render()}
+
 function monthFacts(month){
   const all=getTxs();
   const txs=all.filter(t=>t.month===month);
@@ -3490,9 +3523,13 @@ function renderHome(){
     add(7,fcHtml({icon:'target',tone:'pro',title:'Sätt en budget',text:'Tak per kategori, förifyllt från ditt snitt.',onclick:'openBudgetModal()'}));
   // Fasta kostnader
   const rec=detectRecurring(month);
-  rec.filter(r=>r.status==='dyrare').forEach(r=>add(2.5,fcHtml({icon:'up',tone:'warn',title:`${esc(r.name)} blev dyrare`,text:`${fmt(r.current)} kr denna månad, brukar vara ${fmt(r.typical)} kr.`})));
+  const seen=ld('sub_seen',{});
+  rec.filter(r=>r.status==='dyrare'&&seen[r.key]!==r.current).forEach(r=>add(2.5,fcHtml({icon:'up',tone:'warn',title:`${esc(r.name)} blev dyrare`,text:`${fmt(r.current)} kr denna månad, brukar vara ${fmt(r.typical)} kr — ${fmt((r.current-r.typical)*12)} kr mer per år.`,
+    actions:`<span class="chip on" onclick="subAsk('haggle',${jsArg(r.name)},${r.current},${r.typical},${jsArg(r.cat)})">Förhandla</span><span class="chip" onclick="subAsk('cancel',${jsArg(r.name)},${r.current},${r.typical},${jsArg(r.cat)})">Säg upp</span><span class="chip" onclick="subDismiss(${jsArg(r.key)},${r.current})">OK</span>`})));
+  detectNewSubs(month).filter(n=>seen[n.key]==null).forEach(n=>add(2.6,fcHtml({icon:'repeat',tone:'info',title:`Nytt abonnemang? ${esc(n.name)}`,text:n.why==='first'?`Första dragningen: ${fmt(n.amount)} kr (${esc(n.cat)}). Blir ${fmt(n.amount*12)} kr/år om den fortsätter.`:`${fmt(n.amount)} kr två perioder i rad — ny återkommande kostnad, ${fmt(n.amount*12)} kr/år.`,
+    actions:`<span class="chip" onclick="subDismiss(${jsArg(n.key)},${n.amount})">Behåll</span><span class="chip" onclick="subAsk('cancel',${jsArg(n.name)},${n.amount},${n.amount},${jsArg(n.cat)})">Säg upp</span>`})));
   if(rec.length)add(8,`<details class="fc"><summary style="list-style:none;cursor:pointer"><div class="fc-hd"><div class="fc-ic" style="background:var(--purple);color:#fff">${fcIcon('repeat')}</div><div style="flex:1"><div class="fc-t">Fasta kostnader: ${fmt(rec.reduce((s,r)=>s+r.typical,0))} kr/mån</div><div class="fc-x">${rec.length} st · ${fmt(rec.reduce((s,r)=>s+r.typical,0)*12)} kr/år · ${tap()} för lista</div></div></div></summary>
-    <div style="padding:8px 0 0 40px">${rec.map(r=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:4px 0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(r.name)}</span><span style="font-family:var(--mono)">${fmt(r.typical)}</span></div>`).join('')}</div></details>`);
+    <div style="padding:8px 0 0 40px">${rec.map(r=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:4px 0;cursor:pointer" onclick="subAsk('cancel',${jsArg(r.name)},${r.typical},${r.typical},${jsArg(r.cat)})" title="Säg upp med hjälp av AI"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)">${esc(r.name)}</span><span style="font-family:var(--mono)">${fmt(r.typical)} <span style="color:var(--sub2)">›</span></span></div>`).join('')}<div style="font-size:11px;color:var(--sub2);padding-top:4px">Tryck på en rad för att få hjälp att säga upp den.</div></div></details>`);
   // Sparmål
   const nws=getNWs();const ln=nws[nws.length-1];const goal=getGoal();
   if(ln)add(7.5,fcHtml({icon:'wealth',tone:'good',title:`Förmögenhet: ${fmt(ln.total)} kr`,text:`${goalPctApp(ln.total)?goalPctTxt(goalPctApp(ln.total)):''} · senast ${mLabel(ln.period)}`,onclick:"showScreen('nw')"}));
@@ -4734,7 +4771,7 @@ function applyBackup(d){
 // Dokument: ekonomi/{synk-ID}, fält "data" = backup-JSON.
 // Firestore-reglerna måste tillåta läs/skriv på ekonomi/{id}.
 // ═══════════════════════════════════════════
-const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters','planned_savings','known_inflows','goal_start','fixed_costs','expected_tx']);
+const SYNC_KEYS=new Set(['txs','nws','goal','salary','cats_exp','cats_inc','cats_sav','cats_trf','cats_nw','cat_groups','pay_periods','ai_memory','accounts','merchant_rules','imports','import_maps','owner_name','ai_import_notes','cat_budgets','contact_names','ai_insights','ai_history','goal_date','ai_profile','month_closings','weekly_letters','planned_savings','known_inflows','goal_start','fixed_costs','expected_tx','sub_seen']);
 let _syncApplying=false,_autoSyncTimer=null;
 
 function getFbConfig(){return ld('firebase_config',null)}
@@ -6482,6 +6519,12 @@ VERKTYG — DU KAN SÖKA I ALLA TRANSAKTIONER:
 - search_transactions: hitta enskilda köp (butik, datum, belopp, kategori). Använd för "när köpte jag…", "hur ofta…", "vad kostade…", "visa mina köp på…".
 - summarize_spending: summor per kategori, butik eller månad för valfri period. Använd för trender, jämförelser och topplistor.
 - Använd verktygen för ALLA frågor om specifika belopp, butiker eller perioder — gissa aldrig siffror. Sammanfattningen nedan är bara en överblick.
+
+DU KAN FÖRESLÅ ÄNDRINGAR (användaren godkänner med en knapp):
+- change_transactions: byt kategori/typ, taggar eller engångsinkomst på rader (ids från search_transactions eller ett filter); learn_rule: true när framtida köp från butiken ska följa med.
+- set_budget: månadsbudget för en utgiftskategori. create_category: ny kategori, och flytta rader dit med change_transactions i samma svar.
+- Använd dem när användaren ber om en ändring, eller när du hittar något uppenbart fel (felkategoriserade köp) — fråga då först om du är osäker.
+- Inget sparas förrän användaren trycker Spara. Skriv inte att det är gjort. Rader i historiken som börjar med ✅/↩️/✖️ visar vad användaren gjorde med förslagen.
 - Dagens datum: ${todayLocal()}. Månader = löneperioder (t.ex. "Sep 2026" = ${payPeriodLabel(periodShift(currentPayPeriod(),-1)).replace('Löneperiod ','')}).
 
 Regler:
@@ -6540,7 +6583,8 @@ function extractAndSaveMemory(reply){
   return reply.replace(/<memory>[\s\S]*?<\/memory>/g,'').trim();
 }
 
-// ── Verktyg för AI-chatten: sök och summera bland alla transaktioner ──// ═══════════════════════════════════════════
+// ── Verktyg för AI-chatten: sök och summera bland alla transaktioner ──
+// ═══════════════════════════════════════════
 // PROGNOS — resten av löneperioden: vad som finns kvar, kommande fasta dragningar och vad du kan lägga per dag
 // ═══════════════════════════════════════════
 function periodEndDate(ym){const d=parseLocalDate(getPeriodStart(periodShift(ym,1)));d.setDate(d.getDate()-1);return d}
@@ -6950,7 +6994,25 @@ const COACH_TOOLS=[
   {name:'update_profile',
    description:'Sparar ett faktum i användarens ekonomiska profil (visas i varje samtal och i inställningarna). Använd när användaren berättar om hushåll, boende, arbete/lön, mål/risk eller livssituation/vanor. Ett fält per anrop; tomt värde tar bort fältet. Fält per sektion: '+PROFILE_SECTIONS.map(s=>`${s.k}: ${s.f.map(f=>f[0]).join(', ')}`).join(' | '),
    input_schema:{type:'object',additionalProperties:false,required:['section','field','value'],properties:{
-     section:{type:'string',enum:PROFILE_SECTIONS.map(s=>s.k)},field:{type:'string'},value:{type:'string',description:'Kort och konkret, t.ex. "2 vuxna" eller "42 000"'}}}}
+     section:{type:'string',enum:PROFILE_SECTIONS.map(s=>s.k)},field:{type:'string'},value:{type:'string',description:'Kort och konkret, t.ex. "2 vuxna" eller "42 000"'}}}},
+  {name:'change_transactions',
+   description:'FÖRESLÅR en ändring av transaktioner: kategori (och typ), taggar eller engångsinkomst. Sparar INGENTING: användaren godkänner förslaget med en knapp under ditt svar. Välj rader med ids (från search_transactions) och/eller samma filter som search_transactions. Returnerar en förhandsgranskning med antal och exempel.',
+   input_schema:{type:'object',additionalProperties:false,required:['set'],properties:{
+     ids:{type:'array',items:{type:'integer'},description:'Transaktions-id från search_transactions'},
+     query:{type:'string'},category:{type:'string',description:'Filter: nuvarande kategori'},type:{type:'string',enum:['expense','income','savings','transfer'],description:'Filter: nuvarande typ'},
+     from:{type:'string',description:'YYYY-MM-DD'},to:{type:'string',description:'YYYY-MM-DD'},min_amount:{type:'number'},max_amount:{type:'number'},
+     set:{type:'object',additionalProperties:false,properties:{
+       category:{type:'string',description:'Ny kategori (måste finnas, eller föreslås i samma svar med create_category)'},
+       type:{type:'string',enum:['expense','income','savings','transfer'],description:'Ny typ (kräver category)'},
+       add_tags:{type:'array',items:{type:'string'}},remove_tags:{type:'array',items:{type:'string'}},
+       once:{type:'boolean',description:'Engångsinkomst (bara inkomster): räknas inte i sparkvot och prognos'}}},
+     learn_rule:{type:'boolean',description:'Lär in regeln så att framtida köp från samma butiker får den nya kategorin'}}}},
+  {name:'set_budget',
+   description:'FÖRESLÅR en månadsbudget för en utgiftskategori (0 = ta bort budgeten). Sparas först när användaren godkänner.',
+   input_schema:{type:'object',additionalProperties:false,required:['category','amount'],properties:{category:{type:'string'},amount:{type:'number',description:'kr per månad, avrunda till 100 kr'}}}},
+  {name:'create_category',
+   description:'FÖRESLÅR en ny kategori. Sparas först när användaren godkänner. Flytta transaktioner dit med change_transactions i samma svar.',
+   input_schema:{type:'object',additionalProperties:false,required:['name','type'],properties:{name:{type:'string'},type:{type:'string',enum:['expense','income','savings','transfer']}}}}
 ];
 function coachFilter(inp){
   const q=String(inp.query||'').toLowerCase().trim();
@@ -6961,6 +7023,7 @@ function coachFilter(inp){
     (!q||(t.desc||'').toLowerCase().includes(q)||(contactName(t.desc)||'').toLowerCase().includes(q)||(t.cat||'').toLowerCase().includes(q)));
 }
 function runCoachTool(name,inp){
+  if(COACH_WRITE.includes(name))return coachPropose(name,inp);
   if(name==='search_transactions'){
     let r=coachFilter(inp);
     const total=r.reduce((s,t)=>s+t.amount,0);
@@ -6970,7 +7033,7 @@ function runCoachTool(name,inp){
     return{count:r.length,sum:Math.round(total),first_date:r.length?[...r].sort((a,b)=>a.date.localeCompare(b.date))[0].date:null,
       last_date:r.length?[...r].sort((a,b)=>b.date.localeCompare(a.date))[0].date:null,
       shown:Math.min(lim,r.length),
-      transactions:r.slice(0,lim).map(t=>({date:t.date,desc:displayDesc(t.desc),amount:Math.round(t.amount*100)/100,type:t.type,category:t.cat,account:accountName(t.account),month:t.month}))};
+      transactions:r.slice(0,lim).map(t=>({id:t.id,date:t.date,desc:displayDesc(t.desc),amount:Math.round(t.amount*100)/100,type:t.type,category:t.cat,account:accountName(t.account),month:t.month}))};
   }
   if(name==='summarize_spending'){
     const r=coachFilter({...inp,type:inp.type||'expense'});
@@ -6989,6 +7052,141 @@ function runCoachTool(name,inp){
     return{ok:true,section:s.k,profile:getProfile()[s.k]||{}};
   }
   return{error:'okänt verktyg'};
+}
+
+// ── Coachen föreslår ändringar ──────────────
+// Skrivverktygen sparar ingenting: de räknar fram en förhandsgranskning (som MCP-serverns dry_run) och lägger
+// förslaget i _coachProps. sendAi visar förslagen som ett kort under svaret; Spara gör ändringen och sparar
+// det gamla så att Ångra kan återställa det.
+let _coachProps=[];const _coachBatches={};
+const COACH_WRITE=['change_transactions','set_budget','create_category'];
+function coachCatExists(type,name){return catsForType(type).includes(name)||_coachProps.some(p=>p.kind==='create_category'&&p.data.type===type&&p.data.name===name)}
+function coachAdd(kind,data,title,lines){
+  const p={id:'p'+(_coachProps.length+1),kind,data,title,lines};_coachProps.push(p);
+  return{status:'förslag_väntar_på_godkännande',proposal:p.id,title,details:lines,
+    note:'Inget är sparat än. Användaren sparar eller avbryter med ett kort under ditt svar. Säg det kort; påstå inte att det redan är gjort.'};
+}
+function coachPropose(name,inp){
+  if(name==='create_category'){
+    const type=inp.type||'expense',nm=String(inp.name||'').trim();
+    if(!CAT_CFG[type])return{error:'type måste vara expense, income, savings eller transfer'};
+    if(!nm||nm.length>40)return{error:'name saknas eller är för långt'};
+    if(catsForType(type).some(c=>c.toLowerCase()===nm.toLowerCase())||coachCatExists(type,nm))return{error:`kategorin ${nm} finns redan`};
+    return coachAdd('create_category',{type,name:nm},`Ny kategori: ${nm}`,[TYPE_LABEL[type]]);
+  }
+  if(name==='set_budget'){
+    const cat=String(inp.category||''),amt=Math.round(+inp.amount);
+    if(!coachCatExists('expense',cat))return{error:`utgiftskategorin "${cat}" finns inte; finns: ${getExpCats().join(', ')}`};
+    if(!(amt>=0))return{error:'amount måste vara 0 eller mer'};
+    const now=getBudgets()[cat];
+    if((now||0)===amt)return{error:`budgeten för ${cat} är redan ${amt} kr`};
+    return coachAdd('set_budget',{category:cat,amount:amt},amt?`Budget för ${cat}: ${fmt(amt)} kr/mån`:`Ta bort budgeten för ${cat}`,[now?`nu ${fmt(now)} kr`:'ingen budget nu']);
+  }
+  if(name==='change_transactions'){
+    const s=inp.set||{},ids=Array.isArray(inp.ids)?inp.ids.map(Number):[];
+    if(!ids.length&&!['query','category','type','from','to','min_amount','max_amount'].some(k=>inp[k]!=null&&inp[k]!==''))return{error:'ange ids eller minst ett filter'};
+    if(s.type&&!s.category)return{error:'ange set.category när du byter typ'};
+    if(s.type&&!CAT_CFG[s.type])return{error:'okänd typ'};
+    const addT=parseTags((s.add_tags||[]).join(',')),remT=parseTags((s.remove_tags||[]).join(','));
+    if(!s.category&&!addT.length&&!remT.length&&s.once==null)return{error:'set saknar ändringar (category, type, add_tags, remove_tags eller once)'};
+    let rows=coachFilter(inp);if(ids.length){const w=new Set(ids);rows=rows.filter(t=>w.has(t.id))}
+    for(const ty of new Set(rows.map(t=>s.type||t.type)))if(s.category&&!coachCatExists(ty,s.category))
+      return{error:`kategorin "${s.category}" finns inte för ${TYPE_LABEL[ty]||ty}; skapa den först med create_category eller välj bland: ${catsForType(ty).join(', ')}`};
+    const after=t=>{const x={...t};
+      if(s.category){x.type=s.type||t.type;x.cat=s.category}
+      if(addT.length||remT.length){const tg=[...new Set([...(t.tags||[]),...addT])].filter(g=>!remT.includes(g));if(tg.length)x.tags=tg;else delete x.tags}
+      if(s.once!=null&&x.type==='income'){if(s.once)x.once=true;else delete x.once}
+      return x};
+    const same=(a,b)=>a.type===b.type&&a.cat===b.cat&&(a.tags||[]).join()===(b.tags||[]).join()&&!!a.once===!!b.once;
+    const ch=rows.filter(t=>!same(t,after(t)));
+    if(!ch.length)return{error:`${rows.length} transaktioner matchar men ingen skulle ändras`};
+    const rules=s.category&&inp.learn_rule?[...new Set(ch.map(t=>t.mkey).filter(Boolean))]:[];
+    const lines=[`${ch.length} transaktion${ch.length>1?'er':''} · ${fmt(ch.reduce((a,t)=>a+t.amount,0))} kr`,
+      ...ch.slice(0,5).map(t=>{const a=after(t);return`${t.date} ${displayDesc(t.desc)||t.cat} ${fmt(t.amount)} kr: ${a.cat!==t.cat?`${t.cat} → ${a.cat}`:t.cat}${(a.tags||[]).join()!==(t.tags||[]).join()?` · taggar ${(a.tags||[]).join(', ')||'inga'}`:''}`}),
+      ...(ch.length>5?[`+ ${ch.length-5} till`]:[]),
+      ...(rules.length?[`Regel för ${rules.length} butik${rules.length>1?'er':''}: framtida köp blir ${s.category}`]:[])];
+    const what=s.category?`till ${s.category}`:addT.length?`tagg ${addT.join(', ')}`:remT.length?`ta bort tagg ${remT.join(', ')}`:s.once?'engångsinkomst':'inte engång';
+    return coachAdd('change_transactions',{ids:ch.map(t=>t.id),set:{type:s.type||null,category:s.category||null,add_tags:addT,remove_tags:remT,once:s.once??null},rules},`Ändra ${ch.length} transaktion${ch.length>1?'er':''} ${what}`,lines);
+  }
+  return{error:'okänt verktyg'};
+}
+// Gör ett förslag och returnerar hur det återställs
+function coachApply(p){
+  const d=p.data;
+  if(p.kind==='create_category'){
+    const{key,def}=CAT_CFG[d.type],cats=ld(key,def);
+    if(cats.includes(d.name))return null;
+    const i=d.type==='expense'?cats.indexOf('Övrigt'):-1;cats.splice(i>=0?i:cats.length,0,d.name);sv(key,cats);
+    return{kind:p.kind,type:d.type,name:d.name};
+  }
+  if(p.kind==='set_budget'){
+    const B=getBudgets(),prev=B[d.category]??null;
+    if(d.amount>0)B[d.category]=d.amount;else delete B[d.category];
+    sv('cat_budgets',B);return{kind:p.kind,category:d.category,prev};
+  }
+  if(p.kind==='change_transactions'){
+    const s=d.set,ids=new Set(d.ids),prev={},R=getRules(),prevRules={};
+    const txs=getTxs().map(t=>{
+      if(!ids.has(t.id))return t;
+      prev[t.id]={type:t.type,cat:t.cat,tags:t.tags,once:t.once};
+      const x={...t};
+      if(s.category){x.type=s.type||t.type;x.cat=s.category}
+      if(s.add_tags.length||s.remove_tags.length){const tg=[...new Set([...(t.tags||[]),...s.add_tags])].filter(g=>!s.remove_tags.includes(g));if(tg.length)x.tags=tg;else delete x.tags}
+      if(s.once!=null&&x.type==='income'){if(s.once)x.once=true;else delete x.once}
+      return x});
+    svTxs(txs);
+    for(const k of d.rules){const t=txs.find(x=>x.mkey===k&&ids.has(x.id));if(!t)continue;prevRules[k]=R[k]?{...R[k]}:null;setRule(k,t.type,t.cat)}
+    return{kind:p.kind,prev,prevRules};
+  }
+  return null;
+}
+function coachUndo(u){
+  if(!u)return;
+  if(u.kind==='create_category'){
+    if(getTxs().some(t=>t.type===u.type&&t.cat===u.name))return; // används redan: behåll kategorin
+    const{key,def}=CAT_CFG[u.type];sv(key,ld(key,def).filter(c=>c!==u.name));
+  }
+  if(u.kind==='set_budget'){const B=getBudgets();if(u.prev!=null)B[u.category]=u.prev;else delete B[u.category];sv('cat_budgets',B)}
+  if(u.kind==='change_transactions'){
+    svTxs(getTxs().map(t=>{const p=u.prev[t.id];if(!p)return t;const x={...t,type:p.type,cat:p.cat};
+      if(p.tags)x.tags=p.tags;else delete x.tags;if(p.once)x.once=true;else delete x.once;return x}));
+    const R=getRules();for(const[k,v]of Object.entries(u.prevRules)){if(v)R[k]=v;else delete R[k]}sv('merchant_rules',R);
+  }
+}
+function coachNote(txt){
+  for(let i=aiHistory.length-1;i>=0;i--)if(aiHistory[i].role==='assistant'){aiHistory[i]={...aiHistory[i],content:aiHistory[i].content+'\n\n'+txt};persistAiHistory();return}
+}
+function coachCardHtml(bid){
+  const b=_coachBatches[bid];
+  const list=b.props.map(p=>`<div style="padding:7px 0;border-top:1px solid var(--line)"><div style="font-size:13px;font-weight:600">${esc(p.title)}</div>${p.lines.map(l=>`<div style="font-size:11.5px;color:var(--sub);line-height:1.5">${esc(l)}</div>`).join('')}</div>`).join('');
+  const foot=b.state==='done'?`<div style="font-size:12px;color:var(--green);margin-top:8px">✓ Sparat <button class="chip" style="margin-left:8px" onclick="coachUndoBatch('${bid}')">Ångra</button></div>`
+    :b.state==='undone'?`<div style="font-size:12px;color:var(--sub2);margin-top:8px">↩︎ Ångrat</div>`
+    :b.state==='cancel'?`<div style="font-size:12px;color:var(--sub2);margin-top:8px">Avbrutet – inget ändrades</div>`
+    :`<div style="display:flex;gap:8px;margin-top:10px"><button class="btn-s" style="margin:0;flex:1" onclick="coachSaveBatch('${bid}')">Spara</button><button class="chip" onclick="coachCancelBatch('${bid}')">Avbryt</button></div>`;
+  return`<div style="font-size:10px;color:var(--sub2);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);margin-bottom:4px">Föreslagna ändringar</div>${list}${foot}`;
+}
+function addCoachCard(props){
+  const bid='cb'+Date.now();_coachBatches[bid]={props,state:'open',undo:[]};
+  const msgs=document.getElementById('ai-msgs'),div=document.createElement('div');
+  div.id=bid;div.className='ai-msg bot';div.style.maxWidth='100%';div.innerHTML=coachCardHtml(bid);
+  msgs.appendChild(div);requestAnimationFrame(()=>{msgs.scrollTop=msgs.scrollHeight});
+}
+function coachRefresh(bid){const el=document.getElementById(bid);if(el)el.innerHTML=coachCardHtml(bid)}
+function coachSaveBatch(bid){
+  const b=_coachBatches[bid];if(!b||b.state!=='open')return;
+  try{b.undo=b.props.map(coachApply)}catch(e){toast('Kunde inte spara: '+e.message,'err');return}
+  b.state='done';coachRefresh(bid);coachNote(`✅ Sparat: ${b.props.map(p=>p.title).join('; ')}`);
+  toast('Ändringarna är sparade ✓');render();
+}
+function coachUndoBatch(bid){
+  const b=_coachBatches[bid];if(!b||b.state!=='done')return;
+  [...b.undo].reverse().forEach(coachUndo);
+  b.state='undone';coachRefresh(bid);coachNote(`↩️ Ångrat: ${b.props.map(p=>p.title).join('; ')}`);
+  toast('Ändringarna är ångrade');render();
+}
+function coachCancelBatch(bid){
+  const b=_coachBatches[bid];if(!b||b.state!=='open')return;
+  b.state='cancel';coachRefresh(bid);coachNote(`✖️ Avbrutet av användaren (inget sparat): ${b.props.map(p=>p.title).join('; ')}`);
 }
 
 function sendChip(txt){
@@ -7023,6 +7221,7 @@ async function sendAi(){
   if(model.fallbacks)body.fallbacks='default';
   const beta=model.fallbacks?'server-side-fallback-2026-07-01':null;
   body.tools=COACH_TOOLS;
+  _coachProps=[];
   try{
     // Verktygsloop: modellen kan söka/summera i transaktionerna flera gånger innan den svarar
     const convo=[...msgs];let data=null;const usage={input_tokens:0,output_tokens:0};let cost=0;
@@ -7044,7 +7243,7 @@ async function sendAi(){
       convo.push({role:'assistant',content});
       const calls=content.filter(b=>b.type==='tool_use');
       const el=document.getElementById(tid);
-      if(el)el.textContent=calls.map(c=>c.name==='update_profile'?'🧠 Uppdaterar profilen…':c.name==='search_transactions'?`🔎 Söker${c.input?.query?` "${c.input.query}"`:''}${c.input?.category?` i ${c.input.category}`:''}…`:`📊 Summerar per ${({category:'kategori',merchant:'butik',month:'månad'})[c.input?.group_by]||'kategori'}…`).join(' ');
+      if(el)el.textContent=calls.map(c=>COACH_WRITE.includes(c.name)?'✏️ Förbereder ändring…':c.name==='update_profile'?'🧠 Uppdaterar profilen…':c.name==='search_transactions'?`🔎 Söker${c.input?.query?` "${c.input.query}"`:''}${c.input?.category?` i ${c.input.category}`:''}…`:`📊 Summerar per ${({category:'kategori',merchant:'butik',month:'månad'})[c.input?.group_by]||'kategori'}…`).join(' ');
       convo.push({role:'user',content:calls.map(c=>{
         let out;try{out=JSON.stringify(runCoachTool(c.name,c.input||{}))}catch(e){out=JSON.stringify({error:e.message})}
         return{type:'tool_result',tool_use_id:c.id,content:out.slice(0,20000)};
@@ -7061,6 +7260,7 @@ async function sendAi(){
       aiHistory.push({role:'assistant',content:reply});
       persistAiHistory();
       addAiMsg(reply,'bot');
+      if(_coachProps.length)addCoachCard(_coachProps);
       // Beräkna och visa kostnad (prissatt efter modellen som faktiskt svarade)
       if(data._usage.input_tokens)addCostBadge(data._cost,data._usage,data.model||model.id,model.id,effort);
     }

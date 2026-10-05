@@ -76,6 +76,12 @@ Installera (en gång):
    (`bank_cron_secret`), och kör sedan [`cron.sql`](cron.sql). Jobbet `bank-nightly` hämtar kl. 05:00
    (sommartid). Svaren syns i `net._http_response`.
 
+**Nattens notis** ([`bank/notify.ts`](functions/bank/notify.ts), [`bank/watch.ts`](functions/bank/watch.ts)) tar med
+möjliga dubbeldragningar (samma butik, konto och belopp, minst 100 kr, inom två dagar), fasta kostnader som blivit
+dyrare och nya abonnemang. Det du tryckt *OK* eller *Behåll* på i appen (`sub_seen`) nämns inte igen. När det finns
+flera händelser skriver Claude Haiku 4.5 om notisen med det viktigaste först; innehåller texten ett tal som inte
+finns i underlaget skickas regeltexten i stället. Stäng av AI-texten med `npx supabase secrets set DIGEST_AI=off`.
+
 ## AI-koppling (MCP)
 
 [`functions/mcp`](functions/mcp) är en MCP-server (Model Context Protocol) som körs som en
