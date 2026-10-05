@@ -72,9 +72,17 @@ Installera (en gång):
    *Activate by linking accounts*.
 2. `npx supabase secrets set ENABLEBANKING_APP_ID=<id> ENABLEBANKING_KEY_B64=<.pem i base64> --project-ref qchasvatuhndtswxlucr`
 3. Kör `schema.sql` och `npx supabase functions deploy bank --no-verify-jwt`.
-4. **Nattjobb:** skapa en slumpad nyckel, spara den som `CRON_SECRET` (secret) och i databasens valv
-   (`bank_cron_secret`), och kör sedan [`cron.sql`](cron.sql). Jobbet `bank-nightly` hämtar kl. 05:00
-   (sommartid). Svaren syns i `net._http_response`.
+4. **Schemalagd hämtning:** skapa en slumpad nyckel, spara den som `CRON_SECRET` (secret) och i databasens valv
+   (`bank_cron_secret`), och kör sedan [`cron.sql`](cron.sql). Jobben hämtar kl. 05:00, 12:30 och 18:30
+   (sommartid; en timme tidigare på vintern). Bankerna tillåter högst 4 hämtningar per konto och dygn utan att
+   du är inloggad; "Hämta nu" i appen räknas inte. Svaren syns i `net._http_response`. Har du kört en äldre
+   `cron.sql`: kör den nya igen, så ersätts `bank-nightly` och de två nya jobben läggs till.
+
+**Nattens notis** ([`bank/notify.ts`](functions/bank/notify.ts), [`bank/watch.ts`](functions/bank/watch.ts)) tar med
+möjliga dubbeldragningar (samma butik, konto och belopp, minst 100 kr, inom två dagar), fasta kostnader som blivit
+dyrare och nya abonnemang. Det du tryckt *OK* eller *Behåll* på i appen (`sub_seen`) nämns inte igen. När det finns
+flera händelser skriver Claude Haiku 4.5 om notisen med det viktigaste först; innehåller texten ett tal som inte
+finns i underlaget skickas regeltexten i stället. Stäng av AI-texten med `npx supabase secrets set DIGEST_AI=off`.
 
 ## AI-koppling (MCP)
 

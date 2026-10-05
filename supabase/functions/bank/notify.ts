@@ -19,7 +19,7 @@ export function goalPlan(latest: Obj | null, goal: number, avgMonthly: number | 
   return { months, left, need: left / months, eta, diff: eta != null ? months - eta : null };
 }
 
-export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[]; goal?: Obj; pace?: Obj | null; missing?: Obj[]; salaryDate?: string | null; stale?: Obj[] }) {
+export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; period: Obj; today: string; conns: Obj[]; sent: Set<string>; loans?: Obj[]; goal?: Obj; pace?: Obj | null; missing?: Obj[]; salaryDate?: string | null; stale?: Obj[]; watch?: Obj[] }) {
   const items: Obj[] = [];
   const add = (key: string, line: string, kind: string) => { if (!p.sent.has(key)) items.push({ key, line, kind }); };
   const rows = p.newRows.filter((r) => !r.deleted);
@@ -30,6 +30,8 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
   for (const r of exp.filter((r) => r.amount >= BIG).sort((a, b) => b.amount - a.amount).slice(0, 2))
     add(`stort:${r.id}`, `Stort köp: ${kr(r.amount)} – ${r.description || r.category}`, 'big');
   const review = rows.filter((r) => r.extra?.review).length;
+  // Prishöjningar, nya abonnemang och dubbeldragningar (watch.ts)
+  for (const w of p.watch || []) add(w.key, w.line, w.kind);
   if (review) add(`granska:${p.today}`, `🔎 ${review} ${review === 1 ? 'rad' : 'rader'} att granska i appen`, 'review');
 
   // Budgettakt: 80 % förbrukat klart före tiden, eller över budget (en gång per kategori och nivå och period)
@@ -74,12 +76,12 @@ export function buildDigest(p: { newRows: Obj[]; spent: Obj; budgets: Obj; perio
       add(`mal:${p.period.id}`, `🎯 Målet ${kr(p.goal.target)} till ${p.goal.date}: behöver +${kr(g.need!)}/mån, snittet är ${kr(p.goal.avg || 0)}/mån`, 'goal');
   }
   if (!items.length) return null;
-  const order = ['salary', 'expected', 'update', 'budget', 'pace', 'goal', 'loan', 'consent', 'big', 'day', 'review'];
+  const order = ['salary', 'dup', 'expected', 'price', 'newsub', 'update', 'budget', 'pace', 'goal', 'loan', 'consent', 'big', 'day', 'review'];
   items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
-  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items.some((i) => i.kind === 'budget' || i.kind === 'pace') ? 'Koll på budgeten' : items[0].kind === 'expected' ? 'Något har inte kommit' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
+  const title = items[0].kind === 'salary' ? 'Lönen har kommit' : items[0].kind === 'dup' ? 'Möjlig dubbeldragning' : items.some((i) => i.kind === 'budget' || i.kind === 'pace') ? 'Koll på budgeten' : items[0].kind === 'expected' ? 'Något har inte kommit' : items[0].kind === 'price' ? 'Något har blivit dyrare' : items[0].kind === 'newsub' ? 'Nytt abonnemang?' : items[0].kind === 'loan' ? 'Ditt bolån' : items[0].kind === 'consent' ? 'Bankkopplingen' : 'Din ekonomi idag';
   const lines = items.slice(0, 4).map((i) => i.line);
   if (items.length > 4) lines.push(`+ ${items.length - 4} till i appen`);
-  return { title, body: lines.join('\n'), keys: items.map((i) => i.key) };
+  return { title, body: lines.join('\n'), keys: items.map((i) => i.key), items };
 }
 
 // Förväntade transaktioner (expected_tx): [{id, name, type, cat, match?, days | due_day}]. Fönstret är antingen
