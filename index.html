@@ -3598,12 +3598,62 @@ function changeMonth(dir){
 // ═══════════════════════════════════════════
 let _lcNWs=[];
 
+// TÄTARE PUNKTER — förmögenheten mellan förmögenhetsbilderna, räknad i appen ur saldohistoriken (banken sparar ett
+// saldo per dag), manuella värden och lån. Varje punkt utgår från närmast föregående bild (läget när perioden börjar)
+// plus förändringen sedan dess i de källor som har ett värde både vid bildens datum och vid punkten. Kurvan går
+// därför genom bilderna, och en källa utan historik (t.ex. ett nytt konto) räknas först från nästa bild.
+// Ingenting sparas: bilderna styr fortfarande mål, prognos och "vad förändringen består av".
+const NW_RANGES=[['1M',31],['3M',92],['1Å',366],['Allt',0]];
+let _nwRange=localStorage.getItem('nw_range')||'1Å';
+function setNWRange(r){_nwRange=r;try{localStorage.setItem('nw_range',r)}catch(e){}renderNetWorth()}
+const MON_S=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+const dayLbl=d=>{const[y,m,dd]=d.split('-').map(Number);return`${dd} ${MON_S[m-1]}${y!==new Date().getFullYear()?' '+String(y).slice(2):''}`};
+function nwSeries(nws){
+  const today=todayLocal();
+  const snaps=nws.map(n=>({n,date:getPeriodStart(n.period)})).filter(x=>x.date<=today).sort((a,b)=>a.date.localeCompare(b.date));
+  const out=snaps.map(x=>({date:x.date,value:x.n.total,snap:x.n.period}));
+  if(!_sbUser||!snaps.length)return out;
+  // Källorna: konton som räknas in i förmögenheten, manuella värden per kategori och lån (som minus)
+  // Senaste värde på eller före datum: sorterade rader och binärsökning (många datum × många rader)
+  const series=(rows,dk)=>{const r=rows.map(x=>({d:x[dk],v:+x.value})).filter(x=>x.d).sort((a,b)=>a.d.localeCompare(b.d));
+    return{dates:r.map(x=>x.d),at:d=>{let lo=0,hi=r.length-1,b=-1;while(lo<=hi){const m=(lo+hi)>>1;if(r[m].d<=d){b=m;lo=m+1}else hi=m-1}return b<0?undefined:r[b].v}}};
+  const cats=new Set(getNWCats().map(c=>c.key)),src=[];
+  getAccounts().forEach(a=>{const k=nwCatOfAcc(a);const rows=_balances.filter(b=>b.account===a.id);if(k&&cats.has(k)&&rows.length)src.push(series(rows,'bal_date'))});
+  [...new Set(_assets.map(x=>x.asset))].filter(k=>cats.has(k)).forEach(k=>src.push(series(_assets.filter(x=>x.asset===k),'val_date')));
+  _loans.forEach(l=>{if(!(l.history||[]).length||l.netted_in_assets)return;src.push({at:d=>{const v=debtAtApp(l,d);return v?-v.value:undefined},dates:l.history.map(h=>h.date)})});
+  const snapDates=new Set(snaps.map(x=>x.date));
+  const dates=[...new Set(src.flatMap(x=>x.dates))].filter(d=>d&&d>snaps[0].date&&d<=today&&!snapDates.has(d)).sort();
+  let si=0;const base=new Map();
+  for(const d of dates){
+    while(si+1<snaps.length&&snaps[si+1].date<=d)si++;
+    const a=snaps[si];
+    if(!base.has(si))base.set(si,src.map(x=>x.at(a.date)));
+    const b0=base.get(si);let delta=0;
+    src.forEach((x,i)=>{if(b0[i]==null)return;const v=x.at(d);if(v!=null)delta+=v-b0[i]});
+    out.push({date:d,value:Math.round(a.n.total+delta)});
+  }
+  return out.sort((a,b)=>a.date.localeCompare(b.date)||(a.snap?-1:1));
+}
 function makeNWChart(nws){
   if(nws.length<2)return'';
   _lcNWs=nws;
-  const dataPoints=nws.map(n=>({label:n.period.slice(2).replace('-','/'),value:n.total}));
+  const all=nwSeries(nws),dense=all.length>nws.length+2;
+  let ser=all;
+  if(dense){
+    const days=NW_RANGES.find(r=>r[0]===_nwRange)?.[1]||0;
+    if(days){const from=ymdOf(new Date(Date.now()-days*864e5));const inR=all.filter(p=>p.date>=from);const before=all.filter(p=>p.date<from).pop();ser=before&&inR.length?[{date:from,value:before.value},...inR]:inR}
+    // Över ett halvår: en punkt per vecka (sista i veckan) och alla bilder, så att linjen inte blir för tät
+    if(ser.length&&(parseLocalDate(ser[ser.length-1].date)-parseLocalDate(ser[0].date))/864e5>183){
+      const wk=d=>Math.floor((parseLocalDate(d)-parseLocalDate('2000-01-03'))/(7*864e5));
+      ser=ser.filter((p,i)=>p.snap||i===0||i===ser.length-1||wk(ser[i+1].date)!==wk(p.date));
+    }
+  }
+  const dataPoints=dense&&ser.length>=2
+    ?ser.map(p=>({label:p.snap?`${dayLbl(p.date)} · bild ${mLabel(p.snap)}`:dayLbl(p.date),axis:dayLbl(p.date),value:p.value,t:parseLocalDate(p.date).getTime(),mark:!!p.snap}))
+    :nws.map(n=>({label:n.period.slice(2).replace('-','/'),value:n.total}));
+  const rangeBtns=dense?`<div style="display:flex;gap:6px;margin-bottom:10px">${NW_RANGES.map(([r])=>`<span class="chip${r===_nwRange?' on':''}" onclick="setNWRange('${r}')">${r}</span>`).join('')}</div>`:'';
   return`<div class="card"><div class="card-inner">
-    <div class="card-lbl" style="margin-bottom:6px">Total förmögenhet — ${fineMouse()?'håll musen över grafen':'svep'} för detaljer</div>
+    <div class="card-lbl" style="margin-bottom:6px">Total förmögenhet — ${fineMouse()?'håll musen över grafen':'svep'} för detaljer${dense?' · ringarna är förmögenhetsbilderna':''}</div>${rangeBtns}
     <defs-holder style="display:none">
       <svg style="width:0;height:0;position:absolute"><defs>
         <linearGradient id="lgrad" x1="0" y1="0" x2="1" y2="0">
@@ -3937,7 +3987,7 @@ function renderNetWorth(){
 // ═══════════════════════════════════════════
 // INTERAKTIV GRAF — återanvändbar
 // ═══════════════════════════════════════════
-let _chartData={}; // keyed by chartId
+let _chartData={},_chartX={}; // keyed by chartId (_chartX: punkternas x i viewBox)
 
 function makeInteractiveChart(id, dataPoints, color, labelFn, valueFn){
   // dataPoints: [{label, value}, ...]
@@ -3947,16 +3997,21 @@ function makeInteractiveChart(id, dataPoints, color, labelFn, valueFn){
   const minV=Math.min(...vals), maxV=Math.max(...vals), rng=maxV-minV||1;
   const W=400, H=110, padL=8, padR=8, padT=12, padB=24;
   const xStep=(W-padL-padR)/(dataPoints.length-1);
+  // Med t (ms) på varje punkt ligger punkterna efter datum i stället för jämnt utspridda
+  const timed=dataPoints.every(d=>typeof d.t==='number'),t0=timed?dataPoints[0].t:0,tr=timed?(dataPoints[dataPoints.length-1].t-t0)||1:1;
   const pts=dataPoints.map((d,i)=>({
-    x:padL+i*xStep,
+    x:timed?padL+(d.t-t0)/tr*(W-padL-padR):padL+i*xStep,
     y:H-padB-(d.value-minV)/rng*(H-padT-padB),
     d
   }));
+  _chartX[id]=pts.map(p=>p.x);
   const pathD='M'+pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('L');
   const areaD=pathD+`L${pts[pts.length-1].x.toFixed(1)},${H-padB}L${pts[0].x.toFixed(1)},${H-padB}Z`;
   const gid='cg_'+id;
   const step=Math.ceil(dataPoints.length/5);
-  const labels=pts.filter((_,i)=>i%step===0||i===pts.length-1);
+  // Tidsaxel: fem etiketter jämnt fördelade i tid (närmaste punkt), placerade där punkten ligger
+  const labels=timed?[...new Set([0,.25,.5,.75,1].map(f=>{const x=padL+f*(W-padL-padR);return pts.reduce((b,p,i)=>Math.abs(p.x-x)<Math.abs(pts[b].x-x)?i:b,0)}))].map(i=>pts[i]):pts.filter((_,i)=>i%step===0||i===pts.length-1);
+  const marks=pts.filter(p=>p.d.mark).map(p=>`<div style="position:absolute;left:${(p.x/W*100).toFixed(2)}%;top:${p.y.toFixed(1)}px;width:7px;height:7px;border-radius:50%;background:var(--bg1);border:2px solid ${color};transform:translate(-50%,-50%);pointer-events:none"></div>`).join('');
   return `<div class="ichart-wrap" id="icw_${id}" data-chartid="${id}" style="position:relative;touch-action:none;cursor:crosshair">
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">
       <defs>
@@ -3968,12 +4023,15 @@ function makeInteractiveChart(id, dataPoints, color, labelFn, valueFn){
       <path d="${areaD}" fill="url(#${gid})"/>
       <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
+    ${marks}
     <div id="icv_${id}" style="display:none;position:absolute;top:0;bottom:${padB}px;width:1.5px;background:${color};pointer-events:none;opacity:.8"></div>
     <div id="icd_${id}" style="display:none;position:absolute;width:10px;height:10px;border-radius:50%;background:${color};border:2px solid var(--bg1);pointer-events:none;transform:translate(-50%,-50%)"></div>
     <div id="ict_${id}" style="display:none;position:absolute;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;font-size:12px;font-family:var(--mono);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;bottom:${padB+8}px;transform:translateX(-50%)"></div>
-    <div style="display:flex;justify-content:space-between;padding:2px 0 0;font-size:10px;font-family:var(--mono);color:var(--sub2)">
+    ${timed?`<div style="position:relative;height:16px;padding-top:2px;font-size:10px;font-family:var(--mono);color:var(--sub2)">
+      ${labels.map((p,i)=>`<span style="position:absolute;white-space:nowrap;${i===0?'left:0':i===labels.length-1?'right:0':`left:${(p.x/W*100).toFixed(2)}%;transform:translateX(-50%)`}">${p.d.axis||p.d.label}</span>`).join('')}
+    </div>`:`<div style="display:flex;justify-content:space-between;padding:2px 0 0;font-size:10px;font-family:var(--mono);color:var(--sub2)">
       ${labels.map(p=>`<span>${p.d.label}</span>`).join('')}
-    </div>
+    </div>`}
   </div>`;
 }
 
@@ -4000,7 +4058,8 @@ function initInteractiveCharts(){
       const sx=svgRect.width/W, sy=svgRect.height/H;
       // Närmaste datapunkt, och markören låses till punkten (inte fingret)
       const vx=(clientX-svgRect.left)/sx;
-      const i=Math.max(0,Math.min(Math.round((vx-padL)/((W-padL-padR)/(data.length-1))),data.length-1));
+      const xs=_chartX[id]||data.map((_,k)=>padL+k*(W-padL-padR)/(data.length-1));
+      let i=0;for(let k=1;k<xs.length;k++)if(Math.abs(xs[k]-vx)<Math.abs(xs[i]-vx))i=k;
       const d=data[i];
       const prev=data[i-1];
       const diff=prev?d.value-prev.value:null;
@@ -4008,7 +4067,7 @@ function initInteractiveCharts(){
 
       const vals=data.map(p=>p.value);
       const minV=Math.min(...vals),maxV=Math.max(...vals),rng=maxV-minV||1;
-      const x=(padL+i*(W-padL-padR)/(data.length-1))*sx+(svgRect.left-rect.left);
+      const x=xs[i]*sx+(svgRect.left-rect.left);
       const dotY=(H-padB-(d.value-minV)/rng*(H-padT-padB))*sy+(svgRect.top-rect.top);
 
       vline.style.display='block';vline.style.left=x+'px';
