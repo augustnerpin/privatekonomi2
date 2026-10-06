@@ -1153,7 +1153,7 @@ body.light #drop-veil{background:rgba(242,242,247,.8)}
         <div class="hdr-amount"><sub>kr</sub><span id="nw-hero-val">—</span></div>
         <div id="nw-hero-pill" style="margin-top:8px"></div>
       </div>
-      <button class="ibtn" onclick="openSettings()">⚙</button>
+      <div style="display:flex;gap:8px;flex-shrink:0"><button class="ibtn" id="nw-live-btn" onclick="nwUpdateNow()" aria-label="Uppdatera nu" title="Uppdatera nu: hämta från banken och räkna om">⚡</button><button class="ibtn" onclick="openSettings()">⚙</button></div>
     </div>
   </div>
   <div class="sgrid sg4" id="nw-pills" style="margin-bottom:14px"></div>
@@ -3620,6 +3620,46 @@ function initNWChartEvents(){
   initInteractiveCharts();
 }
 
+// FÖRMÖGENHETEN JUST NU — räknas av servern från senaste saldon, värden och lån (route networth utan period =
+// innevarande period, datum idag). Sparas inte som förmögenhetsbild: månadsbilden är fortfarande den som mål,
+// prognos och "vad förändringen består av" använder.
+let _nwLive=ld('nw_live_cache',null),_nwLiveAt=0,_nwLiveBusy=false;
+async function refreshNWLive(){
+  if(!_sbUser)return;_nwLiveAt=Date.now();
+  try{const r=await bankCall('networth');const v={date:r.date,total:r.total,sources:r.sources,detail:r.detail};
+    const ch=JSON.stringify(v)!==JSON.stringify(_nwLive);
+    _nwLive=v;localStorage.setItem('nw_live_cache',JSON.stringify(v));if(ch)renderNetWorth()}
+  catch(e){console.warn('Förmögenhet nu:',e.message||e)}
+}
+// ⚡ Uppdatera nu: hämta från banken, läs in nya saldon och räkna om förmögenheten just nu
+async function nwUpdateNow(){
+  if(!_sbUser){toast('Logga in under Inställningar → Databas för att räkna förmögenheten från saldon','warn');return}
+  if(_nwLiveBusy)return;_nwLiveBusy=true;
+  const btn=document.getElementById('nw-live-btn');if(btn){btn.textContent='…';btn.disabled=true}
+  try{
+    const before=_nwLive?.total;
+    const r=await bankCall('sync').catch(e=>({error:e.message}));
+    if(r.added)await sbSync({silent:true});
+    await refreshLoans();await refreshNWLive();
+    const d=_nwLive&&before!=null?Math.round(_nwLive.total-before):0;
+    toast(r.error?'Banken svarade inte ('+r.error+') — räknat på senaste saldon':`Uppdaterat ✓${r.added?` · ${r.added} nya transaktioner`:''}${d?` · ${fmtSigned(d)} kr`:''}`,r.error?'warn':'ok');
+    renderNetWorth();
+  }finally{_nwLiveBusy=false;if(btn){btn.textContent='⚡';btn.disabled=false}}
+}
+const daysAgo=date=>Math.round((parseLocalDate(todayLocal())-parseLocalDate(date))/864e5);
+const ageTxt=date=>{const n=daysAgo(date);return n<=0?'idag':n===1?'igår':n<45?`för ${n} dagar sedan`:`för ${Math.round(n/30)} mån sedan`};
+// Raden under värdet: när varje källa senast uppdaterades. ⚠ = gammalt (konton > 7 dagar, tillgångar > 90 dagar).
+function nwFreshHtml(live){
+  const parts=(live.detail||[]).filter(x=>x.kind!=='loan'&&x.date).map(x=>{
+    const name=x.kind==='account'?x.name:(getNWCats().find(c=>c.key===x.cat)?.label||x.cat);
+    const n=daysAgo(x.date),old=n>(x.kind==='account'?7:90);
+    return{n,html:`<span style="white-space:nowrap${old?';color:var(--amber)':''}">${esc(name)} ${ageTxt(x.date)}${old?' ⚠':''}</span>`};
+  }).sort((a,b)=>a.n-b.n).map(p=>p.html);
+  const prev=getNWCats().filter(c=>live.sources?.[c.key]==='förra').map(c=>c.label);
+  if(prev.length)parts.push(`${esc(prev.join(', '))} från förra bilden`);
+  return parts.length?`<div style="font-size:11px;color:var(--sub2);margin-top:6px;line-height:1.6">Uppdaterat: ${parts.join(' · ')}</div>`:'';
+}
+
 function renderNetWorth(){
   if(_sbUser&&Date.now()-_loansAt>60e3)refreshLoans(); // lånen hämtas i bakgrunden, högst en gång i minuten
   const nws=getNWs();
@@ -3629,9 +3669,14 @@ function renderNetWorth(){
   const change=latest&&prev?latest.total-prev.total:null;
   const gpc=latest?goalPctApp(latest.total):null,pct=gpc?gpc.pct:0;
 
-  document.getElementById('nw-hero-val').textContent=latest?fmt(latest.total):'—';
+  if(_sbUser&&Date.now()-_nwLiveAt>60e3)refreshNWLive(); // förmögenheten just nu räknas om högst en gång i minuten
+  const live=_sbUser&&_nwLive?.date?_nwLive:null;
+  document.getElementById('nw-hero-val').textContent=live?fmt(live.total):latest?fmt(latest.total):'—';
   const heroEl=document.getElementById('nw-hero-pill');
-  if(change!==null){
+  if(live){
+    const d=latest?live.total-latest.total:null;
+    heroEl.innerHTML=`<span class="pill pill-g" style="font-size:11px">● just nu</span>${d!==null?` <span class="pill ${d>=0?'pill-g':'pill-r'}" style="font-size:11px">${d>=0?'↑':'↓'} ${fmt(Math.abs(d))} kr sedan bilden ${mLabel(latest.period)}</span>`:''}${nwFreshHtml(live)}`;
+  } else if(change!==null){
     heroEl.innerHTML=`<span class="pill ${change>=0?'pill-g':'pill-r'}">${change>=0?'↑':'↓'} ${fmt(Math.abs(change))} kr vs förra</span>`;
   } else heroEl.innerHTML='';
   {const mv=manualValuesApp().filter(x=>x.estimated||x.stale);if(mv.length)heroEl.innerHTML+=`<div style="font-size:11px;color:var(--amber);margin-top:6px">Uppskattade eller gamla värden: ${mv.map(x=>esc(x.name)+(x.stale?' (äldre än 6 mån)':'')).join(', ')} — se Konton & värden</div>`}
